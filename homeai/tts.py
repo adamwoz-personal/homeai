@@ -71,8 +71,14 @@ class Speaker:
             return False, f"piper voice model missing: {self._cfg.model_path}"
         return True, ""
 
-    def say(self, text: str) -> SpeechResult:
-        """Synthesise and play ``text``. Blocks until playback completes."""
+    def say(self, text: str, should_stop=None) -> SpeechResult:
+        """Synthesise and play ``text``. Blocks until playback completes.
+
+        If ``should_stop`` is given it is polled while audio is playing, and
+        playback is killed as soon as it returns True. This is what makes an
+        interruption feel immediate rather than landing at the end of the
+        sentence currently being spoken.
+        """
         if not text or not text.strip():
             return SpeechResult(ok=False, error="nothing to say")
 
@@ -84,11 +90,11 @@ class Speaker:
         with self._lock:
             self._speaking.set()
             try:
-                return self._run_pipeline(text)
+                return self._run_pipeline(text, should_stop)
             finally:
                 self._speaking.clear()
 
-    def _run_pipeline(self, text: str) -> SpeechResult:
+    def _run_pipeline(self, text: str, should_stop=None) -> SpeechResult:
         started = time.monotonic()
         # '--output-raw' streams headerless PCM. The alternative, writing a WAV
         # to stdout, fails because a WAV header needs a length that is not
@@ -151,7 +157,23 @@ class Speaker:
             pump = threading.Thread(target=relay, name="tts-relay", daemon=True)
             pump.start()
 
-            aplay.wait(timeout=self._cfg.timeout_s)
+            interrupted = self._await_playback(aplay, should_stop)
+            if interrupted:
+                # Kill rather than wait: aplay holds only a short ALSA buffer,
+                # so terminating it cuts the voice off within a fraction of a
+                # second. Waiting for the sentence to finish is what made the
+                # first field test feel like the interrupt had not worked.
+                for proc in (aplay, piper):
+                    if proc and proc.poll() is None:
+                        proc.kill()
+                pump.join(timeout=2)
+                return SpeechResult(
+                    ok=True,
+                    interrupted=True,
+                    first_audio_ms=(first_audio[0] - started) * 1000.0 if first_audio else 0.0,
+                    total_ms=(time.monotonic() - started) * 1000.0,
+                )
+
             pump.join(timeout=5)
             piper.wait(timeout=5)
 
@@ -181,11 +203,32 @@ class Speaker:
             total_ms=(time.monotonic() - started) * 1000.0,
         )
 
-    def say_safe(self, text: str) -> SpeechResult:
+    def _await_playback(self, aplay, should_stop) -> bool:
+        """Wait for playback, returning True if it should be cut short.
+
+        Polls at 50ms, which is imperceptible to a listener but cheap.
+        """
+        if should_stop is None:
+            aplay.wait(timeout=self._cfg.timeout_s)
+            return False
+
+        deadline = time.monotonic() + self._cfg.timeout_s
+        while True:
+            try:
+                aplay.wait(timeout=0.05)
+                return False
+            except subprocess.TimeoutExpired:
+                pass
+            if should_stop():
+                return True
+            if time.monotonic() > deadline:
+                raise subprocess.TimeoutExpired(cmd="aplay", timeout=self._cfg.timeout_s)
+
+    def say_safe(self, text: str, should_stop=None) -> SpeechResult:
         """Speak, logging rather than raising. For use on failure paths where
         an exception would be worse than silence."""
         try:
-            result = self.say(text)
+            result = self.say(text, should_stop=should_stop)
         except Exception as exc:  # noqa: BLE001 - must never kill the daemon
             log.exception("unexpected TTS failure")
             return SpeechResult(ok=False, error=str(exc))
@@ -200,11 +243,16 @@ class Speaker:
         Chunking is what makes a long answer interruptible at all: previously
         a 68-second reply was a single `aplay` call with no seam to stop at.
 
-        ``should_stop`` is polled *between* chunks, never during. That keeps
-        the check trivially correct -- no audio is playing at that moment, so
-        there is nothing to race with and no echo for a microphone to hear.
-        The cost is granularity: an interruption takes effect at the end of
-        the current sentence rather than instantly.
+        ``should_stop`` is polled both *between* chunks and *during* playback
+        of each chunk, so an interruption takes effect within about 50ms
+        instead of at the next sentence boundary.
+
+        Field evidence for why mid-chunk polling is required: with
+        between-chunk polling only, a barge-in detected at 14:48:40.9 did not
+        silence Jarvis until 14:48:48.6 -- 7.7 seconds later, because the
+        first chunk was 9.9 seconds of audio. The user reasonably concluded
+        the interrupt had failed and spoke again, and their follow-up was
+        talked over and discarded as noise.
         """
         from .speech import chunk_for_speech
 
@@ -234,7 +282,17 @@ class Speaker:
                 except Exception:  # noqa: BLE001 - a bad callback must not mute us
                     log.warning("stop callback raised; continuing", exc_info=True)
 
-            result = self.say_safe(chunk)
+            result = self.say_safe(chunk, should_stop=should_stop)
+            if result.interrupted:
+                log.info("speech interrupted during chunk %d of %d",
+                         index + 1, len(chunks))
+                return SpeechResult(
+                    ok=True,
+                    first_audio_ms=first_audio_ms or result.first_audio_ms,
+                    total_ms=(time.perf_counter() - started) * 1000.0,
+                    interrupted=True,
+                    chunks_spoken=spoken,
+                )
             if not result.ok:
                 # Partial speech beats silence, so report what was said.
                 return SpeechResult(

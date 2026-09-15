@@ -207,6 +207,10 @@ class WakeConfig:
     threshold: float = field(default_factory=lambda: _env_float("HOMEAI_WAKE_THRESHOLD", 0.5))
     # Stop capturing after this much trailing silence.
     silence_s: float = field(default_factory=lambda: _env_float("HOMEAI_SILENCE_S", 0.7))
+    # Grace period after the wake word, before any speech has been heard. Longer
+    # than silence_s because a person often pauses between "Hey Jarvis" and
+    # their actual question -- especially when interrupting a reply.
+    lead_in_s: float = field(default_factory=lambda: _env_float("HOMEAI_LEAD_IN_S", 2.5))
     # Hard ceiling on one utterance, so a stuck-open mic cannot capture forever.
     max_utterance_s: float = field(default_factory=lambda: _env_float("HOMEAI_MAX_UTTERANCE_S", 15.0))
     # Deaf window after a capture ends. Stops the just-captured wake word from

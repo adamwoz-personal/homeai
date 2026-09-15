@@ -180,6 +180,7 @@ class CaptureMachine:
     speech_threshold: float = 0.02
     state: State = State.IDLE
     _speech_last_seen: float = field(default=0.0, repr=False)
+    _heard_speech: bool = field(default=False, repr=False)
     _started_at: float = field(default=0.0, repr=False)
     _refractory_until: float = field(default=0.0, repr=False)
 
@@ -194,6 +195,7 @@ class CaptureMachine:
         blocked the pipeline. A short deaf window is the reliable fix.
         """
         self.state = State.IDLE
+        self._heard_speech = False
         self._speech_last_seen = 0.0
         self._started_at = 0.0
         if now is not None:
@@ -207,6 +209,7 @@ class CaptureMachine:
         self.state = State.LISTENING
         self._started_at = now
         self._speech_last_seen = now
+        self._heard_speech = False
 
     def feed(self, frame: np.ndarray, now: float) -> bool:
         """Feed one frame while LISTENING. Returns True when the utterance ends.
@@ -220,12 +223,23 @@ class CaptureMachine:
 
         if rms(frame) >= self.speech_threshold:
             self._speech_last_seen = now
+            self._heard_speech = True
 
         if now - self._started_at >= self.cfg.max_utterance_s:
             log.info("utterance hit max duration")
             return True
 
-        if now - self._speech_last_seen >= self.cfg.silence_s:
+        # Before any speech has been heard, wait `lead_in_s` rather than
+        # `silence_s`. A person who says the wake word and then pauses -- to
+        # think, or to check that an interruption actually worked -- would
+        # otherwise have the capture close on the wake word alone, which is
+        # then thrown away as too short to be a real utterance. Observed in
+        # the field: an interrupt succeeded but the follow-up question was
+        # never captured.
+        limit = self.cfg.silence_s if self._heard_speech else self.cfg.lead_in_s
+        if now - self._speech_last_seen >= limit:
+            if not self._heard_speech:
+                log.info("no speech within lead-in; closing capture")
             return True
 
         return False

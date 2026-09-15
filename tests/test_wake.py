@@ -212,3 +212,67 @@ def test_refractory_can_be_disabled():
     m = _machine(refractory_s=0.0)
     m.reset(now=5.0)
     assert m.accepts_wake(5.0) is True
+
+
+# ---------------------------------------------------------------------------
+# Lead-in grace period
+#
+# Field failure this covers: a user said the wake word to interrupt a reply,
+# paused to check it had worked, and then asked their question. The capture
+# had already closed on the wake word alone and the question was discarded as
+# "below minimum length".
+# ---------------------------------------------------------------------------
+
+
+def _leadin_loud(n: int = 512) -> np.ndarray:
+    return np.full(n, 0.5, dtype=np.float32)
+
+
+def _leadin_quiet(n: int = 512) -> np.ndarray:
+    return np.zeros(n, dtype=np.float32)
+
+
+def _leadin_machine(silence_s: float = 0.7, lead_in_s: float = 2.5) -> CaptureMachine:
+    cfg = WakeConfig(silence_s=silence_s, lead_in_s=lead_in_s, max_utterance_s=15.0)
+    return CaptureMachine(cfg=cfg)
+
+
+def test_pause_before_speaking_does_not_close_capture() -> None:
+    m = _leadin_machine()
+    m.on_wake(0.0)
+    # 1.5s of silence: longer than silence_s, shorter than lead_in_s.
+    assert m.feed(_leadin_quiet(), 1.5) is False, "capture closed before the question"
+    # The question finally arrives and is captured.
+    assert m.feed(_leadin_loud(), 2.0) is False
+
+
+def test_lead_in_eventually_expires() -> None:
+    m = _leadin_machine()
+    m.on_wake(0.0)
+    assert m.feed(_leadin_quiet(), 2.6) is True
+
+
+def test_silence_s_applies_once_speech_heard() -> None:
+    """After real speech, the shorter timeout governs, so replies stay snappy."""
+    m = _leadin_machine()
+    m.on_wake(0.0)
+    m.feed(_leadin_loud(), 1.0)
+    assert m.feed(_leadin_quiet(), 1.5) is False
+    assert m.feed(_leadin_quiet(), 1.75) is True
+
+
+def test_max_duration_still_wins_during_lead_in() -> None:
+    cfg = WakeConfig(silence_s=0.7, lead_in_s=99.0, max_utterance_s=3.0)
+    m = CaptureMachine(cfg=cfg)
+    m.on_wake(0.0)
+    assert m.feed(_leadin_quiet(), 3.1) is True
+
+
+def test_wake_resets_heard_speech_between_utterances() -> None:
+    m = _leadin_machine()
+    m.on_wake(0.0)
+    m.feed(_leadin_loud(), 0.1)
+    m.reset(1.0)
+    m.on_wake(10.0)
+    # Grace must apply again, not be suppressed by the previous utterance.
+    assert m.feed(_leadin_quiet(), 11.5) is False

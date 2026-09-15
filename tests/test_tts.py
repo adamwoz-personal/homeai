@@ -10,6 +10,7 @@ exist because each corresponds to a real failure observed after a reboot.
 
 from __future__ import annotations
 
+import subprocess
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -123,3 +124,76 @@ def test_tts_timeout_allows_multi_minute_answers():
 
     # ~150 wpm; a 500-word answer needs well over three minutes.
     assert TtsConfig().timeout_s >= 240
+
+
+# ---------------------------------------------------------------------------
+# Mid-chunk interruption
+#
+# Field failure this covers: a barge-in was detected at 14:48:40.9 but speech
+# did not stop until 14:48:48.6 -- 7.7s later -- because should_stop was only
+# polled between chunks and the current chunk was 9.9s of audio.
+# ---------------------------------------------------------------------------
+
+
+class _FakeAplay:
+    """Playback that never ends on its own, so only a kill can stop it."""
+
+    def __init__(self) -> None:
+        self.killed = False
+        self.returncode = 0
+
+    def wait(self, timeout=None):
+        if self.killed:
+            return 0
+        raise subprocess.TimeoutExpired(cmd="aplay", timeout=timeout or 0)
+
+    def poll(self):
+        return 0 if self.killed else None
+
+    def kill(self):
+        self.killed = True
+        self.returncode = 0
+
+
+def test_await_playback_returns_true_when_stop_requested(tmp_path):
+    speaker = Speaker(TtsConfig(), "null")
+    aplay = _FakeAplay()
+    assert speaker._await_playback(aplay, lambda: True) is True
+
+
+def test_await_playback_waits_while_not_stopped():
+    speaker = Speaker(TtsConfig(), "null")
+    aplay = _FakeAplay()
+    calls = {"n": 0}
+
+    def stop():
+        calls["n"] += 1
+        if calls["n"] >= 3:
+            return True
+        return False
+
+    assert speaker._await_playback(aplay, stop) is True
+    assert calls["n"] >= 3, "stop callback must be polled repeatedly, not once"
+
+
+def test_await_playback_without_callback_blocks_normally():
+    """The no-interrupt path must keep its original behaviour."""
+    speaker = Speaker(TtsConfig(), "null")
+
+    class Finishes:
+        returncode = 0
+
+        def wait(self, timeout=None):
+            return 0
+
+        def poll(self):
+            return 0
+
+    assert speaker._await_playback(Finishes(), None) is False
+
+
+def test_await_playback_respects_timeout():
+    speaker = Speaker(TtsConfig(timeout_s=0.1), "null")
+    aplay = _FakeAplay()
+    with pytest.raises(subprocess.TimeoutExpired):
+        speaker._await_playback(aplay, lambda: False)

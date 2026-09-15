@@ -734,3 +734,64 @@ whole file to defaults (Session 1).
 `tools/*.py` need `PYTHONPATH=.` — they are not installed into the venv.
 `systemctl --user stop homeai.service` before any probe that opens the mic, and
 remember to start it again; the service holds the device exclusively.
+
+---
+
+## Session 9 — The interrupt that "worked" but felt broken
+
+First field test of barge-in. Two distinct bugs, both invisible to the unit
+tests, both obvious in the service log. **The log had the answer in under a
+minute; guessing would have cost far more.**
+
+```
+14:48:40.917  bargein: wake word heard during playback   <- detection: instant
+14:48:48.638  speech interrupted after 1 of 4 chunks     <- silence: 7.7s later
+14:48:49.236  discarding utterance: transcript below minimum length
+```
+
+### Bug 1: detection was instant, stopping was not
+
+`say_chunked` polled `should_stop` **between** chunks only. I had documented
+that as a deliberate simplification ("no audio is playing at that moment, so
+there is nothing to race with"). The flaw: chunk one was **9.9 seconds** of
+audio, so the poll could not happen for 7.7s after the wake word.
+
+The user experienced this as "the interrupt didn't work", spoke again, and
+their second attempt was then talked over. **A correct mechanism with the
+wrong granularity is indistinguishable from a broken one.**
+
+Fix: `should_stop` is now threaded down through `say_safe` -> `say` ->
+`_run_pipeline` and polled every 50ms *during* playback by
+`_await_playback`. On stop, `aplay` and `piper` are **killed**, not waited on.
+`aplay` holds only a short ALSA buffer, so the voice dies almost instantly.
+
+Measured after the fix, on real playback: **cut latency 1ms** (was ~7700ms).
+
+### Bug 2: the follow-up question was thrown away
+
+`CaptureMachine.feed` ended an utterance after `silence_s` (0.7s) of quiet.
+But the natural way to interrupt is: say the wake word, **pause to check it
+worked**, then ask. That pause closed the capture on the wake word alone, and
+the result was discarded as "below minimum length".
+
+Fix: a separate `lead_in_s` (default 2.5s) applies *until the first real
+speech is heard*; `silence_s` governs only afterwards, so replies stay snappy
+once you are actually talking. This also fixes the ordinary
+"Hey Jarvis... <thinks> ...what's the weather" case, which must have been
+failing silently all along.
+
+### Lessons
+
+1. **Measure the user-visible quantity, not the internal event.** "Interrupt
+   detected" was true and useless. The number that mattered was the delay
+   between detection and silence, and nothing measured it until a human
+   complained. The new test asserts the callback is polled *repeatedly*.
+2. **A timeout tuned for one phase of an interaction may be wrong for
+   another.** `silence_s` was tuned for end-of-sentence detection and was
+   silently also acting as a start-of-speech deadline.
+3. **Appending tests to an existing file can shadow its helpers.** My new
+   `_machine()`/`_loud()` helpers collided with existing ones and broke five
+   passing tests. Check for existing names before appending; prefix new
+   helpers.
+
+Result: 374 tests passing (was 365).
