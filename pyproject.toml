@@ -1,0 +1,22 @@
+[project]
+name = "homeai"
+version = "0.1.0"
+description = "Local voice assistant front-end for the ZeroClaw agent"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [{ name = "Adam Wosotowsky" }]
+license = { file = "LICENSE" }
+classifiers = [
+    # BSL 1.1 is source-available, not OSI-approved. This classifier prevents
+    # tooling from mistaking it for an open source licence.
+    "License :: Other/Proprietary License",
+    "Private :: Do Not Upload",
+]
+dependencies = ["numpy", "requests", "sounddevice", "onnxruntime"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.setuptools.packages.find]
+include = ["homeai*"]

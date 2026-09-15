@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# MCP stdio server entry point for ZeroClaw.
+#
+# A wrapper rather than a direct command because the server must run inside
+# this project's virtualenv, and ZeroClaw's config takes a single binary path
+# with no shell interpretation.
+set -euo pipefail
+cd "$(dirname "$(readlink -f "$0")")/.."
+exec .venv/bin/python -m homeai.mcp_server "$@"
