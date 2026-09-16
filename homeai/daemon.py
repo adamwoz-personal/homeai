@@ -76,6 +76,10 @@ class VoiceAssistant:
         self._detector = None
         self._queue: queue.Queue[np.ndarray] = queue.Queue(maxsize=4)
         self._stop = threading.Event()
+        # Set when a reply was cut short by the wake word. The wake loop is
+        # deaf while speaking, so it never saw that wake word; this hands the
+        # capture over to it explicitly.
+        self._bargein_armed = threading.Event()
         self._threads: list[threading.Thread] = []
 
     # -- startup -----------------------------------------------------------
@@ -118,6 +122,19 @@ class VoiceAssistant:
             if self.mic.paused or self.tts.speaking:
                 cursor = self.mic.buffer.total_written
                 continue
+
+            # A reply was just interrupted. This loop was deaf for the whole
+            # of that reply, so it never detected the wake word that stopped
+            # it -- only the InterruptListener did, and that listener captures
+            # nothing. Without this handoff the user's follow-up question is
+            # never recorded at all: the field symptom was an interrupt that
+            # visibly worked, followed by total silence in the log.
+            if self._bargein_armed.is_set():
+                self._bargein_armed.clear()
+                utterance = []
+                cursor = self.mic.buffer.total_written
+                self.machine.on_wake(time.monotonic())
+                log.info("barge-in: capturing follow-up")
 
             try:
                 chunk, cursor = self.mic.buffer.read_new(cursor)
@@ -244,15 +261,15 @@ class VoiceAssistant:
             # 0.487s after a reply finished. Muting the mic is not enough;
             # the detector must also be cleared and made briefly deaf.
             #
-            # The one case where we must NOT reset: the listener was triggered,
-            # which means the person said the wake word deliberately. The main
-            # wake loop heard the same words and has already begun capturing
-            # their follow-up, so resetting here would discard the very
-            # utterance they interrupted us to say.
-            if not interrupted:
-                if self._detector:
-                    self._detector.reset()
-                self.machine.reset(time.monotonic())
+            if self._detector:
+                self._detector.reset()
+            self.machine.reset(time.monotonic())
+
+            # The person said the wake word deliberately, so a question is
+            # almost certainly coming. Arm the wake loop to start capturing it
+            # without requiring a second wake word.
+            if interrupted:
+                self._bargein_armed.set()
 
     def _start_interrupt_listener(self, text: str):
         """Return a running InterruptListener, or None if barge-in is unsafe.

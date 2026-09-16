@@ -795,3 +795,70 @@ failing silently all along.
    helpers.
 
 Result: 374 tests passing (was 365).
+
+---
+
+## Session 10 — The interrupt fired, but nobody was listening
+
+Second field test. The cut was now instant (10ms), but the follow-up question
+produced **nothing at all in the log** — not even a discard. That absence was
+the clue: the utterance was never captured, so no code ran to reject it.
+
+### The bug I had written into my own comment
+
+`_wake_loop` begins:
+
+```python
+if self.mic.paused or self.tts.speaking:
+    cursor = self.mic.buffer.total_written
+    continue
+```
+
+**The wake loop is deaf for the entire duration of every reply**, and discards
+buffered audio on each poll. Yet in Session 8 I wrote, in `_speak`:
+
+> "The main wake loop heard the same words and has already begun capturing
+> their follow-up, so resetting here would discard the very utterance..."
+
+That was false. Only `InterruptListener` heard the wake word, and it captures
+no audio — it only sets a flag. So after an interrupt the daemon returned to
+IDLE and waited for a *second* wake word that the user had no reason to say.
+
+**Lesson: a comment asserting the behaviour of another thread is a claim, not
+a fact.** I reasoned about the wake loop instead of reading it, and the false
+premise survived because the interrupt bug (Session 9) masked it entirely.
+
+Fix: `_bargein_armed`, a `threading.Event` set by `_speak` when a reply was
+cut short. The wake loop consumes it *after* the speaking guard, clears the
+utterance buffer, adopts a fresh cursor, and calls `machine.on_wake()`
+directly — deliberately bypassing `accepts_wake`, since `_speak` has just
+opened a refractory window and the person has already spoken the wake word.
+
+`tests/test_daemon.py` now exists (4 tests), covering the handoff, the
+refractory bypass, and that arming does **not** take effect while our own
+audio is still playing.
+
+### Debugging note that keeps paying off
+
+Three sessions running, the service log identified the fault faster than any
+reasoning did. Here, the *absence* of a log line was the diagnostic. Read
+`journalctl --user -u homeai.service` first, every time.
+
+### ZeroClaw CLI cannot see ~/src — by design
+
+`acp.default_agent = "local"`, and `agents.local` runs the `voice` risk
+profile, which lists `~/src` in `forbidden_paths`, sets `workspace_only = true`
+and limits `allowed_roots` to voice-scratch and /tmp.
+
+That is the boundary protecting against anyone within earshot of the mic, so
+**do not widen it**. Use the `builder` agent, which already has
+`standard` (allowed_roots includes /home/adam, unrestricted_filesystem = true)
+and runs at temperature 0.2.
+
+Verified empirically both ways: builder answered a question about ~/src
+correctly; local refused with "I cannot access that directory due to security
+restrictions".
+
+Convenience wrapper added at `~/.local/bin/zc`:
+
+    exec zeroclaw agent -a builder "$@"
