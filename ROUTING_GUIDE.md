@@ -946,3 +946,96 @@ the same prompts. With llama-server (17GB) and two Ollama models resident in
 21.4GB of VRAM, those numbers measure **which model happened to be resident**,
 not model speed. Stop the other runtime before benchmarking, or report
 nothing.
+
+## Session 12 — Picking a voice model, and OOM'ing the box
+
+### I crashed the machine, and the cause was a default
+
+Benchmarking candidate voice models loaded four Ollama models while
+llama-server held ~13GB. Ollama keeps up to `OLLAMA_MAX_LOADED_MODELS`
+(default: 3 per GPU) resident *simultaneously*. The card has 20GB. The
+overflow spilled into system RAM, the OOM killer took llama-server, gnome-shell
+and the user systemd instance, and the host rebooted.
+
+Guard committed at `deploy/ollama-vram-guard.conf`:
+`OLLAMA_MAX_LOADED_MODELS=1`, `OLLAMA_NUM_PARALLEL=1`, `OLLAMA_KEEP_ALIVE=-1`.
+
+`bench_llm.py` now evicts each Ollama model (`keep_alive: 0`) when its turn
+ends, unless `--no-unload`. Benchmarking is the activity most likely to stack
+models, so the tool that does it owns the guard.
+
+One thing worked perfectly during the crash: after the reboot, homeai came up
+before Ollama, failed twice with "local model server unavailable", retried and
+succeeded. That is the retry loop deleted during the OpenClaw rewrite and
+restored in Session 11.
+
+### The voice agent was running a coding model
+
+`providers.models.llamacpp.local` pointed at `qwen3-coder-30b` -- the same
+model as the coder profile, differing only in temperature. It obeyed SOUL.md
+well but took **33.9s** for one paragraph, which is what caused the repeated
+45s agent timeouts.
+
+### Single samples are not evidence -- measured hedge rates are
+
+My first recommendation (mistral-nemo, then llama3.1) came from **one** sample
+each. Re-running the same model on the same prompt produced both a committed
+first-person opinion and an "I don't have a personal opinion" hedge. The
+variance is larger than the difference between models.
+
+`bench_llm.py` grew `--reps`, `--soul` (benchmark against the *deployed*
+persona, not a generic system prompt), `--temperature`, and hedge-phrase
+detection. Measured over 33 runs each at temperature 0.45:
+
+| model | clean | unspeakable | hedged | ttft med | total med |
+|---|---|---|---|---|---|
+| llama3.1:8b  | 18/33 | 6 | 1/33 | 14ms | 939ms |
+| mistral-nemo:12b | 18/33 | 8 | 1/33 | 19ms | 1158ms |
+
+llama3.1:8b chosen: fewer unspeakable defects, faster, and better factual
+recall (`unit_native` failed 1/3 versus 3/3). Hedging is rare for both once
+SOUL.md carries an explicit banned-phrase list, so the earlier alarm about
+mistral "ignoring SOUL" was itself a single-sample error.
+
+Caveat kept in the config: an 8B is weaker on facts than the 30B (it got a
+timezone conversion wrong), and with **no** tool attached it will invent tool
+output. With the `homeai-tools` bundle attached it calls the tool in 0.2s.
+
+### I nearly reported a bug that did not exist
+
+The benchmark showed both models emitting bullets, numbered lists and code
+fences on list-shaped questions, every single run. I checked whether the TTS
+path cleaned it by running responses through `normalise_for_speech` -- and
+found code fences surviving.
+
+That was wrong. The real pipeline is three stages, and the order is
+load-bearing (`daemon.py`):
+
+    normalise_for_speech(sanitise_for_speech(flatten_markdown(text)))
+
+`flatten_markdown` needs the line breaks that `normalise_for_speech` collapses,
+so testing the last stage alone reports failures that production never sees.
+Through the full pipeline: **6 -> 0 and 8 -> 0 defects.** Markdown never
+reaches Piper.
+
+`report_bench.py --speech-check` now replicates the exact daemon pipeline, so
+this check cannot be done wrong the next time.
+
+Lesson, and it is the same one as Session 11's band-aid: **test the composed
+pipeline, not the stage you happen to be looking at.**
+
+### SOUL.md is delivered, models just obey it imperfectly
+
+When the ZeroClaw path hedged and the direct API path did not, the obvious
+theory was that ZeroClaw overrides SOUL.md. A canary line proved otherwise --
+both paths returned the codeword. The difference was sampling noise.
+
+Cheap, decisive test worth repeating: put a unique instruction in the prompt
+file and see whether it comes back.
+
+### Tooling convention
+
+Throwaway `python3 -c` probes are a false economy; one was lost to the reboot
+an hour after it was written. Benchmarks and probes belong in `tools/` as
+runnable scripts: `bench_*` measures, `probe_*` inspects one thing,
+`report_*` analyses a saved run without re-running it.
