@@ -81,6 +81,38 @@ Characteristics that made these fail:
 
 ---
 
+## Standing rule: tests and evaluations are files, not one-off commands
+
+**Every test, benchmark, probe or analysis gets written to a file in `tools/`
+(or `tests/` for unit tests) before it is run. No `python3 -c`, no inline
+heredocs for anything you might want to run twice.** Adam's standing
+instruction, and it has paid off every time: the same script re-runs after
+the next change, so before and after are measured the same way. A one-off
+command can't be re-run after a reboot or by the next person (one was lost
+to a reboot in Session 12), and it can't be reviewed.
+
+Naming tells you what a script does without opening it:
+
+| Prefix | Does | Examples |
+|---|---|---|
+| `bench_*` | Measures; writes results with `--out` | `bench_llm.py` (answer quality per model), `bench_conversation.py` (multi-turn repetition, length, hedging), `bench_tokps.py` (llama-server prompt/generation tok/s), `bench_whisper.py` (STT models) |
+| `probe_*` | Inspects one thing on the live system | `probe_agent_prompt.py` (exact request ZeroClaw sends; `--set` tries config changes on a temp copy, `--with-memory`), `probe_voice_tools.py` (can the voice agent cause side effects? checks physical evidence), `probe_bargein.py` (wake scores during our own speech), `probe_soul.py` (SOUL.md canary) |
+| `report_*` / `inspect_*` | Reads saved output without re-running | `report_bench.py`, `inspect_conversation_bench.py` (`compare` runs, `show` flagged conversations), `inspect_captured_prompt.py` (tool calls and results in a capture), `inspect_zc_memory.py` (read-only view of ZeroClaw's brain.db) |
+| `mutation/` | Proves tests guard real behaviour | `check_mutants.sh` breaks the code on purpose and requires the named tests to fail |
+
+Conventions:
+- Results go to `~/homeai-bench/` with a date in the name, so a later run
+  can be compared against them. Keep the baseline.
+- Every script starts with a docstring saying *why it exists*, what it
+  measured last time, and example usage (`--help` prints it).
+- Run with `.venv/bin/python`, never system python.
+- When a delegated agent writes a test or probe, the same rule applies: it
+  goes in a file, and the report names the file.
+- A new behaviour gets unit tests and a mutant in `check_mutants.sh`. If
+  the mutant survives, the tests are decorative.
+
+---
+
 ## Task routing for this project
 
 | Component | Owner | Why |
@@ -1036,9 +1068,8 @@ file and see whether it comes back.
 ### Tooling convention
 
 Throwaway `python3 -c` probes are a false economy; one was lost to the reboot
-an hour after it was written. Benchmarks and probes belong in `tools/` as
-runnable scripts: `bench_*` measures, `probe_*` inspects one thing,
-`report_*` analyses a saved run without re-running it.
+an hour after it was written. See the standing rule near the top of this file
+for the full convention and the index of `tools/`.
 
 ## Session 13 — "Stop" is not a question
 
