@@ -49,6 +49,10 @@ MUTANTS=(
   "mode-no-rollback|homeai/gpu_mode.py|s/                self.voice()$/                pass/|tests/test_gpu_mode.py -k rolls_back"
   "mode-jarvis-left-on|homeai/gpu_mode.py|s/self.sys.systemctl(\"stop\", VOICE_SERVICE)/pass/|tests/test_gpu_mode.py -k order"
   "mode-voice-before-coder-ready|homeai/gpu_mode.py|s/            self._restart_coder()\$/            self.sys.systemctl(\"restart\", CODER_SERVICE)/|tests/test_gpu_mode.py -k restores_default"
+  "mem-no-compact|homeai/memory_privacy.py|s/^        self.be.compact()$/        pass/|tests/test_memory_privacy.py -k purge"
+  "mem-ignore-confirm|homeai/memory_privacy.py|s/if confirm is not None and not confirm(n):/if False:/|tests/test_memory_privacy.py -k cancelled"
+  "mem-no-verify-clear|homeai/memory_privacy.py|s/        if left:/        if False:/|tests/test_memory_privacy.py -k left_behind"
+  "mem-negative-retention|homeai/memory_privacy.py|s/if days < 0:/if days < -99:/|tests/test_memory_privacy.py -k negative"
 )
 
 filter="${1:-}"

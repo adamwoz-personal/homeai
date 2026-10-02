@@ -110,6 +110,29 @@ Tool-call limits for the builder agent (`[runtime_profiles.heavy_duty]` in
 Verify with `tools/probe_tool_cap.py --steps 40`. Hermes has its own limit:
 500 turns.
 
+## What ZeroClaw remembers (privacy)
+
+ZeroClaw saves every request to every agent, including speech Jarvis
+overheard, in `~/.zeroclaw/data/memory/brain.db`. These are `conversation`
+rows, kept for 30 days by default. Jarvis cannot read them back, but anyone
+with the disk can.
+
+```bash
+homeai-mode memory                  # saving on/off, retention, rows, disk used
+homeai-mode memory off              # stop saving (existing rows stay)
+homeai-mode memory on
+homeai-mode memory retention 7      # days; 0 = keep forever
+homeai-mode memory purge            # delete saved conversations (asks first; --yes to skip)
+```
+
+- `auto_save` is global: turning it off also affects `zc` and other agents.
+- Purge deletes only `conversation` rows; notes saved on purpose (`core`,
+  `daily`) are kept. Purge then VACUUMs the database, so the deleted text is
+  really gone from disk, not just unlinked.
+- Config changes restart `zeroclaw.service` so its retention sweep sees them.
+- Test without touching live data: `tools/test_memory_privacy_sandbox.sh`
+  (runs against a copy of `~/.zeroclaw`).
+
 ## Tests
 
 ```bash

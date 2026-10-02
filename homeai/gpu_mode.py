@@ -7,6 +7,7 @@
     homeai-mode coding     # Jarvis offline; qwen3-coder gets the whole card
     homeai-mode voice      # back to normal: Jarvis on, coder shares the card
     homeai-mode status
+    homeai-mode memory [off|on|retention DAYS|purge]   # see memory_privacy.py
 
 Why: the voice model (7.0 GB) and qwen3-coder-30b (~19.7 GB) together need
 ~26 GB on a 21.4 GB card. Sharing, the coder generates at ~25 tok/s; with the
@@ -310,7 +311,20 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--ctx", type=int, help="context tokens (default: llm-serve.sh's 65536)")
     sub.add_parser("voice", help="Jarvis back on; the coder shares the GPU")
     sub.add_parser("status")
+    m = sub.add_parser("memory", help="what ZeroClaw keeps of what is said to it")
+    m.add_argument("--config-dir", type=Path, help="ZeroClaw config dir (default ~/.zeroclaw)")
+    msub = m.add_subparsers(dest="memory_cmd")
+    msub.add_parser("status", help="saving on/off, retention, rows stored, disk used")
+    msub.add_parser("on", help="save conversations (ZeroClaw default)")
+    msub.add_parser("off", help="stop saving conversations (existing ones stay until purged)")
+    r = msub.add_parser("retention", help="days to keep saved conversations")
+    r.add_argument("days", type=int, help="0 = keep forever (ZeroClaw default 30)")
+    pg = msub.add_parser("purge", help="delete all saved conversations now")
+    pg.add_argument("--yes", action="store_true", help="do not ask for confirmation")
     args = parser.parse_args(argv)
+
+    if args.cmd == "memory":
+        return _memory_main(args)
 
     switcher = ModeSwitcher(System())
     try:
@@ -329,6 +343,31 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     except ModeError as exc:
         print(f"homeai-mode: {exc}", file=sys.stderr)
+        return 1
+
+
+def _memory_main(args, backend=None, ask=input) -> int:
+    from homeai import memory_privacy as mp
+
+    control = mp.MemoryControl(backend or mp.MemoryBackend(args.config_dir))
+    cmd = args.memory_cmd or "status"
+    try:
+        if cmd in ("on", "off"):
+            control.set_saving(cmd == "on")
+        elif cmd == "retention":
+            control.set_retention(args.days)
+        elif cmd == "purge":
+            def confirm(n: int) -> bool:
+                try:
+                    return ask(f"Delete {n} saved conversations permanently? [y/N] ") \
+                        .strip().lower() in ("y", "yes")
+                except EOFError:
+                    return False
+            control.purge(None if args.yes else confirm)
+        print("\n".join(control.status().lines()))
+        return 0
+    except mp.MemoryControlError as exc:
+        print(f"homeai-mode memory: {exc}", file=sys.stderr)
         return 1
 
 
