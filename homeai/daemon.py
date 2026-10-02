@@ -38,7 +38,7 @@ from .speech import flatten_markdown, normalise_for_speech
 from .stt import Transcriber
 from .transcript import Stopwatch, TranscriptLog, Turn
 from .tts import Speaker
-from .bargein import InterruptListener, contains_wake_fragments
+from .bargein import InterruptListener, contains_wake_fragments, is_dismissal
 from .wake import CaptureMachine, State, build_detector
 
 log = logging.getLogger("homeai")
@@ -310,6 +310,18 @@ class VoiceAssistant:
 
         turn.heard = transcript.text
         log.info("heard: %s  [stt %.0fms]", transcript.text, turn.stt_ms)
+
+        # "Stop", "quiet", "I'm not talking to you". After a barge-in the mic
+        # stays open for a follow-up question, but the interruption is often
+        # the whole point. Querying the agent here would answer a question
+        # nobody asked and produce more speech to interrupt.
+        if is_dismissal(transcript.text, self.cfg.wake.model):
+            log.info("dismissal: %r - staying quiet", transcript.text)
+            turn.verdict = "dismissed"
+            turn.reply = ""
+            turn.total_ms = total.ms()
+            self.transcript.write(turn)
+            return
 
         verdict = check_utterance(transcript.text)
         if verdict.verdict in (Verdict.REFUSE, Verdict.CONFIRM):

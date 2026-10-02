@@ -1039,3 +1039,29 @@ Throwaway `python3 -c` probes are a false economy; one was lost to the reboot
 an hour after it was written. Benchmarks and probes belong in `tools/` as
 runnable scripts: `bench_*` measures, `probe_*` inspects one thing,
 `report_*` analyses a saved run without re-running it.
+
+## Session 13 — "Stop" is not a question
+
+After a barge-in the mic stays open to capture a follow-up (Session 10). But
+often the interruption *is* the request: "stop", "quiet", or "I'm not talking
+to you" when Jarvis woke on a conversation not meant for it. Those words went
+to the agent as a question, costing a lookup and producing more speech to
+interrupt.
+
+`bargein.is_dismissal()` now short-circuits `_handle` before the agent call;
+the turn is logged with verdict `dismissed` and nothing is spoken.
+
+Design choice: **exact match on the normalised utterance, not substring.**
+The wake word and filler words ("okay", "just", "please", "um") are stripped
+first, then the remainder must be a known phrase. "Stop" is a dismissal; "stop
+and tell me about the moon" and "how do I stop a dripping faucet" are not.
+Missing a dismissal costs one needless lookup, which is the old behaviour.
+Matching too eagerly silently throws away a real question, which is far
+worse. To add a phrase, extend `_DISMISSALS` and add a case to
+`TestIsDismissal`.
+
+The wake word alone ("Hey Jarvis.") is deliberately *not* a dismissal: the
+user may have been cut off mid-sentence.
+
+Verified the daemon tests are real by disabling the check and confirming they
+fail, then restoring it. 414 passing.

@@ -127,3 +127,37 @@ def test_loop_ignores_arming_while_still_speaking(assistant) -> None:
 
     assert assistant.machine.state is State.IDLE
     assert assistant._bargein_armed.is_set(), "flag must survive until audible"
+
+
+def _heard(assistant, text: str) -> None:
+    """Make the fake transcriber return ``text`` for the next utterance."""
+    result = assistant.stt.transcribe_audio.return_value
+    result.ok = True
+    result.text = text
+    result.error = ""
+
+
+@pytest.mark.parametrize("text", ["Stop.", "Jarvis, be quiet.", "I'm not talking to you."])
+def test_dismissal_never_reaches_the_agent(assistant, text) -> None:
+    # "Stop" after a barge-in previously went to the agent as a question,
+    # costing a lookup and producing more speech to interrupt.
+    _heard(assistant, text)
+    assistant._handle(np.zeros(1600, dtype=np.float32))
+
+    assistant.agent.ask.assert_not_called()
+    assistant.tts.say_chunked.assert_not_called()
+    assistant.tts.say_safe.assert_not_called()
+    turn = assistant.transcript.write.call_args.args[0]
+    assert turn.verdict == "dismissed"
+
+
+def test_real_question_still_reaches_the_agent(assistant) -> None:
+    # Guards against the dismissal check being too eager.
+    _heard(assistant, "stop and tell me about the moon")
+    reply = assistant.agent.ask.return_value
+    reply.ok, reply.text, reply.attempts, reply.error = True, "The moon is far.", 1, ""
+
+    assistant._handle(np.zeros(1600, dtype=np.float32))
+
+    assistant.agent.ask.assert_called_once()
+    assert assistant.agent.ask.call_args.args[0] == "stop and tell me about the moon"

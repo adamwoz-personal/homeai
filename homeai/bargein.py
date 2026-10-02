@@ -67,6 +67,63 @@ def contains_wake_fragments(text: str, wake_word: str = "hey_jarvis") -> bool:
     return bool(words & spoken)
 
 
+_DISMISSAL_FILLERS = frozenset({
+    "please", "okay", "ok", "just", "now", "um", "uh", "er", "oh",
+    "well", "actually", "really", "right", "yeah", "yep", "and", "a",
+})
+
+# Whole utterances that mean "be quiet", not "answer this". Matched exactly
+# against the normalised utterance rather than by substring: "stop" must not
+# swallow "stop and tell me about the moon", and "nothing" must not swallow
+# "nothing rhymes with orange, does it". Failing to match costs one needless
+# lookup, which is the behaviour we have today; matching too eagerly would
+# silently discard a real question, which is much worse.
+_DISMISSALS = frozenset({
+    "stop", "stop it", "stop talking", "stop that", "stop speaking",
+    "quiet", "be quiet", "quiet down", "hush", "shush", "silence",
+    "shut up", "shut it", "shut up already",
+    "never mind", "nevermind", "never mind then",
+    "forget it", "forget about it", "forget i asked", "forget that",
+    "enough", "thats enough", "enough already", "no more",
+    "cancel", "cancel that", "abort", "stop the answer",
+    "go away", "leave me alone",
+    "im not talking to you", "i am not talking to you",
+    "im not talking to you jarvis", "i wasnt talking to you",
+    "i was not talking to you", "not talking to you",
+    "wasnt talking to you", "im talking to someone else",
+    "im not asking you", "i didnt ask you", "i wasnt asking you",
+    "thats all", "that was not for you", "that wasnt for you",
+    "not you", "sorry not you", "ignore that", "ignore me",
+})
+
+
+def is_dismissal(text: str, wake_word: str = "hey_jarvis") -> bool:
+    """True if ``text`` is a request to be quiet rather than a question.
+
+    After a barge-in the microphone stays open to capture a follow-up, which
+    is usually a new question. But sometimes the interruption *is* the whole
+    point -- the user wants the reply to stop, or Jarvis woke on a
+    conversation that was never addressed to it. Sending "stop" to the agent
+    answers a question nobody asked, costs a lookup, and produces yet more
+    speech to interrupt.
+
+    The wake word is stripped first, because a dismissal usually arrives
+    attached to it ("Jarvis, stop"). Filler words are stripped too, so
+    "okay, just stop please" reduces to "stop".
+    """
+    if not text:
+        return False
+    cleaned = text.lower().replace("'", "").replace("\u2019", "")
+    words = [w for w in re.split(r"[^a-z]+", cleaned) if w]
+    wake_tokens = {w for w in re.split(r"[^a-z]+", wake_word.lower()) if len(w) > 2}
+    kept = [w for w in words if w not in wake_tokens and w not in _DISMISSAL_FILLERS]
+    if not kept:
+        # Only the wake word and filler. That is not a dismissal -- the user
+        # may simply have been cut off mid-sentence -- so let it through.
+        return False
+    return " ".join(kept) in _DISMISSALS
+
+
 class InterruptListener:
     """Watches the live microphone for the wake word while Jarvis is speaking.
 

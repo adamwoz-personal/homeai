@@ -16,7 +16,7 @@ import time
 import numpy as np
 import pytest
 
-from homeai.bargein import InterruptListener, contains_wake_fragments
+from homeai.bargein import InterruptListener, contains_wake_fragments, is_dismissal
 
 
 class FakeBuffer:
@@ -243,3 +243,55 @@ def test_consecutive_requirement() -> None:
         assert listener.triggered is False
     finally:
         listener.stop()
+
+
+class TestIsDismissal:
+    """After a barge-in, "stop" must silence Jarvis, not become a question.
+
+    The asymmetry drives every case below: missing a dismissal costs one
+    needless lookup; mistaking a real question for one silently discards it.
+    """
+
+    @pytest.mark.parametrize("text", [
+        "stop",
+        "Stop.",
+        "STOP!",
+        "quiet",
+        "Be quiet.",
+        "shut up",
+        "never mind",
+        "Nevermind.",
+        "forget it",
+        "that's enough",
+        "cancel that",
+        "I'm not talking to you.",
+        "I’m not talking to you",          # curly apostrophe from whisper
+        "I wasn't talking to you",
+        "not you",
+        "Jarvis, stop.",                    # wake word attached
+        "Hey Jarvis, be quiet.",
+        "Okay, just stop please.",          # fillers
+        "Um, never mind.",
+    ])
+    def test_recognises_dismissals(self, text):
+        assert is_dismissal(text)
+
+    @pytest.mark.parametrize("text", [
+        # Dismissal words inside a real request must reach the agent.
+        "stop and tell me about the moon",
+        "how do I stop a dripping faucet",
+        "what's the quietest dog breed",
+        "never mind the weather, what time is it",
+        "tell me about the movie Shut Up and Dance",
+        "is enough sleep important",
+        # Ordinary questions.
+        "what is the weather tomorrow",
+        "tell me something about the moon",
+    ])
+    def test_does_not_swallow_real_questions(self, text):
+        assert not is_dismissal(text)
+
+    @pytest.mark.parametrize("text", ["", "Jarvis", "Hey Jarvis.", "um", "okay"])
+    def test_wake_word_or_filler_alone_is_not_a_dismissal(self, text):
+        # The user may have been cut off mid-sentence; let it through.
+        assert not is_dismissal(text)
