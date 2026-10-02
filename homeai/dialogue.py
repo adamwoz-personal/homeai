@@ -43,6 +43,23 @@ def invites_reply(text: str) -> bool:
     return sentences[-1].rstrip().rstrip("\"')]").endswith("?")
 
 
+_TRAILING_OFF = re.compile(r"(\.\.\.|\u2026)[\"')\]\s]*$")
+
+
+def is_trailing_fragment(text: str) -> bool:
+    """True if Whisper heard speech that trails off mid-thought.
+
+    Whisper ends a transcript with "..." when the speaker had not finished.
+    Observed live: someone telling a visitor about Jarvis said its name, and
+    the rest ("I will run by the local AI, so there are...") went to the
+    agent, which gave a 28 s second take on the previous topic. A question
+    that trails off ("what's the weather in...?") still ends in "?", so it
+    is answered.
+    """
+    stripped = (text or "").strip()
+    return bool(_TRAILING_OFF.search(stripped))
+
+
 @dataclass
 class FollowupChain:
     """Counts consecutive wake-word-free turns and decides when to stop.

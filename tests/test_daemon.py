@@ -552,3 +552,30 @@ def test_worker_survives_when_the_error_message_also_fails(quick) -> None:
 
     seen = _run_worker(quick, [(np.zeros(10), "wake"), (np.zeros(10), "wake")], handle)
     assert len(seen) == 2
+
+
+def test_trailing_fragment_is_not_sent_to_the_agent(quick) -> None:
+    """Observed live: overheard 'I will run by the local AI, so there are...'
+    produced a 28 s answer continuing the previous topic."""
+    from homeai.daemon import MSG_FRAGMENT
+    quick.agent.ask.reset_mock()
+    _answer(quick, "I will run by the local AI, so there are...", "unused")
+    quick.agent.ask.assert_not_called()
+    spoken = [c.args[0] for c in quick.tts.say_safe.call_args_list]
+    assert spoken == [MSG_FRAGMENT]
+    assert not quick._followup_armed.is_set()
+
+
+def test_trailing_question_still_reaches_the_agent(quick) -> None:
+    quick.agent.ask.reset_mock()
+    _answer(quick, "what's the weather in...?", "Sunny.")
+    quick.agent.ask.assert_called_once()
+
+
+def test_wake_score_is_recorded_in_the_transcript(quick) -> None:
+    quick._last_wake_score = 0.734
+    quick.transcript = MagicMock()
+    _answer(quick, "capital of france", "Paris.")
+    assert quick.transcript.write.call_args.args[0].wake_score == 0.734
+    _answer(quick, "and germany", "Berlin.", source="followup")
+    assert quick.transcript.write.call_args.args[0].wake_score is None

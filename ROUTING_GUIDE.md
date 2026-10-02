@@ -96,7 +96,7 @@ Naming tells you what a script does without opening it:
 | Prefix | Does | Examples |
 |---|---|---|
 | `bench_*` | Measures; writes results with `--out` | `bench_llm.py` (answer quality per model), `bench_conversation.py` (multi-turn repetition, length, hedging), `bench_tokps.py` (llama-server prompt/generation tok/s), `bench_whisper.py` (STT models) |
-| `probe_*` | Inspects one thing on the live system | `probe_agent_prompt.py` (exact request ZeroClaw sends; `--set` tries config changes on a temp copy, `--with-memory`), `probe_voice_tools.py` (can the voice agent cause side effects? checks physical evidence), `probe_bargein.py` (wake scores during our own speech), `probe_soul.py` (SOUL.md canary), `piper_voice_samples.py` (same reply in every Piper voice; timings + `--play`), `test_memory_privacy_sandbox.sh` (`homeai-mode memory` against the real zeroclaw on a copy of ~/.zeroclaw; proves purged text is gone from disk), `probe_tool_cap.py` (how many sequential tool calls an agent really gets; detects shell loops by timing) |
+| `probe_*` | Inspects one thing on the live system | `probe_agent_prompt.py` (exact request ZeroClaw sends; `--set` tries config changes on a temp copy, `--with-memory`), `probe_voice_tools.py` (can the voice agent cause side effects? checks physical evidence), `probe_bargein.py` (wake scores during our own speech), `probe_soul.py` (SOUL.md canary), `say_to_jarvis.sh` (speak a phrase through the speakers to the live daemon and print what it logged), `probe_wake_reset.py` (does the wake detector re-fire on silence after reset?), `piper_voice_samples.py` (same reply in every Piper voice; timings + `--play`), `test_memory_privacy_sandbox.sh` (`homeai-mode memory` against the real zeroclaw on a copy of ~/.zeroclaw; proves purged text is gone from disk), `probe_tool_cap.py` (how many sequential tool calls an agent really gets; detects shell loops by timing) |
 | `report_*` / `inspect_*` | Reads saved output without re-running | `report_bench.py`, `inspect_conversation_bench.py` (`compare` runs, `show` flagged conversations), `inspect_captured_prompt.py` (tool calls and results in a capture), `inspect_zc_memory.py` (read-only view of ZeroClaw's brain.db) |
 | `mutation/` | Proves tests guard real behaviour | `check_mutants.sh` breaks the code on purpose and requires the named tests to fail |
 | `eval_*` | Scores an agent on real tasks with an objective check | `eval_local_coder.py` (builder agent: PASS / LIED / FAIL, and checks the main checkout is untouched) |
@@ -1240,3 +1240,42 @@ for now: keep the defaults (saving on, 30 days).
 0.58–0.69 s and synthesize at 0.05–0.10× real time, so speed can't separate
 them. Adam picked `en_GB-alba-medium` by ear. `TtsConfig.model_path` now
 also looks in `vendor/piper/voices/`.
+
+### "Jarvis answered again": overheard speech, and a phantom wake
+
+Live report: Adam asked whether the universe is alive. 3.5 minutes later,
+while he was telling someone about Jarvis, it gave a 28 s second take on
+the universe.
+- Whisper heard "I will run by the local AI, so there are...". That was
+  within the 5-minute context window, so the agent treated it as a
+  follow-up.
+- **Fragment gate** (`dialogue.is_trailing_fragment`): a transcript that
+  trails off ("..." or "…", not a question) is not sent to the agent.
+  Jarvis says "Sorry, I only caught part of that. Say hey Jarvis again if
+  you meant me." It deliberately isn't a question, so no follow-up window
+  opens for the people still talking.
+- Limitation: this works only when Whisper marks the trailing off. A Piper
+  test phrase that stopped mid-sentence came back as "so there are.",
+  ending in a full stop.
+- **Wake score** is now logged (`wake word detected (score 0.983)`) and
+  stored as `wake_score` in transcript.jsonl, so real and false triggers
+  can be told apart afterwards.
+
+Found while testing live with `tools/say_to_jarvis.sh`: a second wake at
+score 0.986, 1–2 s after every question, with nobody speaking. It also
+appears in the 18:27:23 log entry.
+- openWakeWord `Model.reset()` clears only the prediction buffer. The
+  feature buffers still end on the wake word, because the detector isn't
+  fed during capture.
+- `tools/probe_wake_reset.py`: after reset, pure silence scored 0.993
+  within 0.4 s. `OpenWakeWordDetector.reset()` now pushes 2.4 s of silence
+  through first (21 ms), and the peak drops to 0.000.
+- Usually harmless, because the reply's mute and reset swallowed it. But
+  if people kept talking, it could have captured their speech as a second
+  question.
+- This was the real cause of the "wake fired 0.487 s after a reply" seen
+  earlier, which the refractory window had only been masking.
+
+My own bug, caught live: `last_score` was a numpy float32. `json.dumps`
+rejected it and every transcript record was dropped until it was cast to
+float. The tests now use numpy floats.

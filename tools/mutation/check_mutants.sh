@@ -54,6 +54,11 @@ MUTANTS=(
   "mem-no-verify-clear|homeai/memory_privacy.py|s/        if left:/        if False:/|tests/test_memory_privacy.py -k left_behind"
   "mem-negative-retention|homeai/memory_privacy.py|s/if days < 0:/if days < -99:/|tests/test_memory_privacy.py -k negative"
   "tts-no-voices-dir|homeai/config.py|s/return extra if not direct.exists() and extra.exists() else direct/return direct/|tests/test_tts.py -k VoiceLocation"
+  "fragment-ignored|homeai/daemon.py|s/        if is_trailing_fragment(transcript.text):/        if False:/|tests/test_daemon.py -k fragment"
+  "fragment-unanchored|homeai/dialogue.py|s/]\\*\$\")/]*\")/|tests/test_dialogue.py -k TrailingFragment"
+  "wake-no-flush|homeai/wake.py|s/                for _ in range(FLUSH_FRAMES):/                for _ in range(0):/|tests/test_wake.py -k flushes"
+  "transcript-numpy-score|homeai/transcript.py|s/round(float(turn.wake_score), 3)/round(turn.wake_score, 3)/|tests/test_transcript.py -k numpy"
+  "wake-numpy-score|homeai/wake.py|s/self.last_score = float(max(scores.values(), default=0.0))/self.last_score = max(scores.values(), default=0.0)/|tests/test_wake.py -k last_score"
 )
 
 filter="${1:-}"

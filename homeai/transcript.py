@@ -41,6 +41,8 @@ class Turn:
     verdict: str = ""
     # How the turn started: "wake", "bargein", or "followup" (no wake word).
     source: str = "wake"
+    # Detector confidence for wake-started turns; None when not applicable.
+    wake_score: float | None = None
     ok: bool = True
     error: str = ""
     attempts: int = 0
@@ -104,6 +106,8 @@ class TranscriptLog:
                 "total": round(turn.total_ms),
             },
         }
+        if turn.wake_score is not None:
+            record["wake_score"] = round(float(turn.wake_score), 3)
         if turn.error:
             record["error"] = turn.error
 

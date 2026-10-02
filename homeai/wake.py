@@ -67,6 +67,12 @@ class EnergyDetector:
         self._streak = 0
 
 
+# Silence pushed through openWakeWord on reset: 30 x 80 ms = 2.4 s, more than
+# the ~1.3 s of audio its wake models look at.
+FLUSH_FRAME = 1280
+FLUSH_FRAMES = 30
+
+
 class OpenWakeWordDetector:
     """openWakeWord via onnxruntime. Loaded lazily so import never fails."""
 
@@ -108,6 +114,8 @@ class OpenWakeWordDetector:
         ]
         return str(candidates[0]) if candidates else None
 
+    last_score: float = 0.0
+
     def load(self) -> tuple[bool, str]:
         try:
             from openwakeword.model import Model
@@ -138,14 +146,27 @@ class OpenWakeWordDetector:
         except Exception:  # noqa: BLE001 - must not kill the audio thread
             log.exception("wake word prediction failed")
             return False
-        return any(score >= self._threshold for score in scores.values())
+        # Kept so the daemon can log how sure the detector was: the only way
+        # to tell a real "Jarvis" from a false trigger afterwards.
+        self.last_score = float(max(scores.values(), default=0.0))
+        return self.last_score >= self._threshold
 
     def reset(self) -> None:
         if self._model is not None:
             try:
+                # Model.reset() clears only the prediction buffer. The audio
+                # feature buffers still hold the wake word: it is not fed
+                # while an utterance is captured, so they still end on it.
+                # Without a flush it re-fires on the next frame of silence
+                # (tools/probe_wake_reset.py measured 0.993 within 0.4 s).
+                # Pushing silence through replaces that history.
+                silence = np.zeros(FLUSH_FRAME, dtype=np.int16)
+                for _ in range(FLUSH_FRAMES):
+                    self._model.predict(silence)
                 self._model.reset()
             except Exception:  # noqa: BLE001
                 log.debug("wake model reset failed", exc_info=True)
+        self.last_score = 0.0
 
 
 def build_detector(cfg: WakeConfig) -> tuple[Detector, str]:

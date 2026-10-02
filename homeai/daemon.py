@@ -46,6 +46,7 @@ from .dialogue import (
     invites_reply,
     is_continue_request,
     is_decline,
+    is_trailing_fragment,
     split_for_budget,
 )
 from .wake import CaptureMachine, State, build_detector
@@ -58,6 +59,9 @@ MSG_AGENT_DOWN = "Sorry, my brain is offline right now."
 MSG_AGENT_ERROR = "Sorry, something went wrong."
 MSG_REFUSED = "I can't do that by voice."
 MSG_NOT_UNDERSTOOD = "Sorry, I didn't catch that."
+# Not a question: asking one would open a follow-up window, and the people
+# talking to each other would "answer" it.
+MSG_FRAGMENT = "Sorry, I only caught part of that. Say hey Jarvis again if you meant me."
 
 # Spoken when the agent is taking long enough that silence reads as failure.
 # The threshold sits above a normal conversational turn (~0.5-1.5s) so simple
@@ -96,6 +100,7 @@ class VoiceAssistant:
         # Set when a reply ended with a question: capture the answer without
         # the wake word. Bounded by _followup_chain; see homeai/dialogue.py.
         self._followup_armed = threading.Event()
+        self._last_wake_score: float | None = None
         self._followup_chain = FollowupChain(self.cfg.wake.followup_max_chain)
         # The unspoken tail of a reply that ran over the spoken budget.
         self._held = HeldRemainder()
@@ -193,10 +198,15 @@ class VoiceAssistant:
                         if not self.machine.accepts_wake(now):
                             continue
                         if self._detector and self._detector.detect(frame):
-                            log.info("wake word detected")
+                            wake_score = getattr(self._detector, "last_score", None)
+                            if wake_score is None:
+                                log.info("wake word detected")
+                            else:
+                                log.info("wake word detected (score %.3f)", wake_score)
                             self.machine.on_wake(now)
                             utterance = []
                             source = "wake"
+                            self._last_wake_score = wake_score
                         continue
 
                     utterance.append(frame)
@@ -350,7 +360,8 @@ class VoiceAssistant:
         return listener if listener.start() else None
 
     def _handle(self, audio: np.ndarray, source: str = "wake") -> None:
-        turn = Turn(source=source)
+        turn = Turn(source=source,
+                    wake_score=self._last_wake_score if source == "wake" else None)
         total = Stopwatch()
         stage = Stopwatch()
         self._followup_chain.record_turn(source == "followup")
@@ -402,6 +413,17 @@ class VoiceAssistant:
                 return
             # Anything else is a new question; the old tail is stale.
             self._held.clear()
+
+        if is_trailing_fragment(transcript.text):
+            log.info("fragment: %r - probably not addressed to me", transcript.text)
+            turn.verdict = "fragment"
+            stage.reset()
+            self._speak(MSG_FRAGMENT)
+            turn.tts_ms = stage.ms()
+            turn.reply = MSG_FRAGMENT
+            turn.total_ms = total.ms()
+            self.transcript.write(turn)
+            return
 
         verdict = check_utterance(transcript.text)
         if verdict.verdict in (Verdict.REFUSE, Verdict.CONFIRM):

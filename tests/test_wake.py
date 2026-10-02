@@ -314,3 +314,48 @@ def test_heard_speech_reports_whether_anyone_spoke() -> None:
     assert m.heard_speech is True
     m.reset()
     assert m.heard_speech is False
+
+
+def test_openwakeword_detect_records_last_score() -> None:
+    from homeai.wake import OpenWakeWordDetector
+
+    class Model:
+        def __init__(self, score):
+            self.score = score
+
+        def predict(self, pcm):
+            return {"hey_jarvis": np.float32(self.score)}
+
+    det = OpenWakeWordDetector("hey_jarvis", 0.5)
+    det._model = Model(0.31)
+    assert det.detect(np.zeros(1280, dtype=np.float32)) is False
+    assert det.last_score == pytest.approx(0.31)
+    det._model = Model(0.92)
+    assert det.detect(np.zeros(1280, dtype=np.float32)) is True
+    assert det.last_score == pytest.approx(0.92)
+    assert type(det.last_score) is float  # numpy floats break the JSON transcript
+
+
+def test_openwakeword_reset_flushes_features_before_clearing_predictions() -> None:
+    """Model.reset() alone leaves the wake word in the feature buffers and it
+    re-fires on silence (tools/probe_wake_reset.py: 0.993 within 0.4 s)."""
+    from homeai import wake
+
+    calls: list[str] = []
+
+    class Model:
+        def predict(self, pcm):
+            assert not pcm.any()
+            calls.append("silence")
+            return {"hey_jarvis": 0.0}
+
+        def reset(self):
+            calls.append("reset")
+
+    det = wake.OpenWakeWordDetector("hey_jarvis", 0.5)
+    det._model = Model()
+    det.last_score = 0.99
+    det.reset()
+    assert calls == ["silence"] * wake.FLUSH_FRAMES + ["reset"]
+    assert wake.FLUSH_FRAMES * wake.FLUSH_FRAME / 16000 >= 2.0
+    assert det.last_score == 0.0

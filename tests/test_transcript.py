@@ -164,3 +164,23 @@ class TestTranscriptLog:
         expected_subkeys = ["stt", "agent", "tts", "total"]
         for key in expected_subkeys:
             assert key in timings
+
+def test_wake_score_written_only_when_known(tmp_path: Path) -> None:
+    import json
+    path = tmp_path / "t.jsonl"
+    log = TranscriptLog(str(path))
+    log.write(Turn(heard="a", wake_score=0.81234))
+    log.write(Turn(heard="b", source="followup"))
+    first, second = (json.loads(line) for line in path.read_text().splitlines())
+    assert first["wake_score"] == 0.812
+    assert "wake_score" not in second
+
+
+def test_numpy_wake_score_does_not_drop_the_record(tmp_path: Path) -> None:
+    """Regression: openWakeWord returns numpy float32, which json cannot
+    serialise; every record was silently dropped for a while."""
+    import json
+    import numpy as np
+    path = tmp_path / "t.jsonl"
+    TranscriptLog(str(path)).write(Turn(heard="a", wake_score=np.float32(0.9)))
+    assert json.loads(path.read_text())["wake_score"] == 0.9

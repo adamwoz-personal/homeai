@@ -147,3 +147,27 @@ class TestHeldRemainder:
 
     def test_empty_is_not_pending(self):
         assert not HeldRemainder().pending(0)
+
+
+class TestTrailingFragment:
+    @pytest.mark.parametrize("text", [
+        "I will run by the local AI, so there are...",
+        "and then he said\u2026",
+        "so the thing is... ",
+        'he told me "maybe..."',
+    ])
+    def test_trailing_off_is_a_fragment(self, text):
+        from homeai.dialogue import is_trailing_fragment
+        assert is_trailing_fragment(text)
+
+    @pytest.mark.parametrize("text", [
+        "Do you think the universe is alive?",
+        "What's the weather in...?",
+        "Well... tell me about Seneca.",
+        "Set a timer for five minutes.",
+        "",
+        "...",
+    ])
+    def test_complete_or_question_is_not(self, text):
+        from homeai.dialogue import is_trailing_fragment
+        assert is_trailing_fragment(text) is (text == "...")
