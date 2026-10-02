@@ -127,9 +127,11 @@ TOOLS: list[dict[str, Any]] = [
         "name": "research",
         "description": (
             "Search the web and read the resulting pages, returning sourced "
-            "excerpts. Use this whenever you are asked about something you "
-            "are unsure of, that may have changed recently, or that involves "
-            "specific facts, names, numbers, or current events. Before "
+            "excerpts. Use it only for facts you do not know or that may "
+            "have changed recently: news, current events, specific names, "
+            "numbers, dates, prices. Never use it for opinions, advice, "
+            "feelings, philosophy, or the meaning of ordinary words; answer "
+            "those from your own reasoning. Before "
             "calling it, tell the user you are looking it up. The tool "
             "returns source material, not an answer: read the excerpts and "
             "form your own conclusion, and say so if the sources are weak or "

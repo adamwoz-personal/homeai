@@ -156,8 +156,9 @@ def test_build_request_includes_prior_exchanges_when_populated():
         "You: assistant2\n"
         "\n"
         "Now answer this, resolving any references to the exchange above. "
-        "If you search or look something up, expand those references into "
-        "a self-contained query first.\n"
+        "Build on what you already said; do not repeat it. Only look "
+        "something up if it needs current facts, and if you do, expand "
+        "those references into a self-contained query first.\n"
         "\n"
         "User: user3"
     )

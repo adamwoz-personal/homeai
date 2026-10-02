@@ -126,6 +126,13 @@ class TtsConfig:
     # roughly 150 words per minute a 30s cap would truncate any answer longer
     # than ~75 words mid-sentence. This is a runaway guard, not a style limit.
     timeout_s: float = field(default_factory=lambda: _env_float("HOMEAI_TTS_TIMEOUT", 300.0))
+    # Style limit, unlike timeout_s. Replies longer than this many words are
+    # cut at a sentence boundary and Jarvis offers to keep going; 110 words
+    # is under forty seconds at Piper's ~3 words/second. 0 disables. See
+    # homeai/dialogue.py split_for_budget.
+    spoken_budget_words: int = field(
+        default_factory=lambda: _env_int("HOMEAI_SPOKEN_BUDGET_WORDS", 110)
+    )
 
     @property
     def model_path(self) -> Path:
@@ -149,6 +156,15 @@ class TtsConfig:
             return rate if rate > 0 else default
         except (OSError, ValueError, TypeError):
             return default
+
+
+DEFAULT_STYLE_HINT = (
+    "(Spoken reply. If I ask what you think, give your own view in the first "
+    "sentence, then your reason; never say you have no opinion or that it is "
+    "a complex topic. If you already gave your view, do not restate it: add "
+    "something new, such as another reason, an objection, or what follows "
+    "from it. Keep it under a hundred words.)"
+)
 
 
 @dataclass(frozen=True)
@@ -185,6 +201,13 @@ class AgentConfig:
     # The ZeroClaw agent to address. Must be bound to a restricted risk
     # profile in ~/.zeroclaw/config.toml.
     agent_name: str = field(default_factory=lambda: _env_str("HOMEAI_AGENT_NAME", "local"))
+    # One line of guidance attached to every spoken request. SOUL.md says the
+    # same things, but it sits under ~8000 characters of ZeroClaw preamble
+    # and an 8B model follows instructions near the question far better than
+    # ones buried in a system prompt. Set HOMEAI_AGENT_STYLE_HINT=off to disable.
+    style_hint: str = field(
+        default_factory=lambda: _env_str("HOMEAI_AGENT_STYLE_HINT", DEFAULT_STYLE_HINT)
+    )
 
 
 @dataclass(frozen=True)
@@ -220,6 +243,19 @@ class WakeConfig:
     # Safe because measurement showed ordinary speech peaks at 0.10 against a
     # 0.5 threshold; see homeai/bargein.py and tools/probe_bargein.py.
     barge_in: bool = field(default_factory=lambda: _env_bool("HOMEAI_BARGE_IN", True))
+    # When a reply ends with a question, listen for the answer without
+    # requiring the wake word. See homeai/dialogue.py.
+    followup: bool = field(default_factory=lambda: _env_bool("HOMEAI_FOLLOWUP", True))
+    # How long to wait for the answer to begin. Longer than lead_in_s: the
+    # person was just asked something and may need a moment to think.
+    followup_lead_in_s: float = field(
+        default_factory=lambda: _env_float("HOMEAI_FOLLOWUP_LEAD_IN_S", 6.0)
+    )
+    # Maximum follow-up windows in a row before the wake word is required
+    # again. Bounds a loop where background audio keeps "answering" Jarvis.
+    followup_max_chain: int = field(
+        default_factory=lambda: _env_int("HOMEAI_FOLLOWUP_MAX_CHAIN", 3)
+    )
 
 
 @dataclass(frozen=True)

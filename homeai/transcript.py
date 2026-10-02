@@ -39,6 +39,8 @@ class Turn:
     heard: str = ""
     reply: str = ""
     verdict: str = ""
+    # How the turn started: "wake", "bargein", or "followup" (no wake word).
+    source: str = "wake"
     ok: bool = True
     error: str = ""
     attempts: int = 0
@@ -90,6 +92,7 @@ class TranscriptLog:
             "heard": turn.heard,
             "reply": turn.reply,
             "verdict": turn.verdict,
+            "source": turn.source,
             "ok": turn.ok,
             "attempts": turn.attempts,
             "timings_ms": {

@@ -93,6 +93,9 @@ class CliAgentClient:
         request = (
             self._memory.build_request(utterance) if self._memory else utterance
         )
+        if self._cfg.style_hint and self._cfg.style_hint.lower() not in ("off", "0", "none"):
+            # After the question, so it is the last thing the model reads.
+            request = f"{request}\n\n{self._cfg.style_hint}"
 
         last_error = "unknown error"
         attempts = 0

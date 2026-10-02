@@ -276,3 +276,41 @@ def test_wake_resets_heard_speech_between_utterances() -> None:
     m.on_wake(10.0)
     # Grace must apply again, not be suppressed by the previous utterance.
     assert m.feed(_leadin_quiet(), 11.5) is False
+
+
+# ---------------------------------------------------------------------------
+# Per-capture lead-in (follow-up listening)
+#
+# After Jarvis asks a question, the answer gets longer to begin than a
+# question asked straight after the wake word: the person is thinking.
+# ---------------------------------------------------------------------------
+
+
+def test_lead_in_override_applies_to_this_capture_only() -> None:
+    m = _leadin_machine(lead_in_s=2.5)
+    m.on_wake(0.0, lead_in_s=6.0)
+    assert m.feed(_leadin_quiet(), 5.0) is False, "6s override must hold at 5s"
+    assert m.feed(_leadin_quiet(), 6.1) is True
+
+    m.reset()
+    m.on_wake(10.0)
+    assert m.feed(_leadin_quiet(), 12.6) is True, "default lead-in restored"
+
+
+def test_reset_clears_the_override() -> None:
+    m = _leadin_machine(lead_in_s=2.5)
+    m.on_wake(0.0, lead_in_s=6.0)
+    m.reset()
+    m.on_wake(20.0)
+    assert m.feed(_leadin_quiet(), 22.6) is True
+
+
+def test_heard_speech_reports_whether_anyone_spoke() -> None:
+    m = _leadin_machine()
+    m.on_wake(0.0)
+    m.feed(_leadin_quiet(), 0.1)
+    assert m.heard_speech is False
+    m.feed(_leadin_loud(), 0.2)
+    assert m.heard_speech is True
+    m.reset()
+    assert m.heard_speech is False

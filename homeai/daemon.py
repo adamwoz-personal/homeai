@@ -39,6 +39,15 @@ from .stt import Transcriber
 from .transcript import Stopwatch, TranscriptLog, Turn
 from .tts import Speaker
 from .bargein import InterruptListener, contains_wake_fragments, is_dismissal
+from .dialogue import (
+    CONTINUE_PROMPT,
+    FollowupChain,
+    HeldRemainder,
+    invites_reply,
+    is_continue_request,
+    is_decline,
+    split_for_budget,
+)
 from .wake import CaptureMachine, State, build_detector
 
 log = logging.getLogger("homeai")
@@ -56,6 +65,10 @@ MSG_NOT_UNDERSTOOD = "Sorry, I didn't catch that."
 # assistant did not hear them.
 MSG_WORKING = "Let me look that up."
 PROGRESS_AFTER_S = 2.5
+
+# Pause between the end of a reply and opening a follow-up window, so the
+# capture does not start on the acoustic tail of Jarvis's own voice.
+FOLLOWUP_SETTLE_S = 0.25
 
 
 class VoiceAssistant:
@@ -80,6 +93,13 @@ class VoiceAssistant:
         # deaf while speaking, so it never saw that wake word; this hands the
         # capture over to it explicitly.
         self._bargein_armed = threading.Event()
+        # Set when a reply ended with a question: capture the answer without
+        # the wake word. Bounded by _followup_chain; see homeai/dialogue.py.
+        self._followup_armed = threading.Event()
+        self._followup_chain = FollowupChain(self.cfg.wake.followup_max_chain)
+        # The unspoken tail of a reply that ran over the spoken budget.
+        self._held = HeldRemainder()
+        self._last_interrupted = False
         self._threads: list[threading.Thread] = []
 
     # -- startup -----------------------------------------------------------
@@ -114,6 +134,7 @@ class VoiceAssistant:
         poll_interval = frame_size / self.cfg.audio.sample_rate / 2
         cursor = self.mic.buffer.total_written
         utterance: list[np.ndarray] = []
+        source = "wake"
 
         while not self._stop.is_set():
             time.sleep(poll_interval)
@@ -131,10 +152,26 @@ class VoiceAssistant:
             # visibly worked, followed by total silence in the log.
             if self._bargein_armed.is_set():
                 self._bargein_armed.clear()
+                self._followup_armed.clear()
                 utterance = []
                 cursor = self.mic.buffer.total_written
                 self.machine.on_wake(time.monotonic())
+                source = "bargein"
                 log.info("barge-in: capturing follow-up")
+            elif self._followup_armed.is_set():
+                # The reply ended with a question. Listen for the answer
+                # without the wake word, for a longer lead-in than usual.
+                self._followup_armed.clear()
+                utterance = []
+                cursor = self.mic.buffer.total_written
+                self.machine.on_wake(
+                    time.monotonic(), lead_in_s=self.cfg.wake.followup_lead_in_s
+                )
+                source = "followup"
+                log.info(
+                    "listening for a reply (%.1fs, no wake word needed)",
+                    self.cfg.wake.followup_lead_in_s,
+                )
 
             try:
                 chunk, cursor = self.mic.buffer.read_new(cursor)
@@ -156,11 +193,13 @@ class VoiceAssistant:
                             log.info("wake word detected")
                             self.machine.on_wake(now)
                             utterance = []
+                            source = "wake"
                         continue
 
                     utterance.append(frame)
                     if self.machine.feed(frame, now):
                         audio = np.concatenate(utterance) if utterance else np.zeros(0, np.float32)
+                        heard = self.machine.heard_speech
                         utterance = []
                         self.machine.reset(now)
                         if self._detector:
@@ -168,28 +207,36 @@ class VoiceAssistant:
                         # Drop anything captured during handoff so the next
                         # turn cannot re-detect this utterance's wake word.
                         cursor = self.mic.buffer.total_written
-                        self._enqueue(audio)
+                        if source == "followup" and not heard:
+                            # Nobody answered. The common case, and not worth
+                            # a Whisper run that could hallucinate words out
+                            # of room noise and send them to the agent.
+                            log.info("no reply to follow-up; back to wake word")
+                        else:
+                            self._enqueue(audio, source)
+                        source = "wake"
                         break
             except Exception:  # noqa: BLE001 - this thread must never die
                 log.exception("wake loop error; resetting")
                 self.machine.reset()
                 utterance = []
+                source = "wake"
                 cursor = self.mic.buffer.total_written
 
-    def _enqueue(self, audio: np.ndarray) -> None:
+    def _enqueue(self, audio: np.ndarray, source: str = "wake") -> None:
         try:
-            self._queue.put_nowait(audio)
+            self._queue.put_nowait((audio, source))
         except queue.Full:
             log.warning("worker busy; dropping utterance")
 
     def _worker_loop(self) -> None:
         while not self._stop.is_set():
             try:
-                audio = self._queue.get(timeout=0.5)
+                audio, source = self._queue.get(timeout=0.5)
             except queue.Empty:
                 continue
             try:
-                self._handle(audio)
+                self._handle(audio, source)
             except Exception:  # noqa: BLE001 - never let one turn kill the service
                 log.exception("unhandled error processing utterance")
                 self._speak(MSG_AGENT_ERROR)
@@ -251,6 +298,7 @@ class VoiceAssistant:
             return result.first_audio_ms
         finally:
             interrupted = listener is not None and listener.triggered
+            self._last_interrupted = interrupted
             if listener is not None:
                 listener.stop()
             else:
@@ -292,10 +340,11 @@ class VoiceAssistant:
         )
         return listener if listener.start() else None
 
-    def _handle(self, audio: np.ndarray) -> None:
-        turn = Turn()
+    def _handle(self, audio: np.ndarray, source: str = "wake") -> None:
+        turn = Turn(source=source)
         total = Stopwatch()
         stage = Stopwatch()
+        self._followup_chain.record_turn(source == "followup")
 
         transcript = self.stt.transcribe_audio(audio, self.cfg.audio.sample_rate)
         turn.stt_ms = stage.ms()
@@ -317,11 +366,33 @@ class VoiceAssistant:
         # nobody asked and produce more speech to interrupt.
         if is_dismissal(transcript.text, self.cfg.wake.model):
             log.info("dismissal: %r - staying quiet", transcript.text)
+            self._held.clear()
             turn.verdict = "dismissed"
             turn.reply = ""
             turn.total_ms = total.ms()
             self.transcript.write(turn)
             return
+
+        # Answering "want me to keep going?". Handled here, without the agent:
+        # the rest of the reply already exists, and asking the model again
+        # would produce a different answer rather than the remainder.
+        now = time.monotonic()
+        if self._held.pending(now):
+            if is_continue_request(transcript.text):
+                log.info("continuing held reply")
+                turn.verdict = "continued"
+                self._deliver(turn, self._held.take(now), total)
+                return
+            if is_decline(transcript.text):
+                log.info("declined the rest of the reply")
+                self._held.clear()
+                turn.verdict = "declined"
+                turn.reply = ""
+                turn.total_ms = total.ms()
+                self.transcript.write(turn)
+                return
+            # Anything else is a new question; the old tail is stale.
+            self._held.clear()
 
         verdict = check_utterance(transcript.text)
         if verdict.verdict in (Verdict.REFUSE, Verdict.CONFIRM):
@@ -361,10 +432,22 @@ class VoiceAssistant:
         spoken = normalise_for_speech(
             sanitise_for_speech(flatten_markdown(reply.text))
         )
+        self._deliver(turn, spoken, total)
+
+    def _deliver(self, turn: Turn, spoken: str, total: Stopwatch) -> None:
+        """Speak a finished reply within the spoken budget, then log it."""
+        spoken, rest = split_for_budget(spoken, self.cfg.tts.spoken_budget_words)
+        if rest:
+            self._held.hold(rest, time.monotonic())
+            spoken = f"{spoken} {CONTINUE_PROMPT}"
+            log.info("reply over budget: holding %d words", len(rest.split()))
         turn.reply = spoken
-        stage.reset()
+        stage = Stopwatch()
         turn.tts_first_audio_ms = self._speak(spoken, chunked=True)
         turn.tts_ms = stage.ms()
+        if self._last_interrupted:
+            # Cut off mid-reply: they do not want the rest either.
+            self._held.clear()
         turn.total_ms = total.ms()
         # Perceived lag ends when sound starts; the rest is Jarvis talking.
         turn.perceived_ms = turn.stt_ms + turn.agent_ms + turn.tts_first_audio_ms
@@ -376,6 +459,29 @@ class VoiceAssistant:
             turn.tts_first_audio_ms, turn.tts_ms, turn.attempts,
         )
         self.transcript.write(turn)
+        self._maybe_listen_for_reply(spoken)
+
+    def _maybe_listen_for_reply(self, spoken: str) -> None:
+        """Open a wake-word-free window if the reply just asked a question.
+
+        Skipped after an interruption: the barge-in path is already capturing,
+        and the question that was cut off was never fully heard anyway.
+        """
+        if not self.cfg.wake.followup or self._last_interrupted:
+            return
+        if not invites_reply(spoken):
+            return
+        if not self._followup_chain.may_open():
+            log.info(
+                "reply asked a question, but %d follow-ups in a row; "
+                "wake word required", self._followup_chain.count,
+            )
+            return
+        # Let the room settle. The tail of our own voice can still be in the
+        # air when aplay returns, and a capture that opens on it would close
+        # after silence_s on a fragment of Jarvis, losing the real answer.
+        time.sleep(FOLLOWUP_SETTLE_S)
+        self._followup_armed.set()
 
     # -- lifecycle ---------------------------------------------------------
 

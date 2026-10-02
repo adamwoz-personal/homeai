@@ -62,7 +62,7 @@ def test_successful_reply_is_returned_trimmed():
 
 def test_command_targets_configured_agent_and_binary():
     runner = make_runner(FakeProc(0, "hi"))
-    c = cfg(agent_name="local", cli_binary="/usr/bin/zeroclaw")
+    c = cfg(agent_name="local", cli_binary="/usr/bin/zeroclaw", style_hint="off")
     CliAgentClient(c, runner=runner).ask("hello")
     cmd = runner.calls[0][0]
     assert cmd[0] == "/usr/bin/zeroclaw"
@@ -203,3 +203,35 @@ def test_cli_and_http_clients_expose_the_same_interface():
     for cls in (CliAgentClient, AgentClient):
         missing = required - {m for m in dir(cls) if not m.startswith("_")}
         assert not missing, f"{cls.__name__} is missing {missing}"
+
+
+# -- style hint ----------------------------------------------------------------
+
+
+def test_style_hint_follows_the_question():
+    runner = make_runner(FakeProc(0, "hi"))
+    CliAgentClient(cfg(style_hint="(Be brief.)"), runner=runner).ask("hello")
+    message = runner.calls[0][0][-1]
+    assert message.startswith("hello")
+    assert message.endswith("(Be brief.)")
+
+
+@pytest.mark.parametrize("off", ["off", "OFF", "0", "none", ""])
+def test_style_hint_can_be_disabled(off):
+    runner = make_runner(FakeProc(0, "hi"))
+    CliAgentClient(cfg(style_hint=off), runner=runner).ask("hello")
+    assert runner.calls[0][0][-1] == "hello"
+
+
+def test_style_hint_is_not_stored_in_memory():
+    from homeai.memory import ConversationMemory
+
+    memory = ConversationMemory()
+    runner = make_runner(FakeProc(0, "hi"))
+    CliAgentClient(cfg(style_hint="(Be brief.)"), runner=runner, memory=memory).ask("hello")
+    assert memory.recent()[0].user == "hello"
+
+
+def test_default_style_hint_targets_the_measured_failures():
+    hint = AgentConfig().style_hint
+    assert "first sentence" in hint and "do not restate" in hint

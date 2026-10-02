@@ -161,3 +161,269 @@ def test_real_question_still_reaches_the_agent(assistant) -> None:
 
     assistant.agent.ask.assert_called_once()
     assert assistant.agent.ask.call_args.args[0] == "stop and tell me about the moon"
+
+
+# ---------------------------------------------------------------------------
+# Follow-up listening
+#
+# When a reply ends with a question, the answer should be captured without
+# "Hey Jarvis". Bounded so background audio cannot hold a conversation with
+# Jarvis indefinitely.
+# ---------------------------------------------------------------------------
+
+
+from dataclasses import replace  # noqa: E402
+
+
+def _with_wake(assistant, **changes) -> None:
+    """Swap in a modified WakeConfig everywhere the daemon reads it."""
+    wake = replace(assistant.cfg.wake, **changes)
+    assistant.cfg = replace(assistant.cfg, wake=wake)
+    assistant.machine.cfg = wake
+    from homeai.dialogue import FollowupChain
+    assistant._followup_chain = FollowupChain(wake.followup_max_chain)
+
+
+def _answer(assistant, heard: str, reply_text: str, source: str = "wake") -> None:
+    """Run one full turn through _handle with the given transcript and reply."""
+    _heard(assistant, heard)
+    reply = assistant.agent.ask.return_value
+    reply.ok, reply.text, reply.attempts, reply.error = True, reply_text, 1, ""
+    spoken = assistant.tts.say_chunked.return_value
+    spoken.first_audio_ms, spoken.interrupted, spoken.chunks_spoken = 100.0, False, 1
+    assistant._handle(np.zeros(1600, dtype=np.float32), source)
+
+
+@pytest.fixture
+def quick(assistant, monkeypatch):
+    """No barge-in listener (it needs a real mic) and no settle delay."""
+    monkeypatch.setattr("homeai.daemon.FOLLOWUP_SETTLE_S", 0.0)
+    _with_wake(assistant, barge_in=False)
+    return assistant
+
+
+def test_question_at_end_of_reply_opens_a_followup_window(quick) -> None:
+    _answer(quick, "is free will real", "I think it is. What do you think?")
+    assert quick._followup_armed.is_set()
+
+
+def test_statement_does_not_open_a_window(quick) -> None:
+    _answer(quick, "capital of france", "The capital of France is Paris.")
+    assert not quick._followup_armed.is_set()
+
+
+def test_interrupted_reply_does_not_open_a_window(quick) -> None:
+    # Barge-in already captures the follow-up; a second arm would race it.
+    _heard(quick, "is free will real")
+    reply = quick.agent.ask.return_value
+    reply.ok, reply.text, reply.attempts, reply.error = True, "What do you think?", 1, ""
+    quick.tts.say_chunked.return_value.first_audio_ms = 100.0
+    # _speak's finally block records the real interrupted state; emulate a
+    # reply that was cut off by setting it after speaking.
+    original = quick._speak
+
+    def speak_then_mark(text, chunked=False):
+        ms = original(text, chunked)
+        quick._last_interrupted = True
+        return ms
+
+    quick._speak = speak_then_mark
+    quick._handle(np.zeros(1600, dtype=np.float32))
+    assert not quick._followup_armed.is_set()
+
+
+def test_followup_can_be_disabled(quick) -> None:
+    _with_wake(quick, barge_in=False, followup=False)
+    _answer(quick, "is free will real", "What do you think?")
+    assert not quick._followup_armed.is_set()
+
+
+def test_chain_of_followups_is_capped(quick) -> None:
+    _with_wake(quick, barge_in=False, followup_max_chain=2)
+    _answer(quick, "q", "What do you think?", source="wake")
+    assert quick._followup_armed.is_set()
+    quick._followup_armed.clear()
+
+    _answer(quick, "a1", "Why?", source="followup")
+    assert quick._followup_armed.is_set()
+    quick._followup_armed.clear()
+
+    _answer(quick, "a2", "And then?", source="followup")
+    assert not quick._followup_armed.is_set(), (
+        "after max_chain wake-word-free turns the wake word must be required"
+    )
+
+    # Saying the wake word starts a fresh chain.
+    _answer(quick, "q2", "What do you think?", source="wake")
+    assert quick._followup_armed.is_set()
+
+
+def test_turn_records_how_it_started(quick) -> None:
+    _answer(quick, "an answer", "Interesting.", source="followup")
+    turn = quick.transcript.write.call_args.args[0]
+    assert turn.source == "followup"
+
+
+class StreamingBuffer:
+    """A mic buffer that always has fresh audio, as a real microphone does."""
+
+    def __init__(self, block: int, level: float = 0.0) -> None:
+        self.total_written = 0
+        self._block = block
+        self.level = level
+
+    def read_new(self, cursor, max_samples=None):
+        frames = np.full(self._block * 2, self.level, dtype=np.float32)
+        self.total_written += len(frames)
+        return frames, cursor + len(frames)
+
+
+def _streaming(assistant, level: float) -> StreamingBuffer:
+    buf = StreamingBuffer(assistant.cfg.audio.block_size, level)
+    assistant.mic.buffer = buf
+    assistant.mic.paused = False
+    assistant.tts.speaking = False
+    return buf
+
+
+def test_followup_arm_starts_capture_with_the_longer_lead_in(quick) -> None:
+    _with_wake(quick, barge_in=False, followup_lead_in_s=30.0)
+    _streaming(quick, level=0.0)
+    quick._followup_armed.set()
+
+    _drive_wake_loop(quick)
+
+    assert quick.machine.state is State.LISTENING
+    assert quick._queue.empty(), "30s lead-in must not have expired yet"
+
+
+def test_unanswered_followup_is_not_sent_to_whisper(quick) -> None:
+    # Silence for the whole window. Transcribing it risks Whisper inventing
+    # words from room noise, which would then go to the agent unprompted.
+    _with_wake(quick, barge_in=False, followup_lead_in_s=0.05)
+    _streaming(quick, level=0.0)
+    quick._followup_armed.set()
+
+    _drive_wake_loop(quick, iterations=0.4)
+
+    assert quick._queue.empty()
+    assert quick.machine.state is State.IDLE
+
+
+def test_answered_followup_is_queued_as_a_followup(quick) -> None:
+    _with_wake(quick, barge_in=False, silence_s=0.05, followup_lead_in_s=5.0)
+    buf = _streaming(quick, level=0.5)  # someone answering
+    quick._followup_armed.set()
+
+    t = threading.Thread(target=quick._wake_loop, daemon=True)
+    t.start()
+    time.sleep(0.15)
+    buf.level = 0.0  # they stop talking
+    time.sleep(0.3)
+    quick._stop.set()
+    t.join(timeout=2)
+    quick._stop.clear()
+
+    audio, source = quick._queue.get_nowait()
+    assert source == "followup"
+    assert audio.size > 0
+
+
+def test_barge_in_takes_precedence_over_a_pending_followup(quick) -> None:
+    _streaming(quick, level=0.0)
+    quick._followup_armed.set()
+    quick._bargein_armed.set()
+
+    _drive_wake_loop(quick)
+
+    assert not quick._followup_armed.is_set(), "stale follow-up must be dropped"
+    assert quick.machine.state is State.LISTENING
+
+
+# -- spoken budget -------------------------------------------------------------
+
+LONG_REPLY = " ".join(f"Point number {i} is worth making here." for i in range(40))
+
+
+def _spoken(assistant) -> str:
+    return assistant.tts.say_chunked.call_args.args[0]
+
+
+def test_long_reply_is_cut_and_offers_to_continue(quick) -> None:
+    _answer(quick, "explain free will", LONG_REPLY)
+    spoken = _spoken(quick)
+    assert len(spoken.split()) < 130
+    assert spoken.endswith("Want me to keep going?")
+    assert quick._followup_armed.is_set(), "the offer must open the reply window"
+
+
+def test_yes_speaks_the_rest_without_asking_the_agent(quick) -> None:
+    _answer(quick, "explain free will", LONG_REPLY)
+    first = _spoken(quick)
+    asked = quick.agent.ask.call_count
+
+    _answer(quick, "yes please", "SHOULD NOT BE USED", source="followup")
+    assert quick.agent.ask.call_count == asked
+    second = _spoken(quick)
+    assert "SHOULD NOT" not in second
+    heard = (first.replace(" There's more to it. Want me to keep going?", "")
+             + " " + second.replace(" There's more to it. Want me to keep going?", ""))
+    assert heard.split()[: len(LONG_REPLY.split())] == LONG_REPLY.split()[: len(heard.split())]
+    assert quick.transcript.write.call_args.args[0].verdict == "continued"
+
+
+def test_whole_reply_is_eventually_spoken(quick) -> None:
+    _answer(quick, "explain free will", LONG_REPLY)
+    parts = [_spoken(quick)]
+    for _ in range(10):
+        if not quick._held.pending(time.monotonic()):
+            break
+        _answer(quick, "go on", "x", source="followup")
+        parts.append(_spoken(quick))
+    suffix = " There's more to it. Want me to keep going?"
+    joined = " ".join(p.removesuffix(suffix) for p in parts)
+    assert joined == LONG_REPLY
+
+
+def test_no_declines_quietly(quick) -> None:
+    _answer(quick, "explain free will", LONG_REPLY)
+    calls = quick.tts.say_chunked.call_count
+    _answer(quick, "no thanks", "x", source="followup")
+    assert quick.tts.say_chunked.call_count == calls
+    assert not quick._held.pending(time.monotonic())
+    assert quick.transcript.write.call_args.args[0].verdict == "declined"
+
+
+def test_new_question_drops_the_held_rest(quick) -> None:
+    _answer(quick, "explain free will", LONG_REPLY)
+    _answer(quick, "what's the weather", "Sunny.", source="followup")
+    assert _spoken(quick) == "Sunny."
+    assert not quick._held.pending(time.monotonic())
+
+
+def test_yes_with_nothing_held_goes_to_the_agent(quick) -> None:
+    _answer(quick, "yes", "Yes to what?")
+    assert _spoken(quick) == "Yes to what?"
+
+
+def test_interrupting_the_first_part_drops_the_rest(quick) -> None:
+    _heard(quick, "explain free will")
+    reply = quick.agent.ask.return_value
+    reply.ok, reply.text, reply.attempts, reply.error = True, LONG_REPLY, 1, ""
+    quick.tts.say_chunked.return_value.first_audio_ms = 100.0
+    original = quick._speak
+
+    def speak_then_mark(text, chunked=False):
+        ms = original(text, chunked)
+        quick._last_interrupted = True
+        return ms
+
+    quick._speak = speak_then_mark
+    quick._handle(np.zeros(1600, dtype=np.float32))
+    assert not quick._held.pending(time.monotonic())
+
+
+def test_budget_zero_speaks_everything(quick) -> None:
+    quick.cfg = replace(quick.cfg, tts=replace(quick.cfg.tts, spoken_budget_words=0))
+    _answer(quick, "explain free will", LONG_REPLY)
+    assert _spoken(quick) == LONG_REPLY

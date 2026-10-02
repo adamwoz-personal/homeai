@@ -163,9 +163,14 @@ class ConversationMemory:
             lines.append("")
 
         lines.append(
+            # Measured 2026-10-02: the old wording ("If you search or look
+            # something up...") read as an invitation, and opinion follow-ups
+            # were searched and re-explained. Searching is now scoped to
+            # current facts and repetition is named explicitly.
             "Now answer this, resolving any references to the exchange above. "
-            "If you search or look something up, expand those references into "
-            "a self-contained query first."
+            "Build on what you already said; do not repeat it. Only look "
+            "something up if it needs current facts, and if you do, expand "
+            "those references into a self-contained query first."
         )
         # Two blank lines: the separation makes it unambiguous to the model
         # where the recalled context ends and the live question begins.

@@ -286,3 +286,20 @@ class TestMcpStdioLoop:
         stdout = io.StringIO()
         serve(io.StringIO("\n\n"), stdout)
         assert stdout.getvalue() == ""
+
+
+class TestResearchPromptIsSpeakable:
+    """The research answer is read aloud by the voice agent."""
+
+    def _prompt(self):
+        return Research(
+            query="q", sources=[Source("T", "https://a.test", "body")]
+        ).as_prompt()
+
+    def test_asks_for_a_short_spoken_answer(self):
+        assert "spoken aloud" in self._prompt()
+
+    def test_forbids_lists_and_source_narration(self):
+        prompt = self._prompt()
+        assert "Do not list" in prompt
+        assert "do not mention 'the sources'" in prompt

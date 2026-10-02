@@ -135,10 +135,16 @@ class Research:
             chunks.append(source.text[:per_source_chars].strip())
             chunks.append("")
 
+        # The answer is spoken. Measured 2026-10-02: given only "answer the
+        # question", the voice model opened with "Based on the research
+        # results" and read out a twenty-two item bulleted list.
         chunks.append(
             "Using only the sources above, answer the question and give your "
             "own assessment. If the sources disagree or are inadequate, say "
-            "so. Do not state anything the sources do not support."
+            "so. Do not state anything the sources do not support. Your answer "
+            "will be spoken aloud: give it in two or three sentences in your "
+            "own words. Do not list, do not quote, and do not mention 'the "
+            "sources' or 'the research'."
         )
         return "\n".join(chunks)
 
