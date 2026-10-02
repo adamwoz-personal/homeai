@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Switch the GPU between Jarvis and the coding model. See homeai/gpu_mode.py.
+set -euo pipefail
+cd "$(dirname "$(readlink -f "$0")")/.."
+exec .venv/bin/python -m homeai.gpu_mode "$@"

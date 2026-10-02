@@ -46,6 +46,9 @@ MUTANTS=(
   "install-voice-can-recall|homeai/install/zc_config.py|s/allowed_tools = \[\"calculator\"\]/allowed_tools = [\"calculator\", \"memory_recall\"]/|tests/test_install_zc_config.py -k locked_down"
   "install-redefines-agent|homeai/install/zc_config.py|s/        elif _has_path(data, path):/        elif False:/|tests/test_install_zc_config.py -k rerun"
   "install-overwrites-mcp-server|homeai/install/zc_config.py|s/if server.get(\"command\") != expected_cmd:/if False:/|tests/test_install_zc_config.py -k conflicting"
+  "mode-no-rollback|homeai/gpu_mode.py|s/                self.voice()$/                pass/|tests/test_gpu_mode.py -k rolls_back"
+  "mode-jarvis-left-on|homeai/gpu_mode.py|s/self.sys.systemctl(\"stop\", VOICE_SERVICE)/pass/|tests/test_gpu_mode.py -k order"
+  "mode-voice-before-coder-ready|homeai/gpu_mode.py|s/            self._restart_coder()\$/            self.sys.systemctl(\"restart\", CODER_SERVICE)/|tests/test_gpu_mode.py -k restores_default"
 )
 
 filter="${1:-}"

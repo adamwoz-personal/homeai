@@ -77,19 +77,38 @@ shipped copy is `deploy/zeroclaw/SOUL.md`. After editing it, measure with
 | Box froze, out of memory | `systemctl show ollama -p Environment` | Install `deploy/ollama-vram-guard.conf` (`OLLAMA_MAX_LOADED_MODELS=1`) |
 | Service won't start: preflight | `.venv/bin/python -m homeai.daemon --check` | Fix each listed problem |
 
-## GPU sharing with the coding model
+## Coding mode (the coder gets the whole GPU)
 
 The voice model (7.0 GB) and qwen3-coder-30b (about 19.7 GB) together exceed
-the 21.4 GB card. With both loaded, the coder runs at about 25 tok/s; with
-the GPU to itself it runs at 80–130 tok/s. To give the coder the GPU for a
-coding session:
+the 21.4 GB card. When they share it, the coder runs at about 25 tok/s.
 
 ```bash
-ollama stop llama31-voice                    # Jarvis is offline until reloaded
-sudo systemctl restart llama-server          # KV=q4_0 NCPUMOE=0 for the fastest config
-# afterwards:
-ollama run llama31-voice "" && ollama ps     # reloads in 5-10 s
+homeai-mode coding    # Jarvis off, coder at ~131 tok/s (measured), ~7 s to switch
+zc                    # code with ZeroClaw's builder agent, or use `hermes`
+homeai-mode voice     # Jarvis back, ~9 s to switch
+homeai-mode status
 ```
+
+- Both `zc` (ZeroClaw builder) and Hermes use the same llama-server, so both
+  get the speed-up.
+- Coding mode defaults to a q4_0 KV cache with every layer on the GPU.
+  `homeai-mode coding --kv q8_0 --cpu-moe 6` gives a higher-fidelity cache at
+  about 80 tok/s.
+- `--ctx N` changes the context window (default 65536). Larger contexts are
+  unmeasured and may need `--cpu-moe` to fit.
+- If the coder fails to start, the switch rolls back to voice mode.
+- Coding mode does not survive a reboot. The machine always comes back in
+  voice mode.
+
+Tool-call limits for the builder agent (`[runtime_profiles.heavy_duty]` in
+`~/.zeroclaw/config.toml`):
+- 100 tool calls per request.
+- No hourly action cap. ZeroClaw's default was 20 per hour, which stopped
+  long tasks with "Rate limit exceeded".
+- 600 s shell timeout. The default was 60 s.
+
+Verify with `tools/probe_tool_cap.py --steps 40`. Hermes has its own limit:
+500 turns.
 
 ## Tests
 

@@ -96,7 +96,7 @@ Naming tells you what a script does without opening it:
 | Prefix | Does | Examples |
 |---|---|---|
 | `bench_*` | Measures; writes results with `--out` | `bench_llm.py` (answer quality per model), `bench_conversation.py` (multi-turn repetition, length, hedging), `bench_tokps.py` (llama-server prompt/generation tok/s), `bench_whisper.py` (STT models) |
-| `probe_*` | Inspects one thing on the live system | `probe_agent_prompt.py` (exact request ZeroClaw sends; `--set` tries config changes on a temp copy, `--with-memory`), `probe_voice_tools.py` (can the voice agent cause side effects? checks physical evidence), `probe_bargein.py` (wake scores during our own speech), `probe_soul.py` (SOUL.md canary) |
+| `probe_*` | Inspects one thing on the live system | `probe_agent_prompt.py` (exact request ZeroClaw sends; `--set` tries config changes on a temp copy, `--with-memory`), `probe_voice_tools.py` (can the voice agent cause side effects? checks physical evidence), `probe_bargein.py` (wake scores during our own speech), `probe_soul.py` (SOUL.md canary), `probe_tool_cap.py` (how many sequential tool calls an agent really gets; detects shell loops by timing) |
 | `report_*` / `inspect_*` | Reads saved output without re-running | `report_bench.py`, `inspect_conversation_bench.py` (`compare` runs, `show` flagged conversations), `inspect_captured_prompt.py` (tool calls and results in a capture), `inspect_zc_memory.py` (read-only view of ZeroClaw's brain.db) |
 | `mutation/` | Proves tests guard real behaviour | `check_mutants.sh` breaks the code on purpose and requires the named tests to fail |
 | `eval_*` | Scores an agent on real tasks with an objective check | `eval_local_coder.py` (builder agent: PASS / LIED / FAIL, and checks the main checkout is untouched) |
@@ -1195,3 +1195,31 @@ user did:
   was assessed.
 - The sandbox was in `/tmp`, a 15 GB RAM-backed tmpfs. A full install there
   would have been held in RAM.
+
+### Coding mode, and a second hidden cap
+
+`homeai-mode coding|voice|status` (`homeai/gpu_mode.py`):
+- Coding mode stops homeai and unloads the voice model. It restarts
+  llama-server with a runtime-only drop-in (`/run/user/<uid>/systemd/user`)
+  set to q4_0 KV with every expert on the GPU.
+- Measured: 131 tok/s generation and 1572 tok/s prompt, against about 25
+  shared. Switching takes about 7 s; switching back to voice takes about 9 s.
+- If the coder fails to start, it rolls back to voice mode. A reboot always
+  comes back in voice mode.
+
+While verifying the 10-call limit was gone, `tools/probe_tool_cap.py` found
+another cap. A chain of 15 calls passed, but a chain of 40 stopped at 20 with
+"Rate limit exceeded: too many actions in the last hour".
+`RuntimeProfileConfig.max_actions_per_hour` defaults to **20**. Setting
+`runtime_profile = "heavy_duty"` replaced the risk profile's 999999 with that
+default, because `heavy_duty` never set it. `shell_timeout_secs` also
+defaults to 60 s.
+
+Both are now set on `heavy_duty` (999999 and 600). 40 sequential calls then
+passed in 41 s. Lesson: when you create a ZeroClaw profile, dump its schema
+defaults (`zeroclaw config schema`). Any field you don't set gets the default,
+and the defaults are conservative.
+
+The probe uses curl through the shell, because ZeroClaw's `web_fetch`
+refuses localhost. It tells separate tool calls from a shell loop by the gap
+between requests: about 0.9 s for separate calls, milliseconds for a loop.
