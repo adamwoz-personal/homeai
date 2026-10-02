@@ -146,6 +146,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--agent", default="local")
+    ap.add_argument("--config-dir", help="ZeroClaw config dir (default: ZeroClaw's own)")
     ap.add_argument("--only", help="run one probe by name")
     ap.add_argument("--timeout", type=float, default=180.0)
     args = ap.parse_args(argv)
@@ -168,7 +169,8 @@ def main(argv: list[str] | None = None) -> int:
     for probe in probes:
         try:
             proc = subprocess.run(
-                ["zeroclaw", "agent", "-a", args.agent, "--message", probe.prompt],
+                ["zeroclaw", "agent", *(["--config-dir", args.config_dir] if args.config_dir else []),
+                 "-a", args.agent, "--message", probe.prompt],
                 capture_output=True, text=True, timeout=args.timeout,
             )
             reply = (proc.stdout or proc.stderr).strip().replace("\n", " ")

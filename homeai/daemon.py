@@ -117,7 +117,10 @@ class VoiceAssistant:
             problems.append(problem)
 
         if not self.agent.health():
-            problems.append(f"ZeroClaw gateway unreachable at {self.cfg.agent.health_url}")
+            problems.append(
+                f"ZeroClaw agent unreachable ({self.cfg.agent.transport} transport: "
+                f"{self.cfg.agent.cli_binary if self.cfg.agent.transport == 'cli' else self.cfg.agent.health_url})"
+            )
 
         return problems
 
@@ -557,11 +560,27 @@ class VoiceAssistant:
         return 0
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Home AI voice assistant")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="run the startup checks (speech, voice, agent, config), print any "
+        "problems and exit 1 if there are some; does not open the microphone",
+    )
+    args = parser.parse_args(argv)
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
     )
+    if args.check:
+        problems = VoiceAssistant().preflight()
+        for problem in problems:
+            print(f"problem: {problem}")
+        print("check: OK" if not problems else f"check: {len(problems)} problem(s)")
+        return 1 if problems else 0
     return VoiceAssistant().run_forever()
 
 

@@ -104,10 +104,18 @@ class TestTranscriberAvailability:
 
 
 class TestConfigValidation:
-    def test_flags_missing_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_flags_missing_token_for_http(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("HOMEAI_AGENT_TOKEN", raising=False)
+        monkeypatch.setenv("HOMEAI_AGENT_TRANSPORT", "http")
         problems = Config().validation_errors()
         assert any("HOMEAI_AGENT_TOKEN" in p for p in problems)
+
+    def test_cli_transport_needs_no_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # A fresh install has no gateway pairing; the daemon must still start.
+        monkeypatch.delenv("HOMEAI_AGENT_TOKEN", raising=False)
+        monkeypatch.setenv("HOMEAI_AGENT_TRANSPORT", "cli")
+        problems = Config().validation_errors()
+        assert not any("HOMEAI_AGENT_TOKEN" in p for p in problems)
 
     def test_flags_wrong_sample_rate(self) -> None:
         cfg = Config(audio=replace(AudioConfig(), sample_rate=44100))

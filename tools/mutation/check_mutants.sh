@@ -39,6 +39,13 @@ MUTANTS=(
   "mcp-unknown-tool-crashes|homeai/mcp_server.py|s/if handler is None:/if False and handler is None:/|tests/test_mcp_server.py -k unknown_tool"
   "mcp-parse-error-kills-loop|homeai/mcp_server.py|s/response = _error(None, PARSE_ERROR, \"invalid JSON\")/raise/|tests/test_mcp_server.py -k malformed_json"
   "mcp-research-sources-unclamped|homeai/mcp_server.py|s/limit = max(1, min(6, int(limit)))/limit = int(limit)/|tests/test_mcp_server.py -k sources_are"
+  "token-required-for-cli|homeai/config.py|s/if self.agent.transport == \"http\" and not self.agent.token:/if not self.agent.token:/|tests/test_stt_config.py -k token"
+  "install-vram-boundary|homeai/install/assess.py|s/if vram >= VRAM_FOR_16K_GB and/if vram > VRAM_FOR_16K_GB and/|tests/test_install_assess.py -k boundaries"
+  "install-weak-machine-accepted|homeai/install/assess.py|s/    return Assessment(not blockers, tier,/    return Assessment(True, tier,/|tests/test_install_assess.py -k underpowered"
+  "install-audio-not-required|homeai/install/assess.py|s/(blockers if require_audio else warnings).append(msg)/warnings.append(msg)/|tests/test_install_assess.py -k all_blockers"
+  "install-voice-can-recall|homeai/install/zc_config.py|s/allowed_tools = \[\"calculator\"\]/allowed_tools = [\"calculator\", \"memory_recall\"]/|tests/test_install_zc_config.py -k locked_down"
+  "install-redefines-agent|homeai/install/zc_config.py|s/        elif _has_path(data, path):/        elif False:/|tests/test_install_zc_config.py -k rerun"
+  "install-overwrites-mcp-server|homeai/install/zc_config.py|s/if server.get(\"command\") != expected_cmd:/if False:/|tests/test_install_zc_config.py -k conflicting"
 )
 
 filter="${1:-}"

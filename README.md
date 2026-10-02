@@ -37,11 +37,22 @@ Both are expected under `vendor/`. Paths are configurable; see `config.py`.
 
 ## Setup
 
-Create a virtual environment and install dependencies:
+On a new machine, use the installer. It checks the hardware first, and
+refuses with an explanation if the machine is not powerful enough:
+
+```bash
+./install.sh --dry-run   # assess and show the plan, change nothing
+./install.sh --sudo      # install (sudo is only for the Ollama VRAM guard)
+```
+
+See [docs/RUNBOOK.md](docs/RUNBOOK.md) for requirements, operation and
+troubleshooting.
+
+Manual setup of the Python environment only:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -e .
+pip install -e '.[voice,dev]'
 ```
 
 ## Running

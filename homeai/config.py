@@ -278,9 +278,13 @@ class Config:
             problems.append(f"whisper binary missing: {self.stt.binary}")
         if not self.stt.model.exists():
             problems.append(f"whisper model missing: {self.stt.model}")
-        if not self.agent.token:
+        # Only the HTTP transport authenticates with a token; the default CLI
+        # transport runs the agent directly. Requiring it unconditionally made
+        # a fresh install (no gateway pairing) refuse to start.
+        if self.agent.transport == "http" and not self.agent.token:
             problems.append(
-                "HOMEAI_AGENT_TOKEN is unset - obtain one via 'zeroclaw gateway get-paircode'"
+                "HOMEAI_AGENT_TOKEN is unset (needed by the http transport) - obtain one "
+                "via 'zeroclaw gateway get-paircode', or use HOMEAI_AGENT_TRANSPORT=cli"
             )
         if self.audio.sample_rate != 16000:
             problems.append(

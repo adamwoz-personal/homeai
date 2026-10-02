@@ -1,0 +1,101 @@
+# Home AI runbook
+
+Day-to-day operation and fixes. The reasoning behind each decision is in
+`ROUTING_GUIDE.md`.
+
+## Install on a new machine
+
+```bash
+git clone <this repo> ~/src/homeai && cd ~/src/homeai
+./install.sh --dry-run     # assess the machine and list every action
+./install.sh --sudo        # install, including the Ollama VRAM guard
+```
+
+The installer aborts, listing every reason, if the machine cannot run a home
+AI. Minimum requirements (from `homeai/install/assess.py`):
+
+| | GPU tier | CPU-only tier (slow, unmeasured) |
+|---|---|---|
+| GPU VRAM | 6.5 GB (8K context) / 7.5 GB (16K) | — |
+| RAM | 8 GB | 16 GB |
+| CPU threads | 4 (8 for whisper small.en) | 8 |
+| Disk | 15 GB free | 15 GB free |
+
+You also need a microphone and a speaker, Python 3.12+, git, curl, cmake, a
+C++ compiler, Ollama and ZeroClaw. The installer prints how to install
+anything that is missing.
+
+Re-running is safe. The installer only appends to an existing ZeroClaw config,
+never overwrites a persona file or a `.env` value you changed, and backs up
+anything it replaces as `*.bak.<epoch>`. On a new machine the voice agent is
+named `jarvis`; on the original box it is `local` (`HOMEAI_AGENT_NAME` in
+`.env`).
+
+## Everyday commands
+
+| Task | Command |
+|---|---|
+| Status | `systemctl --user status homeai` |
+| Logs | `journalctl --user -u homeai -f` |
+| Restart after a code change | `systemctl --user restart homeai` |
+| Check config and dependencies | `set -a; . ./.env; set +a; .venv/bin/python -m homeai.daemon --check` |
+| What is loaded on the GPU | `ollama ps` (expect `llama31-voice`, `100% GPU`, `Forever`) |
+| Recent conversations | `tail ~/.local/share/homeai/transcript.jsonl` |
+| Talk to the voice agent without a mic | `zeroclaw agent -a "$HOMEAI_AGENT_NAME" -m "..."` |
+
+## Talking to Jarvis
+
+- "Hey Jarvis, …" asks a question.
+- Saying "Hey Jarvis" while it is speaking interrupts it. Then "stop",
+  "quiet" or "I'm not talking to you" ends the turn without a lookup.
+- If a reply ends with a question, just answer; no wake word is needed.
+- Long answers stop at about 110 words and ask "Want me to keep going?".
+  "Yes" or "go on" continues; "no" or silence drops it.
+
+## Tuning (`.env`, then restart)
+
+| Variable | Default | Effect |
+|---|---|---|
+| `HOMEAI_SPOKEN_BUDGET_WORDS` | 110 | Words before "keep going?"; 0 disables |
+| `HOMEAI_AGENT_STYLE_HINT` | built in | Guidance sent with every request; `off` disables |
+| `HOMEAI_WAKE_THRESHOLD` | 0.5 | Raise it if Jarvis wakes by mistake |
+| `HOMEAI_AGENT_NAME` | local | ZeroClaw agent used for voice |
+| `HOMEAI_AGENT_TIMEOUT` | 45 | Seconds before giving up on the agent |
+
+The persona lives in `~/.zeroclaw/agents/<agent>/workspace/SOUL.md`. The
+shipped copy is `deploy/zeroclaw/SOUL.md`. After editing it, measure with
+`tools/bench_conversation.py`; don't judge from one conversation.
+
+## When something goes wrong
+
+| Symptom | Check | Usual fix |
+|---|---|---|
+| Never wakes | Logs show `wake detector`? The right mic? | `HOMEAI_INPUT_DEVICE`, or lower the wake threshold |
+| Wakes, then "Something went wrong" | `journalctl --user -u homeai -n 50` | `ollama ps`: the model isn't loaded. `ollama run llama31-voice ""` |
+| Slow replies (over 5 s) | `ollama ps` shows a CPU % | Something else is using the VRAM (the coder's llama-server); see below |
+| Repeats itself or recites lists | `tools/inspect_zc_memory.py`, `tools/probe_agent_prompt.py` | Make sure `memory_recall` is not in the voice profile's `allowed_tools` |
+| Box froze, out of memory | `systemctl show ollama -p Environment` | Install `deploy/ollama-vram-guard.conf` (`OLLAMA_MAX_LOADED_MODELS=1`) |
+| Service won't start: preflight | `.venv/bin/python -m homeai.daemon --check` | Fix each listed problem |
+
+## GPU sharing with the coding model
+
+The voice model (7.0 GB) and qwen3-coder-30b (about 19.7 GB) together exceed
+the 21.4 GB card. With both loaded, the coder runs at about 25 tok/s; with
+the GPU to itself it runs at 80–130 tok/s. To give the coder the GPU for a
+coding session:
+
+```bash
+ollama stop llama31-voice                    # Jarvis is offline until reloaded
+sudo systemctl restart llama-server          # KV=q4_0 NCPUMOE=0 for the fastest config
+# afterwards:
+ollama run llama31-voice "" && ollama ps     # reloads in 5-10 s
+```
+
+## Tests
+
+```bash
+.venv/bin/python -m pytest -p no:warnings -o addopts="" -q   # unit tests
+tools/mutation/check_mutants.sh                              # are the tests real?
+tools/test_installer_sandbox.sh                              # fresh install end to end (~5 min)
+.venv/bin/python tools/probe_voice_tools.py                  # voice agent cannot touch the machine
+```

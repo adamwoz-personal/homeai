@@ -1,0 +1,50 @@
+# Template rendered by install.sh: @REPO@ and @ZEROCLAW_DIR@ are substituted.
+[Unit]
+Description=Home AI voice assistant
+# StartLimit* belong in [Unit]. In [Service] systemd silently ignores them,
+# which leaves the restart limiter inactive.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+Documentation=file://@REPO@/README.md
+# The assistant is useless without the model server and the ZeroClaw agent,
+# but neither is a hard dependency: the daemon retries, and failing to start
+# because a peer was slow would be worse than starting and waiting.
+Wants=zeroclaw.service
+After=zeroclaw.service sound.target
+
+[Service]
+Type=simple
+WorkingDirectory=@REPO@
+
+# The gateway token lives here, mode 600, never in this unit and never in git.
+# "-" means "start anyway if the file is missing": the default CLI transport
+# does not need a token, so a missing .env must not block startup.
+EnvironmentFile=-@REPO@/.env
+
+# Unbuffered, so journalctl shows log lines as they happen rather than in
+# 4 KB bursts.
+Environment=PYTHONUNBUFFERED=1
+
+ExecStart=@REPO@/.venv/bin/python -m homeai.daemon
+
+# Audio devices and the model can both be slow to become ready after a boot.
+TimeoutStartSec=90
+Restart=on-failure
+RestartSec=10
+# Hardening. This is a microphone service reachable by anyone in earshot, so
+# it gets the tightest sandbox that still permits audio and subprocesses.
+NoNewPrivileges=true
+PrivateTmp=false
+ProtectSystem=strict
+ProtectHome=read-only
+# Writable paths needed at runtime (the transcript lives in ~/.local/share/homeai;
+# "-" tolerates it not existing yet).
+ReadWritePaths=@REPO@ /tmp @ZEROCLAW_DIR@ -%h/.local/share/homeai
+# NOTE: ProtectKernelTunables / ProtectKernelModules / ProtectControlGroups
+# are deliberately absent. They require dropping capabilities, which a *user*
+# service cannot do, and systemd fails the unit with 218/CAPABILITIES.
+RestrictRealtime=false
+LockPersonality=true
+
+[Install]
+WantedBy=default.target

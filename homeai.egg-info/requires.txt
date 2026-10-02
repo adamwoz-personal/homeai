@@ -1,0 +1,12 @@
+numpy
+requests
+sounddevice
+onnxruntime
+
+[dev]
+pytest
+pytest-cov
+
+[voice]
+openwakeword>=0.4
+piper-tts>=1.8

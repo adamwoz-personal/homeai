@@ -99,6 +99,8 @@ Naming tells you what a script does without opening it:
 | `probe_*` | Inspects one thing on the live system | `probe_agent_prompt.py` (exact request ZeroClaw sends; `--set` tries config changes on a temp copy, `--with-memory`), `probe_voice_tools.py` (can the voice agent cause side effects? checks physical evidence), `probe_bargein.py` (wake scores during our own speech), `probe_soul.py` (SOUL.md canary) |
 | `report_*` / `inspect_*` | Reads saved output without re-running | `report_bench.py`, `inspect_conversation_bench.py` (`compare` runs, `show` flagged conversations), `inspect_captured_prompt.py` (tool calls and results in a capture), `inspect_zc_memory.py` (read-only view of ZeroClaw's brain.db) |
 | `mutation/` | Proves tests guard real behaviour | `check_mutants.sh` breaks the code on purpose and requires the named tests to fail |
+| `eval_*` | Scores an agent on real tasks with an objective check | `eval_local_coder.py` (builder agent: PASS / LIED / FAIL, and checks the main checkout is untouched) |
+| `test_*` (shell) | End-to-end tests too heavy for pytest | `test_installer_sandbox.sh` (fresh install into a throwaway HOME, re-run idempotency, refusal of a weak machine, tool probe on the new agent), `bench_kv_configs.sh` (llama-server KV/offload configs; always restores the service) |
 
 Conventions:
 - Results go to `~/homeai-bench/` with a date in the name, so a later run
@@ -1096,3 +1098,100 @@ user may have been cut off mid-sentence.
 
 Verified the daemon tests are real by disabling the check and confirming they
 fail, then restoring it. 414 passing.
+
+## Session 14 — Repetition, follow-ups, the GPU budget, and an installer
+
+### Repetition had a root cause, not a style problem
+
+Jarvis restated itself and pasted research lists into philosophy answers.
+`tools/bench_conversation.py` (36 scripted turns) measured it, then each fix
+was measured separately (`--reps 3`). The prompt and style changes helped, but
+the real cause turned up in `tools/inspect_captured_prompt.py`: the model
+called `memory_recall`. ZeroClaw auto-saves every request to `brain.db`
+(443 rows for the voice agent), and recall returned old conversations, which
+the model repeated, including old hedges.
+
+Fixes, all live:
+- `[risk_profiles.voice] allowed_tools = ["calculator"]`. This field also
+  filters which tools the model is shown: 3 instead of 54. MCP `server__tool`
+  names are admitted automatically. `memory_recall` is not allowed.
+- A per-request style hint (`HOMEAI_AGENT_STYLE_HINT`). An 8B model follows
+  guidance placed next to the question; it misses guidance buried in about
+  9000 characters of preamble.
+- A spoken budget (`HOMEAI_SPOKEN_BUDGET_WORDS`, 110). Past it Jarvis asks
+  "Want me to keep going?" and holds the rest for 120 s. "Yes" speaks it
+  without calling the agent.
+
+| | Baseline | After |
+|---|---|---|
+| Median spoken | 64.7 s | 17.5 s |
+| Replies over 60 s | 19/36 | 0/36 |
+| Research lists in opinions | 12/36 | 0/36 |
+| Hedged | 12/36 | 1/36 |
+
+Open privacy point: `auto_save` is global, so `brain.db` still records
+everything said to the voice agent, including overheard speech. The agent can
+no longer recall it, but the data is kept for 30 days.
+
+### Follow-up listening
+
+A reply ending in a real question opens the mic without the wake word,
+limited by `followup_max_chain`. The "keep going?" prompt uses the same path.
+
+### A deaf worker
+
+Daemon tests found a real bug. If a turn failed and the spoken apology also
+failed, the worker thread died, and Jarvis kept waking but never answered.
+The apology is now guarded, and a mutant proves the test catches its removal.
+
+### The GPU is the coder's bottleneck, not the KV cache
+
+`tools/bench_kv_configs.sh`, 10.5K-token prompt:
+
+| Setup | Prompt tok/s | Gen tok/s |
+|---|---|---|
+| Sharing the GPU with the voice model (any KV setting) | 220–610 | 24–30 |
+| GPU to itself, q8_0, 6 MoE layers on CPU | 1121 | 80 |
+| GPU to itself, q4_0, all layers on GPU | 1543 | 131 |
+
+Together the two models want about 26 GB on a 21.4 GB card. KV tuning cannot
+fix that. Shrinking the voice context to 8K saved 1.1 GB but gave the coder
+only about 15%. The `llm-serve.sh` default is unchanged; `KV=` and
+`NCPUMOE=` override it. A "coding mode" that unloads the voice model is the
+real lever. That is Adam's call, because Jarvis would need 5–10 s to reload.
+
+### The local coder still lies
+
+`tools/eval_local_coder.py`, builder agent (qwen3-coder-30b):
+- `planted-bug`: a one-line fix verified by the tests. **PASS.**
+- `json-flag` (a small feature): it made **no edit and reported success**.
+  **LIED.**
+
+Use the local coder for small fixes, and only when a test checks the result.
+Never take its "done" at face value.
+
+### Installer
+
+`./install.sh [--dry-run] [--sudo] [--no-service]`:
+- `homeai/install/assess.py` uses only the standard library and runs before
+  the venv exists. It probes RAM, VRAM (AMD via sysfs, NVIDIA via
+  nvidia-smi), cores, disk, ALSA devices and the required commands.
+  - It chooses `gpu-16k`, `gpu-8k` or `cpu-8k`.
+  - It aborts and lists every reason when the machine falls short. A weaker
+    model is refused, not offered, because the small models tested could not
+    hold a conversation.
+- `homeai/install/zc_config.py` only appends to a ZeroClaw config. It
+  re-parses with `tomllib`, makes a backup, and refuses to touch a config
+  that conflicts or does not parse. An existing agent is left alone.
+
+Bugs the sandbox run (`tools/test_installer_sandbox.sh`) found before any
+user did:
+- `validation_errors()` required `HOMEAI_AGENT_TOKEN` even for the default
+  CLI transport, so a fresh install would never have started.
+- `cmd | grep -q` under `pipefail` reads as false: grep exits early and the
+  writer dies of SIGPIPE. OpenBLAS was reported missing although installed.
+- `uv venv --python python3` used uv's own lookup and picked 3.11 from
+  `~/.local/bin`. The fix passes the absolute path of the interpreter that
+  was assessed.
+- The sandbox was in `/tmp`, a 15 GB RAM-backed tmpfs. A full install there
+  would have been held in RAM.
