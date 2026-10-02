@@ -1,0 +1,15 @@
+# Jarvis's conversational model. Created with:
+#   ollama create llama31-voice -f deploy/ollama/llama31-voice.Modelfile
+#
+# Why llama3.1:8b: the only small model measured that holds a view and
+# modulates length (see the decision comment in ~/.zeroclaw/config.toml and
+# ROUTING_GUIDE.md Session 11).
+#
+# num_ctx: stock Ollama serves every model at 4096, which truncated the
+# ~9000-character ZeroClaw system prompt plus conversation memory. A voice
+# request is ~4K tokens, so 8192 would also do: measured 2026-10-02 it uses
+# 5.9 GB instead of 7.0, but gave the co-resident coder only ~15% (the two
+# models need ~26 GB together on a 21 GB card either way). Kept at 16384.
+FROM llama3.1:8b
+PARAMETER num_ctx 16384
+PARAMETER temperature 0.45
