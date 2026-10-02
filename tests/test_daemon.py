@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import threading
 import time
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -427,3 +427,128 @@ def test_budget_zero_speaks_everything(quick) -> None:
     quick.cfg = replace(quick.cfg, tts=replace(quick.cfg.tts, spoken_budget_words=0))
     _answer(quick, "explain free will", LONG_REPLY)
     assert _spoken(quick) == LONG_REPLY
+
+
+# -- _speak: mic handling ------------------------------------------------------
+
+
+def test_plain_speech_mutes_and_restores_the_mic(quick) -> None:
+    quick._speak("hello")
+    quick.mic.pause.assert_called_once()
+    quick.mic.resume.assert_called_once()
+
+
+def test_mic_is_restored_even_if_tts_fails(quick) -> None:
+    quick.tts.say_safe.side_effect = RuntimeError("piper died")
+    with pytest.raises(RuntimeError):
+        quick._speak("hello")
+    quick.mic.resume.assert_called_once()
+
+
+def test_with_listener_the_mic_stays_open(quick) -> None:
+    listener = MagicMock(triggered=False)
+    quick._start_interrupt_listener = lambda text: listener
+    quick._speak("A long reply.", chunked=True)
+    quick.mic.pause.assert_not_called()
+    listener.stop.assert_called_once()
+    assert quick.tts.say_chunked.call_args.kwargs["should_stop"] is listener.should_stop
+
+
+def test_listener_is_stopped_even_if_tts_fails(quick) -> None:
+    listener = MagicMock(triggered=False)
+    quick._start_interrupt_listener = lambda text: listener
+    quick.tts.say_chunked.side_effect = RuntimeError("piper died")
+    with pytest.raises(RuntimeError):
+        quick._speak("A long reply.", chunked=True)
+    listener.stop.assert_called_once()
+
+
+def test_triggered_listener_marks_the_reply_interrupted(quick) -> None:
+    listener = MagicMock(triggered=True)
+    quick._start_interrupt_listener = lambda text: listener
+    quick._speak("A long reply.", chunked=True)
+    assert quick._last_interrupted
+    assert quick._bargein_armed.is_set()
+
+
+def test_reply_containing_the_wake_word_skips_barge_in(assistant) -> None:
+    # Measured: Jarvis saying "Jarvis" triggers its own detector at 0.995.
+    _with_wake(assistant, barge_in=True)
+    assert assistant._start_interrupt_listener("I'm Jarvis, nice to meet you.") is None
+
+
+def test_detector_is_reset_after_speaking(quick) -> None:
+    quick._detector = MagicMock()
+    quick._speak("hello")
+    quick._detector.reset.assert_called_once()
+
+
+# -- _ask_with_progress ----------------------------------------------------------
+
+
+def test_fast_answer_has_no_progress_announcement(quick, monkeypatch) -> None:
+    monkeypatch.setattr("homeai.daemon.PROGRESS_AFTER_S", 0.5)
+    quick.agent.ask.return_value = "answer"
+    assert quick._ask_with_progress("q") == "answer"
+    quick.tts.say_safe.assert_not_called()
+
+
+def test_slow_answer_announces_the_wait_then_returns_it(quick, monkeypatch) -> None:
+    from homeai.daemon import MSG_WORKING
+
+    monkeypatch.setattr("homeai.daemon.PROGRESS_AFTER_S", 0.05)
+    quick.agent.ask.side_effect = lambda q: (time.sleep(0.3), "answer")[1]
+    assert quick._ask_with_progress("q") == "answer"
+    quick.tts.say_safe.assert_called_once_with(MSG_WORKING)
+
+
+def test_failed_announcement_does_not_lose_the_answer(quick, monkeypatch) -> None:
+    monkeypatch.setattr("homeai.daemon.PROGRESS_AFTER_S", 0.05)
+    quick.agent.ask.side_effect = lambda q: (time.sleep(0.3), "answer")[1]
+    quick.tts.say_safe.side_effect = RuntimeError("speaker unplugged")
+    assert quick._ask_with_progress("q") == "answer"
+
+
+# -- worker loop survives failures ---------------------------------------------
+
+
+def _run_worker(assistant, items, handle) -> list:
+    """Run the worker loop over ``items`` and return what _handle saw."""
+    seen = []
+
+    def fake_handle(audio, source="wake"):
+        seen.append(source)
+        handle(len(seen))
+        if len(seen) == len(items):
+            assistant._stop.set()
+
+    assistant._handle = fake_handle
+    for item in items:
+        assistant._queue.put(item)
+    thread = threading.Thread(target=assistant._worker_loop, daemon=True)
+    thread.start()
+    thread.join(timeout=5)
+    assert not thread.is_alive(), "worker loop hung"
+    return seen
+
+
+def test_one_failing_turn_does_not_stop_the_worker(quick) -> None:
+    def handle(n):
+        if n == 1:
+            raise RuntimeError("whisper crashed")
+
+    seen = _run_worker(quick, [(np.zeros(10), "wake"), (np.zeros(10), "wake")], handle)
+    assert len(seen) == 2
+
+
+def test_worker_survives_when_the_error_message_also_fails(quick) -> None:
+    # A broken speaker makes both the turn and the apology fail. The worker
+    # must still be alive for the next utterance.
+    quick.tts.say_safe.side_effect = RuntimeError("speaker unplugged")
+
+    def handle(n):
+        if n == 1:
+            raise RuntimeError("whisper crashed")
+
+    seen = _run_worker(quick, [(np.zeros(10), "wake"), (np.zeros(10), "wake")], handle)
+    assert len(seen) == 2

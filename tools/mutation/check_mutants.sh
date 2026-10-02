@@ -30,7 +30,15 @@ MUTANTS=(
   "split-drops-sentence|homeai/dialogue.py|s/rest = sentences\[len(head):\]/rest = sentences[len(head) + 1:]/|tests/test_dialogue.py -k budget"
   "held-never-expires|homeai/dialogue.py|s/return bool(self.text) and (now - self.at) <= self.ttl_s/return bool(self.text)/|tests/test_dialogue.py -k expires"
   "yes-thanks-declines|homeai/dialogue.py|s/if not words or words\[0\] in _YES_WORDS:/if not words:/|tests/test_dialogue.py -k Continue"
+  "worker-dies-on-apology|homeai/daemon.py|s/^                except Exception:  # noqa: BLE001$/                except ZeroDivisionError:/|tests/test_daemon.py -k worker"
+  "mic-left-muted|homeai/daemon.py|s/                self.mic.resume()/                pass/|tests/test_daemon.py -k mic"
+  "listener-left-running|homeai/daemon.py|s/                listener.stop()/                pass/|tests/test_daemon.py -k listener"
+  "no-progress-cue|homeai/daemon.py|s/                self._speak(MSG_WORKING)/                pass/|tests/test_daemon.py -k slow_answer"
+  "detector-not-reset|homeai/daemon.py|s/                self._detector.reset()/                pass/|tests/test_daemon.py -k detector_is_reset"
   "research-not-speakable|homeai/research.py|s/will be spoken aloud/will be shown/|tests/test_research.py"
+  "mcp-unknown-tool-crashes|homeai/mcp_server.py|s/if handler is None:/if False and handler is None:/|tests/test_mcp_server.py -k unknown_tool"
+  "mcp-parse-error-kills-loop|homeai/mcp_server.py|s/response = _error(None, PARSE_ERROR, \"invalid JSON\")/raise/|tests/test_mcp_server.py -k malformed_json"
+  "mcp-research-sources-unclamped|homeai/mcp_server.py|s/limit = max(1, min(6, int(limit)))/limit = int(limit)/|tests/test_mcp_server.py -k sources_are"
 )
 
 filter="${1:-}"

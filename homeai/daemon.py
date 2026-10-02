@@ -239,7 +239,13 @@ class VoiceAssistant:
                 self._handle(audio, source)
             except Exception:  # noqa: BLE001 - never let one turn kill the service
                 log.exception("unhandled error processing utterance")
-                self._speak(MSG_AGENT_ERROR)
+                # The apology goes through the same speaker that may have just
+                # failed. If it raises too, the worker thread would die and
+                # Jarvis would go deaf until restarted.
+                try:
+                    self._speak(MSG_AGENT_ERROR)
+                except Exception:  # noqa: BLE001
+                    log.exception("could not speak the error message either")
 
     # -- one turn ----------------------------------------------------------
 
