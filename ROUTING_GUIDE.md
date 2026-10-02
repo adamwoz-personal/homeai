@@ -1233,3 +1233,10 @@ in brain.db's free pages and WAL. The sandbox test caught this with a saved
 row's key: with compaction disabled, the "text gone from disk" check fails.
 Purge therefore runs `wal_checkpoint(TRUNCATE)` and `VACUUM`. Adam's choice
 for now: keep the defaults (saving on, 30 days).
+
+### Voice choice
+
+`tools/piper_voice_samples.py`: all six Piper voices start speaking in
+0.58–0.69 s and synthesize at 0.05–0.10× real time, so speed can't separate
+them. Adam picked `en_GB-alba-medium` by ear. `TtsConfig.model_path` now
+also looks in `vendor/piper/voices/`.

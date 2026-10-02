@@ -197,3 +197,29 @@ def test_await_playback_respects_timeout():
     aplay = _FakeAplay()
     with pytest.raises(subprocess.TimeoutExpired):
         speaker._await_playback(aplay, lambda: False)
+
+
+class TestVoiceLocation:
+    def _cfg(self, tmp_path, voice):
+        from homeai.config import TtsConfig
+        return TtsConfig(voice=voice, model_dir=tmp_path)
+
+    def _make(self, path, rate):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"onnx")
+        path.with_suffix(".onnx.json").write_text(f'{{"audio": {{"sample_rate": {rate}}}}}')
+
+    def test_voice_in_voices_subdir_is_found(self, tmp_path):
+        self._make(tmp_path / "voices" / "en_GB-alba-medium.onnx", 16000)
+        cfg = self._cfg(tmp_path, "en_GB-alba-medium")
+        assert cfg.model_path == tmp_path / "voices" / "en_GB-alba-medium.onnx"
+        assert cfg.sample_rate() == 16000
+
+    def test_model_dir_wins_over_voices_subdir(self, tmp_path):
+        self._make(tmp_path / "v.onnx", 22050)
+        self._make(tmp_path / "voices" / "v.onnx", 16000)
+        cfg = self._cfg(tmp_path, "v")
+        assert cfg.model_path == tmp_path / "v.onnx" and cfg.sample_rate() == 22050
+
+    def test_missing_voice_reports_model_dir_path(self, tmp_path):
+        assert self._cfg(tmp_path, "nope").model_path == tmp_path / "nope.onnx"

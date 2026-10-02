@@ -53,6 +53,7 @@ MUTANTS=(
   "mem-ignore-confirm|homeai/memory_privacy.py|s/if confirm is not None and not confirm(n):/if False:/|tests/test_memory_privacy.py -k cancelled"
   "mem-no-verify-clear|homeai/memory_privacy.py|s/        if left:/        if False:/|tests/test_memory_privacy.py -k left_behind"
   "mem-negative-retention|homeai/memory_privacy.py|s/if days < 0:/if days < -99:/|tests/test_memory_privacy.py -k negative"
+  "tts-no-voices-dir|homeai/config.py|s/return extra if not direct.exists() and extra.exists() else direct/return direct/|tests/test_tts.py -k VoiceLocation"
 )
 
 filter="${1:-}"

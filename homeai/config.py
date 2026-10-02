@@ -136,11 +136,15 @@ class TtsConfig:
 
     @property
     def model_path(self) -> Path:
-        return self.model_dir / f"{self.voice}.onnx"
+        # Extra voices are downloaded into model_dir/voices/; the original
+        # voice sits directly in model_dir. Prefer model_dir when both exist.
+        direct = self.model_dir / f"{self.voice}.onnx"
+        extra = self.model_dir / "voices" / f"{self.voice}.onnx"
+        return extra if not direct.exists() and extra.exists() else direct
 
     @property
     def config_path(self) -> Path:
-        return self.model_dir / f"{self.voice}.onnx.json"
+        return self.model_path.with_suffix(".onnx.json")
 
     def sample_rate(self, default: int = 22050) -> int:
         """Read the voice's native sample rate from its sidecar config.

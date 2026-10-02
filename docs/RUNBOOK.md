@@ -110,6 +110,17 @@ Tool-call limits for the builder agent (`[runtime_profiles.heavy_duty]` in
 Verify with `tools/probe_tool_cap.py --steps 40`. Hermes has its own limit:
 500 turns.
 
+## Changing Jarvis's voice
+
+```bash
+.venv/bin/python tools/piper_voice_samples.py --play   # hear every installed voice
+```
+Set `HOMEAI_PIPER_VOICE=<name>` in `.env`, then run
+`systemctl --user restart homeai`. Voices are found in `vendor/piper/` or
+`vendor/piper/voices/`. Current voice: `en_GB-alba-medium` (chosen
+2026-10-02). Every installed voice starts speaking in about 0.6 s, so choose
+by ear.
+
 ## What ZeroClaw remembers (privacy)
 
 ZeroClaw saves every request to every agent, including speech Jarvis
