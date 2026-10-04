@@ -59,6 +59,13 @@ MUTANTS=(
   "wake-no-flush|homeai/wake.py|s/                for _ in range(FLUSH_FRAMES):/                for _ in range(0):/|tests/test_wake.py -k flushes"
   "transcript-numpy-score|homeai/transcript.py|s/round(float(turn.wake_score), 3)/round(turn.wake_score, 3)/|tests/test_transcript.py -k numpy"
   "wake-numpy-score|homeai/wake.py|s/self.last_score = float(max(scores.values(), default=0.0))/self.last_score = max(scores.values(), default=0.0)/|tests/test_wake.py -k last_score"
+  "verify-skipped|homeai/daemon.py|s/            if not mentions_wake_word(transcript.text, self.cfg.wake.model):/            if False:/|tests/test_daemon.py -k wake"
+  "verify-no-strip|homeai/daemon.py|s/text=strip_wake_phrase(transcript.text, self.cfg.wake.model))/text=transcript.text)/|tests/test_daemon.py -k verified_wake"
+  "verify-no-preroll|homeai/daemon.py|s/            audio = np.concatenate(\[preroll, audio\])/            pass/|tests/test_daemon.py -k verified_wake"
+  "verify-loose-match|homeai/wake_verify.py|s/^WAKE_SIMILARITY = 0.75/WAKE_SIMILARITY = 0.5/|tests/test_wake_verify.py"
+  "verify-no-prefix|homeai/wake_verify.py|s/        or (len(name) >= 5 and token.startswith(name\[:4\]))/        or False/|tests/test_wake_verify.py"
+  "pleasantry-gate-off|homeai/daemon.py|s/        if is_pleasantry_only(transcript.text):/        if False:/|tests/test_daemon.py -k pleasantry"
+  "reasoning-not-checked|homeai/agent_cli.py|s/            if detect_leaked_reasoning(text):/            if False:/|tests/test_agent_cli.py -k reasoning"
 )
 
 filter="${1:-}"

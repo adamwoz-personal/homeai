@@ -27,7 +27,7 @@ from dataclasses import dataclass
 import requests
 
 from .config import AgentConfig
-from .safety import detect_leaked_markup
+from .safety import detect_leaked_markup, detect_leaked_reasoning
 
 log = logging.getLogger(__name__)
 
@@ -159,6 +159,11 @@ class AgentClient:
             if detect_leaked_markup(text):
                 # Discard entirely. Never speak it, never keep it.
                 last_error = "agent leaked tool-call markup"
+                log.warning("%s (attempt %d) - discarding and retrying", last_error, attempts)
+                continue
+
+            if detect_leaked_reasoning(text):
+                last_error = "agent narrated its reasoning instead of answering"
                 log.warning("%s (attempt %d) - discarding and retrying", last_error, attempts)
                 continue
 

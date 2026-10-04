@@ -19,6 +19,7 @@ concurrent requests only produce confusing stalls.
 
 from __future__ import annotations
 
+import collections
 import concurrent.futures
 import logging
 import queue
@@ -26,6 +27,7 @@ import signal
 import sys
 import threading
 import time
+from dataclasses import replace
 
 import numpy as np
 
@@ -50,6 +52,7 @@ from .dialogue import (
     split_for_budget,
 )
 from .wake import CaptureMachine, State, build_detector
+from .wake_verify import is_pleasantry_only, mentions_wake_word, strip_wake_phrase
 
 log = logging.getLogger("homeai")
 
@@ -143,6 +146,11 @@ class VoiceAssistant:
         cursor = self.mic.buffer.total_written
         utterance: list[np.ndarray] = []
         source = "wake"
+        # The frames just before a trigger, which contain the wake word itself.
+        preroll_frames = max(1, round(self.cfg.wake.preroll_s * self.cfg.audio.sample_rate
+                                      / frame_size))
+        recent: collections.deque[np.ndarray] = collections.deque(maxlen=preroll_frames)
+        preroll: np.ndarray | None = None
 
         while not self._stop.is_set():
             time.sleep(poll_interval)
@@ -195,6 +203,7 @@ class VoiceAssistant:
                     frame = chunk[start:start + frame_size]
 
                     if self.machine.state is State.IDLE:
+                        recent.append(frame)
                         if not self.machine.accepts_wake(now):
                             continue
                         if self._detector and self._detector.detect(frame):
@@ -207,6 +216,8 @@ class VoiceAssistant:
                             utterance = []
                             source = "wake"
                             self._last_wake_score = wake_score
+                            preroll = np.concatenate(recent)
+                            recent.clear()
                         continue
 
                     utterance.append(frame)
@@ -226,8 +237,10 @@ class VoiceAssistant:
                             # of room noise and send them to the agent.
                             log.info("no reply to follow-up; back to wake word")
                         else:
-                            self._enqueue(audio, source)
+                            self._enqueue(audio, source,
+                                          preroll if source == "wake" else None)
                         source = "wake"
+                        preroll = None
                         break
             except Exception:  # noqa: BLE001 - this thread must never die
                 log.exception("wake loop error; resetting")
@@ -236,20 +249,21 @@ class VoiceAssistant:
                 source = "wake"
                 cursor = self.mic.buffer.total_written
 
-    def _enqueue(self, audio: np.ndarray, source: str = "wake") -> None:
+    def _enqueue(self, audio: np.ndarray, source: str = "wake",
+                 preroll: np.ndarray | None = None) -> None:
         try:
-            self._queue.put_nowait((audio, source))
+            self._queue.put_nowait((audio, source, preroll))
         except queue.Full:
             log.warning("worker busy; dropping utterance")
 
     def _worker_loop(self) -> None:
         while not self._stop.is_set():
             try:
-                audio, source = self._queue.get(timeout=0.5)
+                audio, source, preroll = self._queue.get(timeout=0.5)
             except queue.Empty:
                 continue
             try:
-                self._handle(audio, source)
+                self._handle(audio, source, preroll)
             except Exception:  # noqa: BLE001 - never let one turn kill the service
                 log.exception("unhandled error processing utterance")
                 # The apology goes through the same speaker that may have just
@@ -359,13 +373,17 @@ class VoiceAssistant:
         )
         return listener if listener.start() else None
 
-    def _handle(self, audio: np.ndarray, source: str = "wake") -> None:
+    def _handle(self, audio: np.ndarray, source: str = "wake",
+                preroll: np.ndarray | None = None) -> None:
         turn = Turn(source=source,
                     wake_score=self._last_wake_score if source == "wake" else None)
         total = Stopwatch()
         stage = Stopwatch()
         self._followup_chain.record_turn(source == "followup")
 
+        verify = source == "wake" and self.cfg.wake.verify and preroll is not None
+        if verify:
+            audio = np.concatenate([preroll, audio])
         transcript = self.stt.transcribe_audio(audio, self.cfg.audio.sample_rate)
         turn.stt_ms = stage.ms()
         if not transcript.ok:
@@ -378,6 +396,22 @@ class VoiceAssistant:
             return
 
         turn.heard = transcript.text
+        if verify:
+            if not mentions_wake_word(transcript.text, self.cfg.wake.model):
+                log.info("unverified wake (score %.3f): Whisper heard %r, no wake word - "
+                         "ignoring", turn.wake_score or 0.0, transcript.text)
+                turn.verdict = "unverified"
+                turn.total_ms = total.ms()
+                self.transcript.write(turn)
+                return
+            transcript = replace(transcript,
+                                 text=strip_wake_phrase(transcript.text, self.cfg.wake.model))
+            if not transcript.text:
+                log.info("wake word only (%r); nothing to answer", turn.heard)
+                turn.verdict = "wake-only"
+                turn.total_ms = total.ms()
+                self.transcript.write(turn)
+                return
         log.info("heard: %s  [stt %.0fms]", transcript.text, turn.stt_ms)
 
         # "Stop", "quiet", "I'm not talking to you". After a barge-in the mic
@@ -413,6 +447,13 @@ class VoiceAssistant:
                 return
             # Anything else is a new question; the old tail is stale.
             self._held.clear()
+
+        if is_pleasantry_only(transcript.text):
+            log.info("pleasantry only: %r - not a request, staying quiet", transcript.text)
+            turn.verdict = "pleasantry"
+            turn.total_ms = total.ms()
+            self.transcript.write(turn)
+            return
 
         if is_trailing_fragment(transcript.text):
             log.info("fragment: %r - probably not addressed to me", transcript.text)

@@ -79,6 +79,30 @@ def detect_leaked_markup(text: str) -> bool:
     return any(p.search(text) for p in _MARKUP_PATTERNS)
 
 
+# The model talking about how it will answer instead of answering. Observed
+# 2026-10-03, spoken for 27 s: "Since the question is a spoken reply and not
+# a question that requires an answer, there is no need to call a tool
+# function. The response should be a direct answer... Since the user's
+# question is "Thank you. You're welcome.", the response would be: ...".
+# "answer" is deliberately absent from the last pattern: "the answer would
+# be six" is a normal reply.
+_REASONING_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\btool (?:function|call)s?\b", re.IGNORECASE),
+    re.compile(r"\b(?:call|use|invoke|calling|using|invoking) (?:a|the|any) tool\b",
+               re.IGNORECASE),
+    re.compile(r"\bthe user'?s? (?:question|request|query|message|input) (?:is|was)\b",
+               re.IGNORECASE),
+    re.compile(r"\bthe (?:response|reply|output) (?:should|would|will) be\b", re.IGNORECASE),
+)
+
+
+def detect_leaked_reasoning(text: str) -> bool:
+    """True if ``text`` narrates the model's own process rather than answering."""
+    if not text:
+        return False
+    return any(p.search(text) for p in _REASONING_PATTERNS)
+
+
 # --------------------------------------------------------------------------
 # Spoken command screening
 # --------------------------------------------------------------------------

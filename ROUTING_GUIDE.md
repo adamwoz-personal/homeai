@@ -96,7 +96,7 @@ Naming tells you what a script does without opening it:
 | Prefix | Does | Examples |
 |---|---|---|
 | `bench_*` | Measures; writes results with `--out` | `bench_llm.py` (answer quality per model), `bench_conversation.py` (multi-turn repetition, length, hedging), `bench_tokps.py` (llama-server prompt/generation tok/s), `bench_whisper.py` (STT models) |
-| `probe_*` | Inspects one thing on the live system | `probe_agent_prompt.py` (exact request ZeroClaw sends; `--set` tries config changes on a temp copy, `--with-memory`), `probe_voice_tools.py` (can the voice agent cause side effects? checks physical evidence), `probe_bargein.py` (wake scores during our own speech), `probe_soul.py` (SOUL.md canary), `say_to_jarvis.sh` (speak a phrase through the speakers to the live daemon and print what it logged), `probe_wake_reset.py` (does the wake detector re-fire on silence after reset?), `piper_voice_samples.py` (same reply in every Piper voice; timings + `--play`), `test_memory_privacy_sandbox.sh` (`homeai-mode memory` against the real zeroclaw on a copy of ~/.zeroclaw; proves purged text is gone from disk), `probe_tool_cap.py` (how many sequential tool calls an agent really gets; detects shell loops by timing) |
+| `probe_*` | Inspects one thing on the live system | `probe_agent_prompt.py` (exact request ZeroClaw sends; `--set` tries config changes on a temp copy, `--with-memory`), `probe_voice_tools.py` (can the voice agent cause side effects? checks physical evidence), `probe_bargein.py` (wake scores during our own speech), `probe_soul.py` (SOUL.md canary), `wake_word_similarity.py` (how close a misheard word is to the wake word; tunes `WAKE_SIMILARITY`), `say_to_jarvis.sh` (speak a phrase through the speakers to the live daemon and print what it logged), `probe_wake_reset.py` (does the wake detector re-fire on silence after reset?), `piper_voice_samples.py` (same reply in every Piper voice; timings + `--play`), `test_memory_privacy_sandbox.sh` (`homeai-mode memory` against the real zeroclaw on a copy of ~/.zeroclaw; proves purged text is gone from disk), `probe_tool_cap.py` (how many sequential tool calls an agent really gets; detects shell loops by timing) |
 | `report_*` / `inspect_*` | Reads saved output without re-running | `report_bench.py`, `inspect_conversation_bench.py` (`compare` runs, `show` flagged conversations), `inspect_captured_prompt.py` (tool calls and results in a capture), `inspect_zc_memory.py` (read-only view of ZeroClaw's brain.db) |
 | `mutation/` | Proves tests guard real behaviour | `check_mutants.sh` breaks the code on purpose and requires the named tests to fail |
 | `eval_*` | Scores an agent on real tasks with an objective check | `eval_local_coder.py` (builder agent: PASS / LIED / FAIL, and checks the main checkout is untouched) |
@@ -1279,3 +1279,39 @@ appears in the 18:27:23 log entry.
 My own bug, caught live: `last_score` was a numpy float32. `json.dumps`
 rejected it and every transcript record was dropped until it was cast to
 float. The tests now use numpy floats.
+
+### Second-stage wake verification
+
+Field report 2026-10-03 20:26: Jarvis answered when nobody had said
+Jarvis. openWakeWord had fired at 0.924, Whisper heard "Thank you. You're
+welcome.", and the model spoke its own reasoning for 27 s ("no need to call
+a tool function… the response would be…").
+
+The log showed about 12 false wakes in 24 h, on TV and family talk ("Love
+you, Valor", "David.", "Cody will be back…"). They scored 0.50–0.97, and real
+wakes score 0.92–0.99, so no threshold separates them.
+
+Fix (`homeai/wake_verify.py`):
+- The wake loop keeps the last 2 s of frames. A wake-started turn is
+  transcribed as pre-roll plus utterance, and the transcript must contain the
+  name. A token counts if its similarity is at least 0.75 or it starts with
+  "jarv". The match is stripped before the question goes to the agent.
+- Turns made only of pleasantries or Whisper hallucinations ("thank you",
+  "thanks for watching") are dropped.
+- `safety.detect_leaked_reasoning` makes narrated reasoning retry, the same
+  way leaked markup does.
+
+Live check with Piper voices through the speakers, with the family talking
+in the room:
+- joe, ryan, amy and hfc wakes were verified.
+- "Hey **Jarvan**" (similarity 0.67) was rejected until the prefix rule
+  was added.
+- One amy wake was rejected correctly. Whisper heard only the room ("That's
+  the letters in the word…") and none of the question, so the old path
+  would have answered nonsense.
+- Alba twice failed to trigger openWakeWord at all. That is the first
+  stage, not this check.
+
+Open issue: in a noisy room the capture keeps going while others talk. A
+verified question can then arrive with unrelated speech attached. The real
+fix is speaker identification (todo `speaker-id`).

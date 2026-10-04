@@ -324,7 +324,8 @@ def test_answered_followup_is_queued_as_a_followup(quick) -> None:
     t.join(timeout=2)
     quick._stop.clear()
 
-    audio, source = quick._queue.get_nowait()
+    audio, source, preroll = quick._queue.get_nowait()
+    assert preroll is None  # only wake-started turns are verified
     assert source == "followup"
     assert audio.size > 0
 
@@ -516,7 +517,7 @@ def _run_worker(assistant, items, handle) -> list:
     """Run the worker loop over ``items`` and return what _handle saw."""
     seen = []
 
-    def fake_handle(audio, source="wake"):
+    def fake_handle(audio, source="wake", preroll=None):
         seen.append(source)
         handle(len(seen))
         if len(seen) == len(items):
@@ -537,7 +538,7 @@ def test_one_failing_turn_does_not_stop_the_worker(quick) -> None:
         if n == 1:
             raise RuntimeError("whisper crashed")
 
-    seen = _run_worker(quick, [(np.zeros(10), "wake"), (np.zeros(10), "wake")], handle)
+    seen = _run_worker(quick, [(np.zeros(10), "wake", None), (np.zeros(10), "wake", None)], handle)
     assert len(seen) == 2
 
 
@@ -550,7 +551,7 @@ def test_worker_survives_when_the_error_message_also_fails(quick) -> None:
         if n == 1:
             raise RuntimeError("whisper crashed")
 
-    seen = _run_worker(quick, [(np.zeros(10), "wake"), (np.zeros(10), "wake")], handle)
+    seen = _run_worker(quick, [(np.zeros(10), "wake", None), (np.zeros(10), "wake", None)], handle)
     assert len(seen) == 2
 
 
@@ -579,3 +580,96 @@ def test_wake_score_is_recorded_in_the_transcript(quick) -> None:
     assert quick.transcript.write.call_args.args[0].wake_score == 0.734
     _answer(quick, "and germany", "Berlin.", source="followup")
     assert quick.transcript.write.call_args.args[0].wake_score is None
+
+
+# -- second-stage wake verification --------------------------------------------
+# Field failure 2026-10-03 20:26: openWakeWord fired at 0.924 on room audio,
+# Whisper heard "Thank you. You're welcome.", and the agent narrated its own
+# reasoning for 27 s. About a dozen false wakes that day, many above 0.85.
+
+
+def _verified_turn(quick, heard: str, source: str = "wake", preroll=True):
+    from homeai.stt import Transcript
+    quick.stt.transcribe_audio.return_value = Transcript(ok=True, text=heard)
+    quick.agent.ask.reset_mock()
+    reply = quick.agent.ask.return_value
+    reply.ok, reply.text, reply.attempts, reply.error = True, "Six.", 1, ""
+    quick.tts.say_chunked.return_value.interrupted = False
+    quick.tts.say_chunked.return_value.first_audio_ms = 100.0
+    quick.transcript = MagicMock()
+    pre = np.ones(800, dtype=np.float32) if preroll else None
+    quick._handle(np.zeros(1600, dtype=np.float32), source, pre)
+    return quick.transcript.write.call_args.args[0]
+
+
+def test_wake_without_the_wake_word_in_the_audio_is_ignored(quick) -> None:
+    turn = _verified_turn(quick, "Thank you. You're welcome.")
+    quick.agent.ask.assert_not_called()
+    quick.tts.say_safe.assert_not_called()
+    quick.tts.say_chunked.assert_not_called()
+    assert turn.verdict == "unverified"
+
+
+def test_verified_wake_sends_the_question_without_the_wake_word(quick) -> None:
+    _verified_turn(quick, "Hey Jarvis, what is 3 plus 3?")
+    assert quick.agent.ask.call_args.args[0] == "what is 3 plus 3?"
+    audio = quick.stt.transcribe_audio.call_args.args[0]
+    assert audio.size == 800 + 1600 and audio[:800].all(), "pre-roll must come first"
+
+
+def test_wake_word_alone_is_silent(quick) -> None:
+    turn = _verified_turn(quick, "Hey Jarvis.")
+    quick.agent.ask.assert_not_called()
+    assert turn.verdict == "wake-only"
+
+
+def test_verification_can_be_disabled(quick) -> None:
+    _with_wake(quick, barge_in=False, verify=False)
+    _verified_turn(quick, "what is 3 plus 3?")
+    quick.agent.ask.assert_called_once()
+    assert quick.stt.transcribe_audio.call_args.args[0].size == 1600
+
+
+def test_followups_are_not_verified(quick) -> None:
+    _verified_turn(quick, "I think it is.", source="followup", preroll=False)
+    quick.agent.ask.assert_called_once()
+
+
+@pytest.mark.parametrize("source", ["wake", "followup"])
+def test_pleasantry_only_never_reaches_the_agent(quick, source) -> None:
+    heard = "Hey Jarvis, thank you." if source == "wake" else "Thank you. You're welcome."
+    turn = _verified_turn(quick, heard, source=source, preroll=source == "wake")
+    quick.agent.ask.assert_not_called()
+    assert turn.verdict == "pleasantry"
+
+
+@pytest.mark.parametrize("fire_on,expected_frames", [(4, 4), (40, 25)])
+def test_wake_loop_queues_the_audio_before_the_trigger(quick, fire_on, expected_frames) -> None:
+    """Up to preroll_s (2.0 s = 25 frames) of audio up to and including the trigger."""
+    class FiresOnTenth:
+        calls = 0
+
+        def detect(self, frame):
+            self.calls += 1
+            return self.calls == fire_on
+
+        def reset(self):
+            pass
+
+    _with_wake(quick, barge_in=False, silence_s=0.05, lead_in_s=5.0)
+    quick._detector = FiresOnTenth()
+    buf = _streaming(quick, level=0.5)
+    t = threading.Thread(target=quick._wake_loop, daemon=True)
+    t.start()
+    # Two frames per 40 ms poll; keep talking for a while after the wake.
+    time.sleep(fire_on * 0.02 + 0.4)
+    buf.level = 0.0
+    time.sleep(0.3)
+    quick._stop.set()
+    t.join(timeout=2)
+    quick._stop.clear()
+
+    audio, source, preroll = quick._queue.get_nowait()
+    assert source == "wake"
+    block = quick.cfg.audio.block_size
+    assert preroll.size == expected_frames * block

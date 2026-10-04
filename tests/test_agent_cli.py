@@ -177,6 +177,26 @@ def test_leaked_markup_then_clean_reply_recovers():
     assert reply.ok and reply.text == "Paris."
 
 
+OBSERVED_REASONING = (
+    'Since the question is a spoken reply and not a question that requires an answer, '
+    'there is no need to call a tool function. The response should be a direct answer in '
+    'the format of a few sentences. Since the user\'s question is "Thank you. You\'re '
+    'welcome.", the response would be: "Anytime, happy to help."'
+)
+
+
+def test_narrated_reasoning_is_retried_not_spoken():
+    runner = make_runner(FakeProc(0, OBSERVED_REASONING), FakeProc(0, "Anytime."))
+    reply = CliAgentClient(cfg(max_retries=1), runner=runner).ask("thanks")
+    assert reply.ok and reply.text == "Anytime."
+
+
+def test_persistent_narrated_reasoning_fails_the_turn():
+    runner = make_runner(FakeProc(0, OBSERVED_REASONING), FakeProc(0, OBSERVED_REASONING))
+    reply = CliAgentClient(cfg(max_retries=1), runner=runner).ask("thanks")
+    assert not reply.ok and "reasoning" in reply.error
+
+
 # -- factory ---------------------------------------------------------------
 
 

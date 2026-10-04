@@ -243,6 +243,12 @@ class WakeConfig:
     # Deaf window after a capture ends. Stops the just-captured wake word from
     # re-triggering the detector out of its internal audio context.
     refractory_s: float = field(default_factory=lambda: _env_float("HOMEAI_REFRACTORY_S", 1.5))
+    # Second-stage check: Whisper must hear the wake word in the audio around
+    # the trigger, or the wake is ignored. See homeai/wake_verify.py.
+    verify: bool = field(default_factory=lambda: _env_bool("HOMEAI_WAKE_VERIFY", True))
+    # Audio kept from before the trigger for that check. "Hey Jarvis" takes
+    # about 0.8 s; the detector fires near its end.
+    preroll_s: float = field(default_factory=lambda: _env_float("HOMEAI_WAKE_PREROLL_S", 2.0))
     # Keep the mic open during replies so the wake word can interrupt them.
     # Safe because measurement showed ordinary speech peaks at 0.10 against a
     # 0.5 threshold; see homeai/bargein.py and tools/probe_bargein.py.

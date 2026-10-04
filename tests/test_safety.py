@@ -227,3 +227,28 @@ def test_unwrapped_json_tool_calls_are_detected(text):
 )
 def test_ordinary_speech_is_not_flagged(text):
     assert _leak(text) is False
+
+
+
+class TestLeakedReasoning:
+    @pytest.mark.parametrize("text", [
+        "There is no need to call a tool function here.",
+        "Since the user's question is about weather, I will search.",
+        "The response should be a direct answer in a few sentences.",
+        "I could use the tool homeai research for this.",
+        "the reply would be: hello",
+    ])
+    def test_detects_narration(self, text):
+        from homeai.safety import detect_leaked_reasoning
+        assert detect_leaked_reasoning(text)
+
+    @pytest.mark.parametrize("text", [
+        "The answer would be six.",
+        "Six.",
+        "A hammer is a tool for driving nails.",
+        "Seneca thought the response to fear should be reason, not panic.",
+        "",
+    ])
+    def test_normal_replies_pass(self, text):
+        from homeai.safety import detect_leaked_reasoning
+        assert not detect_leaked_reasoning(text)

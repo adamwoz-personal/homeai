@@ -110,6 +110,27 @@ Tool-call limits for the builder agent (`[runtime_profiles.heavy_duty]` in
 Verify with `tools/probe_tool_cap.py --steps 40`. Hermes has its own limit:
 500 turns.
 
+## False wakes ("it answered and nobody said Jarvis")
+
+A wake word alone isn't enough. Whisper must also hear "Jarvis" (or a close
+mishearing such as Jervis or Jarvan) in the 2 s before the trigger plus the
+utterance. Otherwise Jarvis stays silent and logs:
+
+    unverified wake (score 0.937): Whisper heard "...", no wake word - ignoring
+
+```bash
+journalctl --user -u homeai | grep -E "wake word detected|unverified|heard:"
+```
+- `transcript.jsonl` verdicts include `unverified`, `wake-only` and
+  `pleasantry` ("Thank you." on its own never reaches the agent).
+- Replies that narrate the model's reasoning ("no need to call a tool
+  function…") are discarded and retried.
+- To turn the check off: `HOMEAI_WAKE_VERIFY=0` in `.env`. Pre-roll
+  length: `HOMEAI_WAKE_PREROLL_S` (default 2.0).
+- If real wakes are rejected, add the misheard word to
+  `tests/test_wake_verify.py` and check it with
+  `tools/wake_word_similarity.py WORD`.
+
 ## Changing Jarvis's voice
 
 ```bash
