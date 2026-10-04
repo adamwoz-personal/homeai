@@ -60,6 +60,17 @@ def is_trailing_fragment(text: str) -> bool:
     return bool(_TRAILING_OFF.search(stripped))
 
 
+def one_sentence(text: str) -> str:
+    """The first sentence of ``text``, as a guard on replies meant to be one.
+
+    A trailing question is dropped too if it is the only thing left: a
+    closing reply must not open a follow-up window.
+    """
+    sentences = split_sentences((text or "").strip())
+    first = sentences[0].strip() if sentences else ""
+    return "" if first.endswith("?") else first
+
+
 @dataclass
 class FollowupChain:
     """Counts consecutive wake-word-free turns and decides when to stop.

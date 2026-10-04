@@ -86,8 +86,8 @@ class AgentClient:
             log.warning("gateway health check failed: %s", exc)
             return False
 
-    def ask(self, utterance: str) -> AgentReply:
-        """Send ``utterance`` to the agent and return its reply.
+    def ask(self, utterance: str, hint: str | None = None) -> AgentReply:
+        """Send ``utterance`` (plus an optional one-off ``hint``) to the agent.
 
         Retries on transport errors and on leaked markup. Each attempt uses a
         brand-new session id, so a poisoned attempt cannot contaminate the
@@ -103,7 +103,7 @@ class AgentClient:
             attempts = attempt + 1
             session_id = f"voice-{uuid.uuid4().hex[:12]}"
             body = {
-                "message": utterance,
+                "message": f"{utterance}\n\n{hint}" if hint else utterance,
                 "session_id": session_id,
                 "source": "homeai-voice",
             }

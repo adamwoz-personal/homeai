@@ -255,3 +255,20 @@ def test_style_hint_is_not_stored_in_memory():
 def test_default_style_hint_targets_the_measured_failures():
     hint = AgentConfig().style_hint
     assert "first sentence" in hint and "do not restate" in hint
+
+
+def test_one_off_hint_replaces_style_hint_and_memory_keeps_the_bare_utterance():
+    from homeai.memory import ConversationMemory
+    memory = ConversationMemory()
+    runner = make_runner(FakeProc(0, "My pleasure."))
+    client = CliAgentClient(cfg(style_hint="STYLE"), runner=runner, memory=memory)
+    assert client.ask("thank you", hint="ONE SENTENCE").ok
+    message = runner.calls[0][0][runner.calls[0][0].index("-m") + 1]
+    assert message.endswith("ONE SENTENCE") and "STYLE" not in message
+    assert memory.recent()[-1].user == "thank you"
+
+
+def test_style_hint_still_used_without_a_one_off_hint():
+    runner = make_runner(FakeProc(0, "Paris."))
+    CliAgentClient(cfg(style_hint="STYLE"), runner=runner).ask("capital of france")
+    assert runner.calls[0][0][-1].endswith("STYLE")

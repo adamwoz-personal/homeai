@@ -675,23 +675,55 @@ def test_wake_loop_queues_the_audio_before_the_trigger(quick, fire_on, expected_
     assert preroll.size == expected_frames * block
 
 
-def test_thanks_mid_conversation_gets_a_short_acknowledgement(quick) -> None:
-    """Live 2026-10-03: sent to the model, "thank you" produced 23 s more on
-    the previous topic."""
+def _closing(quick, model_reply, ok=True, heard="Hey Jarvis, thank you.", **kw):
+    from homeai.stt import Transcript
     quick.memory.add("is the universe alive", "Some philosophers think so.")
-    turn = _verified_turn(quick, "Hey Jarvis, thank you.")
-    quick.agent.ask.assert_not_called()
-    assert [c.args[0] for c in quick.tts.say_safe.call_args_list] == ["You're welcome."]
+    quick.stt.transcribe_audio.return_value = Transcript(ok=True, text=heard)
+    quick.agent.ask.reset_mock()
+    reply = quick.agent.ask.return_value
+    reply.ok, reply.text, reply.attempts = ok, model_reply, 1
+    reply.error = "" if ok else "agent leaked tool-call markup"
+    quick.transcript = MagicMock()
+    quick._handle(np.zeros(1600, dtype=np.float32), kw.get("source", "wake"),
+                  np.ones(800, dtype=np.float32) if kw.get("source", "wake") == "wake" else None)
+    spoken = [c.args[0] for c in quick.tts.say_safe.call_args_list]
+    return quick.transcript.write.call_args.args[0], spoken
+
+
+def test_thanks_mid_conversation_goes_to_the_model_with_the_one_sentence_hint(quick) -> None:
+    from homeai.daemon import CLOSING_HINT
+    turn, spoken = _closing(quick, "My pleasure, Adam.")
+    quick.agent.ask.assert_called_once_with("thank you.", hint=CLOSING_HINT)
+    assert spoken == ["My pleasure, Adam."]
     assert turn.verdict == "closing" and not quick._followup_armed.is_set()
 
 
-def test_followup_thanks_mid_conversation_is_acknowledged(quick) -> None:
-    quick.memory.add("is the universe alive", "Some philosophers think so. Agree?")
-    turn = _verified_turn(quick, "Thank you. You're welcome.", source="followup", preroll=False)
-    assert turn.reply == "You're welcome."
+def test_monologue_after_thanks_is_cut_to_one_sentence(quick) -> None:
+    """Live 2026-10-03: "thank you" produced 23 s more on the previous topic."""
+    _, spoken = _closing(quick, "You're welcome! Also, the universe may be alive because "
+                                "of fine tuning. Many philosophers agree.")
+    assert spoken == ["You're welcome!"]
+
+
+@pytest.mark.parametrize("model_reply,ok", [
+    ("Anything else I can help with?", True),  # would open a follow-up window
+    ("", True),
+    ("<tool_call>", False),
+])
+def test_unusable_closing_reply_falls_back(quick, model_reply, ok) -> None:
+    _, spoken = _closing(quick, model_reply, ok=ok)
+    assert spoken == ["You're welcome."]
+    assert not quick._followup_armed.is_set()
+
+
+def test_followup_goodbye_mid_conversation_goes_to_the_model(quick) -> None:
+    _, spoken = _closing(quick, "Goodnight, sleep well.", heard="Bye bye.", source="followup")
+    quick.agent.ask.assert_called_once()
+    assert spoken == ["Goodnight, sleep well."]
 
 
 def test_okay_mid_conversation_is_quiet(quick) -> None:
+    quick.agent.ask.reset_mock()
     quick.memory.add("is the universe alive", "Some philosophers think so.")
     turn = _verified_turn(quick, "Okay.", source="followup", preroll=False)
     quick.agent.ask.assert_not_called()
@@ -702,6 +734,7 @@ def test_okay_mid_conversation_is_quiet(quick) -> None:
 def test_thanks_out_of_nowhere_is_quiet(quick) -> None:
     turn = _verified_turn(quick, "Hey Jarvis, thank you.")
     quick.tts.say_safe.assert_not_called()
+    quick.agent.ask.assert_not_called()
     assert turn.verdict == "pleasantry"
 
 

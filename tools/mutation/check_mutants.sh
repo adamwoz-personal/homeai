@@ -65,8 +65,13 @@ MUTANTS=(
   "verify-loose-match|homeai/wake_verify.py|s/^WAKE_SIMILARITY = 0.75/WAKE_SIMILARITY = 0.5/|tests/test_wake_verify.py"
   "verify-no-prefix|homeai/wake_verify.py|s/        or (len(name) >= 5 and token.startswith(name\[:4\]))/        or False/|tests/test_wake_verify.py"
   "pleasantry-ignores-conversation|homeai/daemon.py|s/            in_conversation = bool(self.memory.recent())/            in_conversation = True/|tests/test_daemon.py -k out_of_nowhere"
-  "closing-sent-to-agent|homeai/daemon.py|s/        if is_pleasantry_only(transcript.text):/        if is_pleasantry_only(transcript.text) and not self.memory.recent():/|tests/test_daemon.py -k acknowledge"
-  "hallucination-gate-off|homeai/daemon.py|s/            ack = \"\" if is_hallucination_only(transcript.text) or not in_conversation/            ack = \"\" if not in_conversation/|tests/test_daemon.py -k hallucination"
+  "closing-hint-dropped|homeai/daemon.py|s/hint=CLOSING_HINT)/hint=None)/|tests/test_daemon.py -k goes_to_the_model"
+  "closing-not-cut-to-one-sentence|homeai/daemon.py|s/ack = one_sentence(normalise_for_speech(sanitise_for_speech(reply.text)))/ack = normalise_for_speech(sanitise_for_speech(reply.text))/|tests/test_daemon.py -k monologue"
+  "closing-no-fallback|homeai/daemon.py|s/                ack = fallback/                pass/|tests/test_daemon.py -k unusable_closing"
+  "closing-to-agent-out-of-nowhere|homeai/daemon.py|s/ or not in_conversation//|tests/test_daemon.py -k out_of_nowhere"
+  "one-sentence-keeps-question|homeai/dialogue.py|s/return \"\" if first.endswith(\"?\") else first/return first/|tests/test_dialogue.py -k one_sentence"
+  "cli-hint-ignored|homeai/agent_cli.py|s/        if hint:/        if False:/|tests/test_agent_cli.py -k one_off_hint"
+  "hallucination-gate-off|homeai/daemon.py|s/            fallback = \"\" if is_hallucination_only(transcript.text) or not in_conversation/            fallback = \"\" if not in_conversation/|tests/test_daemon.py -k hallucination"
   "reasoning-not-checked|homeai/agent_cli.py|s/            if detect_leaked_reasoning(text):/            if False:/|tests/test_agent_cli.py -k reasoning"
 )
 

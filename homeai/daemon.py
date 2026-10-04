@@ -49,6 +49,7 @@ from .dialogue import (
     is_continue_request,
     is_decline,
     is_trailing_fragment,
+    one_sentence,
     split_for_budget,
 )
 from .wake import CaptureMachine, State, build_detector
@@ -70,6 +71,9 @@ MSG_REFUSED = "I can't do that by voice."
 MSG_NOT_UNDERSTOOD = "Sorry, I didn't catch that."
 # Not a question: asking one would open a follow-up window, and the people
 # talking to each other would "answer" it.
+# Replaces the style hint for thanks and goodbyes mid-conversation.
+CLOSING_HINT = ("(They are thanking you or saying goodbye. Reply warmly in ONE short "
+                "sentence. Do not continue the earlier topic and do not ask a question.)")
 MSG_FRAGMENT = "Sorry, I only caught part of that. Say hey Jarvis again if you meant me."
 
 # Spoken when the agent is taking long enough that silence reads as failure.
@@ -455,23 +459,38 @@ class VoiceAssistant:
             self._held.clear()
 
         # "Thank you" ends a conversation; it doesn't start one. Out of nowhere
-        # it is room audio or a hallucination: stay quiet. Mid-conversation it
-        # gets a short acknowledgement (see wake_verify.closing_reply).
+        # it is room audio or a hallucination: stay quiet. Mid-conversation,
+        # thanks and goodbyes are good manners and get a reply from the model,
+        # held to one sentence: without that, "thank you" was taken as a cue
+        # to keep talking (23 s, live 2026-10-03).
         if is_pleasantry_only(transcript.text):
             in_conversation = bool(self.memory.recent())
-            ack = "" if is_hallucination_only(transcript.text) or not in_conversation \
+            fallback = "" if is_hallucination_only(transcript.text) or not in_conversation \
                 else closing_reply(transcript.text)
             self._held.clear()
-            turn.verdict = "closing" if ack else "pleasantry"
-            turn.reply = ack
-            if ack:
-                log.info("closing %r - %s", transcript.text, ack)
-                stage.reset()
-                self._speak(ack)
-                turn.tts_ms = stage.ms()
-            else:
+            if not fallback:
                 log.info("pleasantry with no conversation in progress: %r - staying quiet",
                          transcript.text)
+                turn.verdict = "pleasantry"
+                turn.total_ms = total.ms()
+                self.transcript.write(turn)
+                return
+            turn.verdict = "closing"
+            stage.reset()
+            reply = self.agent.ask(transcript.text, hint=CLOSING_HINT)
+            turn.agent_ms = stage.ms()
+            turn.attempts = reply.attempts
+            ack = one_sentence(normalise_for_speech(sanitise_for_speech(reply.text))) \
+                if reply.ok else ""
+            if not ack:
+                log.warning("closing reply unusable (%s); using %r",
+                            reply.error or "empty", fallback)
+                ack = fallback
+            log.info("closing %r - %s", transcript.text, ack)
+            turn.reply = ack
+            stage.reset()
+            turn.tts_first_audio_ms = self._speak(ack)
+            turn.tts_ms = stage.ms()
             turn.total_ms = total.ms()
             self.transcript.write(turn)
             return

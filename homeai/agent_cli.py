@@ -84,7 +84,11 @@ class CliAgentClient:
         except Exception:  # noqa: BLE001 - health must never raise
             return False
 
-    def ask(self, utterance: str) -> AgentReply:
+    def ask(self, utterance: str, hint: str | None = None) -> AgentReply:
+        """``hint`` replaces the configured style hint for this request only.
+
+        Memory keeps the bare utterance either way.
+        """
         if not utterance or not utterance.strip():
             return AgentReply(ok=False, error="empty utterance")
 
@@ -93,7 +97,9 @@ class CliAgentClient:
         request = (
             self._memory.build_request(utterance) if self._memory else utterance
         )
-        if self._cfg.style_hint and self._cfg.style_hint.lower() not in ("off", "0", "none"):
+        if hint:
+            request = f"{request}\n\n{hint}"
+        elif self._cfg.style_hint and self._cfg.style_hint.lower() not in ("off", "0", "none"):
             # After the question, so it is the last thing the model reads.
             request = f"{request}\n\n{self._cfg.style_hint}"
 

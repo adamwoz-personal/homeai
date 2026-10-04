@@ -171,3 +171,14 @@ class TestTrailingFragment:
     def test_complete_or_question_is_not(self, text):
         from homeai.dialogue import is_trailing_fragment
         assert is_trailing_fragment(text) is (text == "...")
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("You're welcome! Also, the universe is alive. Truly.", "You're welcome!"),
+    ("My pleasure.", "My pleasure."),
+    ("Anything else?", ""),
+    ("", ""),
+])
+def test_one_sentence(text, expected):
+    from homeai.dialogue import one_sentence
+    assert one_sentence(text) == expected

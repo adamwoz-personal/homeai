@@ -124,9 +124,12 @@ journalctl --user -u homeai | grep -E "wake word detected|unverified|heard:"
 - `transcript.jsonl` verdicts include `unverified`, `wake-only`,
   `pleasantry` and `closing`.
 - A thank-you ends a conversation; it doesn't start one. Within 5 minutes
-  of an exchange, "thank you" gets "You're welcome." and "bye" gets "Bye for
-  now.", without asking the model. A thank-you out of nowhere, or Whisper
-  noise ("thanks for watching"), gets silence.
+  of an exchange, "thank you" or "bye" goes to the model with a
+  one-sentence hint (`daemon.CLOSING_HINT`). The reply is then cut to its
+  first sentence (`dialogue.one_sentence`) and never opens a follow-up
+  window. If the reply is empty, fails, or is only a question, the canned
+  "You're welcome." / "Bye for now." is used. A thank-you out of nowhere,
+  "okay" on its own, or Whisper noise ("thanks for watching") gets silence.
 - Replies that narrate the model's reasoning ("no need to call a tool
   function…") are discarded and retried.
 - To turn the check off: `HOMEAI_WAKE_VERIFY=0` in `.env`. Pre-roll

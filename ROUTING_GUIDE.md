@@ -1322,3 +1322,11 @@ closing is now dropped only when no conversation is in progress (the
 8B model made it continue the previous topic for 23 s. Closings therefore
 get a fixed short reply (`wake_verify.closing_reply`). Whisper's stock
 hallucinations stay dropped either way.
+
+Follow-up (Adam): thanking is good manners and should get a real reply
+from the model, just not a monologue. Mid-conversation closings now go to
+the model with `CLOSING_HINT` ("reply warmly in ONE short sentence"),
+which replaces the usual style hint for that request. The spoken reply is
+hard-cut to its first sentence, and a reply that is only a question is
+dropped so it can't reopen the conversation. The canned reply is only a
+fallback.
