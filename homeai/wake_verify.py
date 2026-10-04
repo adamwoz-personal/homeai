@@ -25,20 +25,33 @@ from difflib import SequenceMatcher
 
 WAKE_SIMILARITY = 0.75
 
-# Whisper's stock hallucinations on noise and room audio, plus pleasantries
-# that are not requests. An utterance made only of these is never sent to the
-# agent: asked to answer "Thank you. You're welcome." the model narrated its
-# own reasoning for 27 s (2026-10-03 20:26).
-_PLEASANTRIES = (
+# Whisper's stock hallucinations on noise and room audio. Never a request.
+_HALLUCINATIONS = (
+    "thanks for watching", "thank you for watching", "subscribe", "please subscribe",
+    "see you next time", "you",
+)
+# How a conversation ends, not how one starts. Answered when a conversation is
+# in progress, dropped when one would open with it: asked to answer "Thank
+# you. You're welcome." out of nowhere, the model narrated its own reasoning
+# for 27 s (2026-10-03 20:26).
+_CLOSINGS = (
     "thank you", "thanks", "thank you very much", "thank you so much", "thanks a lot",
-    "you're welcome", "you are welcome", "thanks for watching", "thank you for watching",
-    "bye", "goodbye", "bye bye", "you", "okay", "ok", "great", "cool", "nice", "amazing",
-    "subscribe", "please subscribe", "see you next time",
+    "you're welcome", "you are welcome", "bye", "goodbye", "bye bye",
+    "okay", "ok", "great", "cool", "nice", "amazing",
 )
-_PLEASANTRY_RE = re.compile(
-    r"^(?:(?:" + "|".join(re.escape(p) for p in sorted(_PLEASANTRIES, key=len, reverse=True))
-    + r")\b[\s,.!]*)+$"
-)
+
+
+def _only(phrases) -> re.Pattern[str]:
+    alternatives = "|".join(re.escape(p) for p in sorted(phrases, key=len, reverse=True))
+    return re.compile(r"^(?:(?:" + alternatives + r")\b[\s,.!]*)+$")
+
+
+_HALLUCINATION_RE = _only(_HALLUCINATIONS)
+_PLEASANTRY_RE = _only(_HALLUCINATIONS + _CLOSINGS)
+
+
+def _normalise(text: str) -> str:
+    return re.sub(r"\s+", " ", (text or "").lower().replace("\u2019", "'")).strip()
 
 
 def _name_words(wake_model: str) -> list[str]:
@@ -81,6 +94,28 @@ def strip_wake_phrase(text: str, wake_model: str = "hey_jarvis") -> str:
     return text.strip()
 
 
+def is_hallucination_only(text: str) -> bool:
+    """Only Whisper's stock noise phrases: drop always."""
+    normalised = _normalise(text)
+    return bool(normalised) and bool(_HALLUCINATION_RE.match(normalised))
+
+
 def is_pleasantry_only(text: str) -> bool:
-    normalised = re.sub(r"\s+", " ", (text or "").lower().replace("\u2019", "'")).strip()
+    """Only closings and/or hallucinations: no request in it."""
+    normalised = _normalise(text)
     return bool(normalised) and bool(_PLEASANTRY_RE.match(normalised))
+
+
+def closing_reply(text: str) -> str:
+    """What Jarvis says to a closing mid-conversation; "" means stay quiet.
+
+    Not sent to the model: given "thank you" plus the conversation window,
+    the 8B voice model took it as a cue to continue the topic and spoke for
+    23 s (2026-10-03 20:45).
+    """
+    normalised = _normalise(text)
+    if re.search(r"\bthank|\bthanks\b", normalised):
+        return "You're welcome."
+    if re.search(r"\bbye\b|\bgoodbye\b", normalised):
+        return "Bye for now."
+    return ""

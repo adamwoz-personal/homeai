@@ -673,3 +673,40 @@ def test_wake_loop_queues_the_audio_before_the_trigger(quick, fire_on, expected_
     assert source == "wake"
     block = quick.cfg.audio.block_size
     assert preroll.size == expected_frames * block
+
+
+def test_thanks_mid_conversation_gets_a_short_acknowledgement(quick) -> None:
+    """Live 2026-10-03: sent to the model, "thank you" produced 23 s more on
+    the previous topic."""
+    quick.memory.add("is the universe alive", "Some philosophers think so.")
+    turn = _verified_turn(quick, "Hey Jarvis, thank you.")
+    quick.agent.ask.assert_not_called()
+    assert [c.args[0] for c in quick.tts.say_safe.call_args_list] == ["You're welcome."]
+    assert turn.verdict == "closing" and not quick._followup_armed.is_set()
+
+
+def test_followup_thanks_mid_conversation_is_acknowledged(quick) -> None:
+    quick.memory.add("is the universe alive", "Some philosophers think so. Agree?")
+    turn = _verified_turn(quick, "Thank you. You're welcome.", source="followup", preroll=False)
+    assert turn.reply == "You're welcome."
+
+
+def test_okay_mid_conversation_is_quiet(quick) -> None:
+    quick.memory.add("is the universe alive", "Some philosophers think so.")
+    turn = _verified_turn(quick, "Okay.", source="followup", preroll=False)
+    quick.agent.ask.assert_not_called()
+    quick.tts.say_safe.assert_not_called()
+    assert turn.verdict == "pleasantry"
+
+
+def test_thanks_out_of_nowhere_is_quiet(quick) -> None:
+    turn = _verified_turn(quick, "Hey Jarvis, thank you.")
+    quick.tts.say_safe.assert_not_called()
+    assert turn.verdict == "pleasantry"
+
+
+def test_whisper_hallucination_is_dropped_even_mid_conversation(quick) -> None:
+    quick.memory.add("is the universe alive", "Some philosophers think so.")
+    turn = _verified_turn(quick, "Thanks for watching!", source="followup", preroll=False)
+    quick.agent.ask.assert_not_called()
+    assert turn.verdict == "pleasantry"

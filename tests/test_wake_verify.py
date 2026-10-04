@@ -78,3 +78,31 @@ def test_pleasantries(text):
 ])
 def test_requests_are_not_pleasantries(text):
     assert not is_pleasantry_only(text)
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("Thanks for watching!", True),
+    ("Please subscribe.", True),
+    ("you", True),
+    ("Thank you.", False),
+    ("Thank you. You're welcome.", False),
+    ("Thanks for watching. What's the weather?", False),
+])
+def test_hallucinations_are_a_subset_of_pleasantries(text, expected):
+    from homeai.wake_verify import is_hallucination_only
+    assert is_hallucination_only(text) is expected
+    if expected:
+        assert is_pleasantry_only(text)
+
+
+@pytest.mark.parametrize("text,reply", [
+    ("Thank you.", "You're welcome."),
+    ("Thanks a lot!", "You're welcome."),
+    ("Thank you. You're welcome.", "You're welcome."),
+    ("Bye bye.", "Bye for now."),
+    ("Okay.", ""),
+    ("Great.", ""),
+])
+def test_closing_reply(text, reply):
+    from homeai.wake_verify import closing_reply
+    assert closing_reply(text) == reply

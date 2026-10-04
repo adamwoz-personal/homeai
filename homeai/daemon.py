@@ -52,7 +52,13 @@ from .dialogue import (
     split_for_budget,
 )
 from .wake import CaptureMachine, State, build_detector
-from .wake_verify import is_pleasantry_only, mentions_wake_word, strip_wake_phrase
+from .wake_verify import (
+    closing_reply,
+    is_hallucination_only,
+    is_pleasantry_only,
+    mentions_wake_word,
+    strip_wake_phrase,
+)
 
 log = logging.getLogger("homeai")
 
@@ -448,9 +454,24 @@ class VoiceAssistant:
             # Anything else is a new question; the old tail is stale.
             self._held.clear()
 
+        # "Thank you" ends a conversation; it doesn't start one. Out of nowhere
+        # it is room audio or a hallucination: stay quiet. Mid-conversation it
+        # gets a short acknowledgement (see wake_verify.closing_reply).
         if is_pleasantry_only(transcript.text):
-            log.info("pleasantry only: %r - not a request, staying quiet", transcript.text)
-            turn.verdict = "pleasantry"
+            in_conversation = bool(self.memory.recent())
+            ack = "" if is_hallucination_only(transcript.text) or not in_conversation \
+                else closing_reply(transcript.text)
+            self._held.clear()
+            turn.verdict = "closing" if ack else "pleasantry"
+            turn.reply = ack
+            if ack:
+                log.info("closing %r - %s", transcript.text, ack)
+                stage.reset()
+                self._speak(ack)
+                turn.tts_ms = stage.ms()
+            else:
+                log.info("pleasantry with no conversation in progress: %r - staying quiet",
+                         transcript.text)
             turn.total_ms = total.ms()
             self.transcript.write(turn)
             return

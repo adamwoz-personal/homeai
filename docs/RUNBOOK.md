@@ -121,8 +121,12 @@ utterance. Otherwise Jarvis stays silent and logs:
 ```bash
 journalctl --user -u homeai | grep -E "wake word detected|unverified|heard:"
 ```
-- `transcript.jsonl` verdicts include `unverified`, `wake-only` and
-  `pleasantry` ("Thank you." on its own never reaches the agent).
+- `transcript.jsonl` verdicts include `unverified`, `wake-only`,
+  `pleasantry` and `closing`.
+- A thank-you ends a conversation; it doesn't start one. Within 5 minutes
+  of an exchange, "thank you" gets "You're welcome." and "bye" gets "Bye for
+  now.", without asking the model. A thank-you out of nowhere, or Whisper
+  noise ("thanks for watching"), gets silence.
 - Replies that narrate the model's reasoning ("no need to call a tool
   function…") are discarded and retried.
 - To turn the check off: `HOMEAI_WAKE_VERIFY=0` in `.env`. Pre-roll

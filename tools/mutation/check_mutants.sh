@@ -64,7 +64,9 @@ MUTANTS=(
   "verify-no-preroll|homeai/daemon.py|s/            audio = np.concatenate(\[preroll, audio\])/            pass/|tests/test_daemon.py -k verified_wake"
   "verify-loose-match|homeai/wake_verify.py|s/^WAKE_SIMILARITY = 0.75/WAKE_SIMILARITY = 0.5/|tests/test_wake_verify.py"
   "verify-no-prefix|homeai/wake_verify.py|s/        or (len(name) >= 5 and token.startswith(name\[:4\]))/        or False/|tests/test_wake_verify.py"
-  "pleasantry-gate-off|homeai/daemon.py|s/        if is_pleasantry_only(transcript.text):/        if False:/|tests/test_daemon.py -k pleasantry"
+  "pleasantry-ignores-conversation|homeai/daemon.py|s/            in_conversation = bool(self.memory.recent())/            in_conversation = True/|tests/test_daemon.py -k out_of_nowhere"
+  "closing-sent-to-agent|homeai/daemon.py|s/        if is_pleasantry_only(transcript.text):/        if is_pleasantry_only(transcript.text) and not self.memory.recent():/|tests/test_daemon.py -k acknowledge"
+  "hallucination-gate-off|homeai/daemon.py|s/            ack = \"\" if is_hallucination_only(transcript.text) or not in_conversation/            ack = \"\" if not in_conversation/|tests/test_daemon.py -k hallucination"
   "reasoning-not-checked|homeai/agent_cli.py|s/            if detect_leaked_reasoning(text):/            if False:/|tests/test_agent_cli.py -k reasoning"
 )
 

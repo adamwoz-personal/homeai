@@ -1315,3 +1315,10 @@ in the room:
 Open issue: in a noisy room the capture keeps going while others talk. A
 verified question can then arrive with unrelated speech attached. The real
 fix is speaker identification (todo `speaker-id`).
+
+Follow-up (Adam): "you end with a thank you, not start with one". A
+closing is now dropped only when no conversation is in progress (the
+5-minute memory window). Live, a mid-conversation "thank you" sent to the
+8B model made it continue the previous topic for 23 s. Closings therefore
+get a fixed short reply (`wake_verify.closing_reply`). Whisper's stock
+hallucinations stay dropped either way.
