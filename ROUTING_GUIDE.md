@@ -1329,4 +1329,7 @@ the model with `CLOSING_HINT` ("reply warmly in ONE short sentence"),
 which replaces the usual style hint for that request. The spoken reply is
 hard-cut to its first sentence, and a reply that is only a question is
 dropped so it can't reopen the conversation. The canned reply is only a
-fallback.
+fallback. Live, "thanks a lot" once got a sentence *about* gratitude, so
+the hint now says not to talk about gratitude. An example reply in the
+hint made the model parrot it (even "bye" -> "You're welcome."), so it has
+none. `tools/eval_closing_hint.py --rep 4` checks this: 20/20 acceptable.

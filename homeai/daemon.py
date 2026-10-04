@@ -72,8 +72,10 @@ MSG_NOT_UNDERSTOOD = "Sorry, I didn't catch that."
 # Not a question: asking one would open a follow-up window, and the people
 # talking to each other would "answer" it.
 # Replaces the style hint for thanks and goodbyes mid-conversation.
-CLOSING_HINT = ("(They are thanking you or saying goodbye. Reply warmly in ONE short "
-                "sentence. Do not continue the earlier topic and do not ask a question.)")
+CLOSING_HINT = ("(The user is thanking you, Jarvis, for your help, or saying goodbye. "
+                "Reply warmly and naturally in ONE short sentence. Do not "
+                "talk about gratitude, do not continue the earlier topic and do not ask "
+                "a question.)")
 MSG_FRAGMENT = "Sorry, I only caught part of that. Say hey Jarvis again if you meant me."
 
 # Spoken when the agent is taking long enough that silence reads as failure.
