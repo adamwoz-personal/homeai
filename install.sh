@@ -14,7 +14,8 @@
 #      ABORTS with every reason listed if the machine cannot run a home AI.
 #   2. Python environment (.venv) with the voice extras.
 #   3. whisper.cpp built from source, plus the speech-recognition model.
-#   4. The Piper voice.
+#   4. The Piper voice, and the speaker-recognition model (off until
+#      `homeai-mode speaker on`; see homeai/speaker_admin.py).
 #   5. Ollama: pull llama3.1:8b and create the `llama31-voice` variant with the
 #      tier's context length. The VRAM guard needs sudo: see --sudo.
 #   6. ZeroClaw: add the locked-down voice agent and copy its persona.
@@ -198,6 +199,16 @@ for ext in onnx onnx.json; do
         run curl -fL --retry 3 -o "vendor/piper/${PIPER_VOICE}.${ext}" "${PIPER_URL}/${PIPER_VOICE}.${ext}"
     fi
 done
+
+# Speaker recognition is optional: a failed download is a note, not an abort.
+FETCH_SPEAKER='from homeai.speaker_admin import fetch_model; from homeai.config import SpeakerConfig; print(fetch_model(SpeakerConfig().model_path))'
+if [[ $DRY_RUN -eq 1 ]]; then
+    info "would download the speaker-recognition model (SHA256-checked)"
+elif SPEAKER_OUT="$(.venv/bin/python -c "$FETCH_SPEAKER" 2>&1)"; then
+    info "$SPEAKER_OUT"
+else
+    note "speaker-recognition model not downloaded (${SPEAKER_OUT##*$'\n'}); later: homeai-mode speaker fetch"
+fi
 
 # -- 5. ollama ------------------------------------------------------------------
 

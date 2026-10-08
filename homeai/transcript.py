@@ -43,6 +43,11 @@ class Turn:
     source: str = "wake"
     # Detector confidence for wake-started turns; None when not applicable.
     wake_score: float | None = None
+    # Who spoke, if speaker recognition is on and sure; the best-match score
+    # is kept even when it was not sure, for tuning the threshold.
+    speaker: str | None = None
+    speaker_score: float | None = None
+    speaker_ms: float = 0.0
     ok: bool = True
     error: str = ""
     attempts: int = 0

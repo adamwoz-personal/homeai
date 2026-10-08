@@ -53,6 +53,7 @@ from .dialogue import (
     split_for_budget,
 )
 from .wake import CaptureMachine, State, build_detector
+from . import voice_id as vid
 from .wake_verify import (
     closing_reply,
     is_hallucination_only,
@@ -100,6 +101,9 @@ class VoiceAssistant:
         # for why this does not reintroduce session poisoning.
         self.memory = ConversationMemory()
         self.agent = build_agent_client(self.cfg.agent, memory=self.memory)
+        # Who is speaking; None when turned off or the model failed to load.
+        self.voice_id = vid.VoiceId(self.cfg.speaker) if self.cfg.speaker.enabled else None
+        self._enrolment: vid.Enrolment | None = None
         self.transcript = TranscriptLog(
             self.cfg.transcript.path, enabled=self.cfg.transcript.enabled
         )
@@ -426,6 +430,12 @@ class VoiceAssistant:
                 return
         log.info("heard: %s  [stt %.0fms]", transcript.text, turn.stt_ms)
 
+        ident, emb = self._identify(audio, turn)
+        if self._handle_voice_id(turn, transcript.text, source, audio, ident, emb, total):
+            return
+        if ident is not None:
+            self.memory.switch_speaker(ident.name)
+
         # "Stop", "quiet", "I'm not talking to you". After a barge-in the mic
         # stays open for a follow-up question, but the interruption is often
         # the whole point. Querying the agent here would answer a question
@@ -548,6 +558,113 @@ class VoiceAssistant:
         )
         self._deliver(turn, spoken, total)
 
+    # -- speaker recognition -------------------------------------------------
+
+    def _identify(self, audio: np.ndarray, turn: Turn):
+        """(Identification, embedding), or (None, None) when it is off or fails."""
+        if self.voice_id is None:
+            return None, None
+        stage = Stopwatch()
+        try:
+            ident, emb = self.voice_id.identify(audio)
+        except Exception as exc:  # noqa: BLE001 - never lose a turn to speaker-id
+            log.warning("speaker identification failed: %s", exc)
+            return None, None
+        turn.speaker_ms = stage.ms()
+        turn.speaker = ident.name
+        turn.speaker_score = round(float(ident.score), 3) if ident.best else None
+        log.info("speaker: %s  [%.0fms]", vid.describe(ident), turn.speaker_ms)
+        return ident, emb
+
+    def _handle_voice_id(self, turn: Turn, text: str, source: str, audio: np.ndarray,
+                         ident, emb, total: Stopwatch) -> bool:
+        """Enrolment answers, follow-ups from other voices, and voice-ID
+        commands. Returns True if the turn was dealt with here."""
+        if self._enrolment is not None:
+            if source == "followup" and not self._enrolment.expired() \
+                    and not is_dismissal(text, self.cfg.wake.model):
+                self._continue_enrolment(turn, audio, total)
+                return True
+            log.info("enrolment for %s abandoned", self._enrolment.name)
+            self._enrolment = None
+
+        # Family chatter during a follow-up window is not an answer.
+        if source == "followup" and self.voice_id is not None and ident is not None:
+            owner = self.memory.speaker
+            other, sim = self.voice_id.is_someone_else(owner, ident, emb)
+            if other:
+                log.info("follow-up from another voice (%s; %s to %s) - ignoring",
+                         vid.describe(ident), "?" if sim is None else f"{sim:.2f}", owner)
+                turn.verdict = "other-speaker"
+                turn.total_ms = total.ms()
+                self.transcript.write(turn)
+                return True
+
+        cmd = vid.parse_command(text)
+        if cmd is None or (self.voice_id is None and cmd.kind != "enrol"):
+            return False
+        listen = False
+        if self.voice_id is None:
+            reply = vid.MSG_OFF
+        elif cmd.kind == "enrol" and not cmd.name:
+            reply = vid.MSG_ENROL_NO_NAME
+        elif cmd.kind == "enrol":
+            self._enrolment = vid.Enrolment(cmd.name)
+            self._enrolment.add(audio)
+            reply, listen = vid.MSG_ENROL_START.format(name=cmd.name), True
+            log.info("enrolling %s", cmd.name)
+        elif not self.voice_id.registry.names():
+            reply = vid.MSG_WHO_NOBODY
+        elif ident is None or ident.name is None:
+            reply = vid.MSG_WHO_UNSURE if cmd.kind == "who" else vid.MSG_FORGET_UNKNOWN
+        elif cmd.kind == "who":
+            reply = vid.MSG_WHO_KNOWN.format(name=ident.name)
+        else:
+            self.voice_id.forget(ident.name)
+            self.memory.clear()
+            reply = vid.MSG_FORGOTTEN.format(name=ident.name)
+            log.info("forgot the voice of %s", ident.name)
+        turn.verdict = f"voice-{cmd.kind}"
+        self._say_turn(turn, reply, total, listen)
+        return True
+
+    def _continue_enrolment(self, turn: Turn, audio: np.ndarray, total: Stopwatch) -> None:
+        enrolment = self._enrolment
+        enrolment.add(audio)
+        log.info("enrolling %s: %d answer(s), %.1f s of speech",
+                 enrolment.name, enrolment.rounds, enrolment.speech_s)
+        turn.verdict = "enrolling"
+        if not (enrolment.done or enrolment.gave_up):
+            self._say_turn(turn, vid.MSG_ENROL_MORE, total, listen=True)
+            return
+        self._enrolment = None
+        profile = None
+        if enrolment.done:
+            try:
+                profile = self.voice_id.finish_enrolment(enrolment)
+            except OSError as exc:
+                log.error("could not save voice profile: %s", exc)
+        if profile is None:
+            log.warning("enrolment of %s failed (%.1f s of speech)",
+                        enrolment.name, enrolment.speech_s)
+            self._say_turn(turn, vid.MSG_ENROL_FAILED, total)
+            return
+        log.info("enrolled %s from %.1f s of speech", enrolment.name, enrolment.speech_s)
+        self._say_turn(turn, vid.MSG_ENROL_DONE.format(name=enrolment.name), total)
+
+    def _say_turn(self, turn: Turn, text: str, total: Stopwatch, listen: bool = False) -> None:
+        """Speak a fixed reply, log the turn, and optionally listen without
+        the wake word for the answer."""
+        turn.reply = text
+        stage = Stopwatch()
+        turn.tts_first_audio_ms = self._speak(text)
+        turn.tts_ms = stage.ms()
+        turn.total_ms = total.ms()
+        self.transcript.write(turn)
+        if listen:
+            time.sleep(FOLLOWUP_SETTLE_S)
+            self._followup_armed.set()
+
     def _deliver(self, turn: Turn, spoken: str, total: Stopwatch) -> None:
         """Speak a finished reply within the spoken budget, then log it."""
         spoken, rest = split_for_budget(spoken, self.cfg.tts.spoken_budget_words)
@@ -613,6 +730,7 @@ class VoiceAssistant:
 
         self._detector, description = build_detector(self.cfg.wake)
         log.info("wake detector: %s", description)
+        self._start_voice_id()
 
         # Warm the agent loop. The first request against a cold session was
         # measured at ~29s versus ~4s steady state; without this the user's
@@ -626,6 +744,21 @@ class VoiceAssistant:
 
         log.info("voice assistant ready")
         return True
+
+    def _start_voice_id(self) -> None:
+        """Load speaker recognition. A failure turns it off; it never stops Jarvis."""
+        if self.voice_id is None:
+            return
+        ok, problem = self.voice_id.load()
+        if not ok:
+            log.error("speaker recognition off: %s", problem)
+            self.voice_id = None
+            return
+        if self.voice_id.registry.problem:
+            log.warning("%s", self.voice_id.registry.problem)
+        names = self.voice_id.registry.names()
+        log.info("speaker recognition: %s (%s enrolled)", self.voice_id.embedder.model_name,
+                 ", ".join(names) or "nobody")
 
     def _warm_up(self) -> None:
         """Prime the agent loop in the background so the first real question

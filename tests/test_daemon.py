@@ -743,3 +743,144 @@ def test_whisper_hallucination_is_dropped_even_mid_conversation(quick) -> None:
     turn = _verified_turn(quick, "Thanks for watching!", source="followup", preroll=False)
     quick.agent.ask.assert_not_called()
     assert turn.verdict == "pleasantry"
+
+
+# -- speaker recognition ------------------------------------------------------
+
+def _unit(*xs):
+    v = np.asarray(xs, dtype=np.float32)
+    return v / np.linalg.norm(v)
+
+
+ADAM, BETH, STRANGER = _unit(1, 0, 0), _unit(0, 1, 0), _unit(0, 0, 1)
+
+
+@pytest.fixture
+def voiced(quick, tmp_path, monkeypatch):
+    """quick, with speaker-id on: Adam and Beth enrolled, embeddings scripted."""
+    from homeai.config import SpeakerConfig
+    from homeai.voice_id import VoiceId
+    v = VoiceId(SpeakerConfig(enabled=True, registry_path=tmp_path / "speakers.json"))
+    v.registry.add("Adam", ADAM)
+    v.registry.add("Beth", BETH)
+    quick.voiced_next = ADAM
+    monkeypatch.setattr(v.embedder, "embed", lambda audio, trim=True: quick.voiced_next)
+    quick.voice_id = v
+    return quick
+
+
+def _speak_as(q, emb, heard, source="wake", seconds=1.0):
+    from homeai.stt import Transcript
+    q.voiced_next = emb
+    q.stt.transcribe_audio.return_value = Transcript(ok=True, text=heard)
+    q.agent.ask.reset_mock()
+    q.tts.say_safe.reset_mock()
+    reply = q.agent.ask.return_value
+    reply.ok, reply.text, reply.attempts, reply.error = True, "Six.", 1, ""
+    q.tts.say_chunked.return_value.interrupted = False
+    q.tts.say_chunked.return_value.first_audio_ms = 100.0
+    q.transcript = MagicMock()
+    q._followup_armed.clear()
+    t = np.arange(int(seconds * 16000)) / 16000
+    audio = (0.3 * np.sin(2 * np.pi * 220 * t)).astype(np.float32)
+    q._handle(audio, source, np.zeros(800, dtype=np.float32) if source == "wake" else None)
+    spoken = [c.args[0] for c in q.tts.say_safe.call_args_list]
+    return q.transcript.write.call_args.args[0], spoken
+
+
+def test_recognised_speaker_is_logged_and_owns_the_conversation(voiced) -> None:
+    turn, _ = _speak_as(voiced, ADAM, "Hey Jarvis, what is two plus four?")
+    voiced.agent.ask.assert_called_once()
+    assert turn.speaker == "Adam" and turn.speaker_score == pytest.approx(1.0)
+    assert voiced.memory.speaker == "Adam"
+
+
+def test_unknown_speaker_still_gets_an_answer(voiced) -> None:
+    turn, _ = _speak_as(voiced, STRANGER, "Hey Jarvis, what is two plus four?")
+    voiced.agent.ask.assert_called_once()
+    assert turn.speaker is None and turn.verdict == "allow"
+
+
+def test_followup_from_another_voice_is_ignored(voiced) -> None:
+    _speak_as(voiced, ADAM, "Hey Jarvis, what is two plus four?")
+    voiced.memory.add("what is two plus four", "Six. Anything else?")
+    turn, spoken = _speak_as(voiced, BETH, "Mum, where are my shoes?", source="followup")
+    voiced.agent.ask.assert_not_called()
+    assert turn.verdict == "other-speaker" and spoken == []
+
+
+def test_followup_from_the_same_voice_is_answered(voiced) -> None:
+    _speak_as(voiced, ADAM, "Hey Jarvis, what is two plus four?")
+    _speak_as(voiced, _unit(0.9, 0.1, 0.1), "and times two?", source="followup")
+    voiced.agent.ask.assert_called_once()
+
+
+def test_who_am_i(voiced) -> None:
+    turn, spoken = _speak_as(voiced, ADAM, "Hey Jarvis, who am I?")
+    voiced.agent.ask.assert_not_called()
+    assert spoken == ["You sound like Adam."] and turn.verdict == "voice-who"
+    _, spoken = _speak_as(voiced, STRANGER, "Hey Jarvis, who am I?")
+    assert spoken == ["I'm not sure who you are."]
+
+
+def test_enrolment_by_voice(voiced, monkeypatch) -> None:
+    import homeai.voice_id as vid
+    monkeypatch.setattr(vid, "ENROL_TARGET_SPEECH_S", 6.0)
+    carl = _unit(1, 1, 1)
+    _, spoken = _speak_as(voiced, carl, "Hey Jarvis, remember my voice as Carl.", seconds=2.0)
+    assert spoken[0].startswith("Okay, Carl.") and voiced._followup_armed.is_set()
+    turn, spoken = _speak_as(voiced, carl, "I had a busy day.", source="followup", seconds=2.0)
+    assert spoken == [vid.MSG_ENROL_MORE] and voiced._followup_armed.is_set()
+    assert turn.verdict == "enrolling"
+    _, spoken = _speak_as(voiced, carl, "Lots of meetings.", source="followup", seconds=3.0)
+    assert spoken == ["Got it. I'll know your voice now, Carl."]
+    assert not voiced._followup_armed.is_set()
+    voiced.agent.ask.assert_not_called()
+    assert voiced.voice_id.registry.get("Carl") is not None
+    assert "Carl" in voiced.voice_id.registry.path.read_text()
+
+
+def test_enrolment_is_abandoned_by_a_new_wake_turn(voiced) -> None:
+    _speak_as(voiced, ADAM, "Hey Jarvis, remember my voice as Adam.")
+    _speak_as(voiced, ADAM, "Hey Jarvis, what is two plus four?")
+    voiced.agent.ask.assert_called_once()
+    assert voiced._enrolment is None
+
+
+def test_enrolment_without_a_name_asks_for_one(voiced) -> None:
+    _, spoken = _speak_as(voiced, ADAM, "Hey Jarvis, remember my voice.")
+    assert spoken == ["Say: remember my voice as, and then your name."]
+    assert voiced._enrolment is None
+
+
+def test_forget_my_voice(voiced) -> None:
+    _, spoken = _speak_as(voiced, BETH, "Hey Jarvis, forget my voice.")
+    assert spoken == ["Okay, Beth. I've forgotten your voice."]
+    assert voiced.voice_id.registry.names() == ["Adam"]
+
+
+def test_voice_commands_when_speaker_id_is_off(quick) -> None:
+    assert quick.voice_id is None
+    turn = _verified_turn(quick, "Hey Jarvis, remember my voice as Adam.")
+    assert turn.reply == "Voice recognition is turned off."
+    quick.agent.ask.assert_not_called()
+    _verified_turn(quick, "Hey Jarvis, who am I?")
+    quick.agent.ask.assert_called_once()
+
+
+def test_identification_failure_never_loses_the_turn(voiced, monkeypatch) -> None:
+    def boom(audio, trim=True):
+        raise RuntimeError("onnx exploded")
+    monkeypatch.setattr(voiced.voice_id.embedder, "embed", boom)
+    turn, _ = _speak_as(voiced, None, "Hey Jarvis, what is two plus four?")
+    voiced.agent.ask.assert_called_once()
+    assert turn.speaker is None
+
+
+def test_missing_speaker_model_turns_speaker_id_off(quick, tmp_path) -> None:
+    from homeai.config import SpeakerConfig
+    from homeai.voice_id import VoiceId
+    quick.voice_id = VoiceId(SpeakerConfig(enabled=True, model_path=tmp_path / "x.onnx",
+                                           registry_path=tmp_path / "s.json"))
+    quick._start_voice_id()
+    assert quick.voice_id is None

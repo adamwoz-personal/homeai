@@ -73,16 +73,34 @@ MUTANTS=(
   "cli-hint-ignored|homeai/agent_cli.py|s/        if hint:/        if False:/|tests/test_agent_cli.py -k one_off_hint"
   "hallucination-gate-off|homeai/daemon.py|s/            fallback = \"\" if is_hallucination_only(transcript.text) or not in_conversation/            fallback = \"\" if not in_conversation/|tests/test_daemon.py -k hallucination"
   "reasoning-not-checked|homeai/agent_cli.py|s/            if detect_leaked_reasoning(text):/            if False:/|tests/test_agent_cli.py -k reasoning"
+  "speaker-no-margin|homeai/speaker.py|s/        if margin < self.margin:/        if False:/|tests/test_speaker.py -k similar_voices"
+  "speaker-threshold-exclusive|homeai/speaker.py|s/        if score < self.threshold:/        if score <= self.threshold:/|tests/test_speaker.py -k inclusive"
+  "speaker-no-trim|homeai/speaker.py|s/            feats = feats\[mask\]/            pass/|tests/test_speaker.py -k unit_vector"
+  "speaker-no-cmn|homeai/speaker.py|s/        feats = feats - feats.mean(axis=0, keepdims=True)/        pass/|tests/test_speaker.py -k unit_vector"
+  "speaker-other-model-accepted|homeai/speaker.py|s/            if model != self.model:/            if False:/|tests/test_speaker.py -k another_model"
+  "speaker-followup-gate-off|homeai/daemon.py|s/            if other:/            if False:/|tests/test_daemon.py -k another_voice"
+  "speaker-unknown-voice-never-different|homeai/voice_id.py|s/        return (sim is not None and sim < self.cfg.different_below), sim/        return False, sim/|tests/test_voice_id.py -k clearly_different"
+  "speaker-enrol-no-minimum|homeai/voice_id.py|s/        return self.speech_s >= ENROL_TARGET_SPEECH_S/        return True/|tests/test_voice_id.py -k enough_speech"
+  "memory-unknown-switches-window|homeai/memory.py|s/            if name is None or name == self._owner:/            if name == self._owner:/|tests/test_memory.py -k unrecognised"
+  "memory-name-never-sent|homeai/memory.py|s/naturally and only now and then.)\\\\n\\\\n\") if named else \"\"/naturally and only now and then.)\\\\n\\\\n\") if False else \"\"/|tests/test_memory.py -k name_goes"
+  "speaker-fetch-no-checksum|homeai/speaker_admin.py|s/        if got != expected:/        if False:/|tests/test_speaker_admin.py -k checksum"
 )
 
 filter="${1:-}"
 fail=0
+# Never cache bytecode of mutated sources. Python validates a .pyc by the
+# source's whole-second mtime and size; a same-length mutant restored within
+# the same second left the MUTATED bytecode in use by every later run
+# (found 2026-10-07: "if named" -> "if False" broke the real suite).
+export PYTHONDONTWRITEBYTECODE=1
+purge_pyc() { rm -f "$(dirname "$1")/__pycache__/$(basename "$1" .py)".*.pyc; }
 for entry in "${MUTANTS[@]}"; do
   IFS='|' read -r name file expr selector <<<"$entry"
   [[ -n "$filter" && "$name" != *"$filter"* ]] && continue
   cp "$file" "$file.mutbak"
-  trap 'mv -f "$file.mutbak" "$file"' EXIT INT TERM
+  trap 'mv -f "$file.mutbak" "$file"; purge_pyc "$file"' EXIT INT TERM
   sed -i "$expr" "$file"
+  purge_pyc "$file"
   if cmp -s "$file" "$file.mutbak"; then
     echo "STALE    $name  (sed matched nothing; update the mutant)"
     fail=1
@@ -102,6 +120,7 @@ for entry in "${MUTANTS[@]}"; do
     fi
   fi
   mv -f "$file.mutbak" "$file"
+  purge_pyc "$file"
   trap - EXIT INT TERM
 done
 exit $fail

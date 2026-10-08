@@ -204,3 +204,61 @@ def test_thread_safety_concurrent_add_calls():
     assert all(results)
     # Should have 10 entries
     assert len(memory) == 10
+
+# -- speaker windows ---------------------------------------------------------
+
+def test_two_recognised_people_keep_separate_windows():
+    from homeai.memory import ConversationMemory
+    m = ConversationMemory()
+    m.switch_speaker("Adam")
+    m.add("is the universe alive", "Some say so.")
+    m.switch_speaker("Beth")
+    assert m.recent() == [] and m.speaker == "Beth"
+    m.add("what's for dinner", "Pasta.")
+    m.switch_speaker("Adam")
+    assert [e.user for e in m.recent()] == ["is the universe alive"]
+
+
+def test_unrecognised_turn_keeps_the_current_window():
+    from homeai.memory import ConversationMemory
+    m = ConversationMemory()
+    m.switch_speaker("Adam")
+    m.add("q", "a")
+    m.switch_speaker(None)
+    assert len(m.recent()) == 1 and m.speaker == "Adam"
+
+
+def test_window_started_by_an_unknown_voice_is_adopted():
+    from homeai.memory import ConversationMemory
+    m = ConversationMemory()
+    m.add("q", "a")
+    m.switch_speaker("Adam")
+    assert len(m.recent()) == 1 and m.speaker == "Adam"
+
+
+def test_expired_window_belongs_to_nobody():
+    from homeai.memory import ConversationMemory
+    now = [0.0]
+    m = ConversationMemory(idle_expiry_s=10, clock=lambda: now[0])
+    m.switch_speaker("Adam")
+    m.add("q", "a")
+    now[0] = 11
+    assert m.speaker is None
+
+
+def test_name_goes_into_the_request_only_when_recognised_this_turn():
+    from homeai.memory import ConversationMemory
+    m = ConversationMemory()
+    m.switch_speaker("Adam")
+    assert m.build_request("hi").startswith("(The person speaking is Adam")
+    m.switch_speaker(None)
+    assert m.build_request("hi") == "hi"
+
+
+def test_clear_forgets_speakers_too():
+    from homeai.memory import ConversationMemory
+    m = ConversationMemory()
+    m.switch_speaker("Adam")
+    m.add("q", "a")
+    m.clear()
+    assert m.speaker is None and m.build_request("hi") == "hi"

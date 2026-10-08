@@ -8,6 +8,7 @@
     homeai-mode voice      # back to normal: Jarvis on, coder shares the card
     homeai-mode status
     homeai-mode memory [off|on|retention DAYS|purge]   # see memory_privacy.py
+    homeai-mode speaker [on|off|fetch|remove|enrol|identify]   # see speaker_admin.py
 
 Why: the voice model (7.0 GB) and qwen3-coder-30b (~19.7 GB) together need
 ~26 GB on a 21.4 GB card. Sharing, the coder generates at ~25 tok/s; with the
@@ -321,10 +322,14 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("days", type=int, help="0 = keep forever (ZeroClaw default 30)")
     pg = msub.add_parser("purge", help="delete all saved conversations now")
     pg.add_argument("--yes", action="store_true", help="do not ask for confirmation")
+    from homeai import speaker_admin
+    speaker_admin.add_parser(sub)
     args = parser.parse_args(argv)
 
     if args.cmd == "memory":
         return _memory_main(args)
+    if args.cmd == "speaker":
+        return speaker_admin.main(args)
 
     switcher = ModeSwitcher(System())
     try:

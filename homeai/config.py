@@ -269,6 +269,36 @@ class WakeConfig:
 
 
 @dataclass(frozen=True)
+class SpeakerConfig:
+    """Who is speaking. See homeai/speaker.py and plans/VOICE_ID_PLAN.md."""
+
+    enabled: bool = field(default_factory=lambda: _env_bool("HOMEAI_SPEAKER_ID", False))
+    model_path: Path = field(
+        default_factory=lambda: Path(_env_str(
+            "HOMEAI_SPEAKER_MODEL", str(VENDOR / "speaker" / "wespeaker_en_voxceleb_resnet34_LM.onnx")
+        ))
+    )
+    registry_path: Path = field(
+        default_factory=lambda: Path(_env_str(
+            "HOMEAI_SPEAKER_REGISTRY", os.path.expanduser("~/.config/homeai/speakers.json")
+        ))
+    )
+    # Cosine similarity needed to name someone, and how far ahead of the
+    # next-best profile the match must be. Tuned with tools/bench_speaker_separation.py.
+    threshold: float = field(default_factory=lambda: _env_float("HOMEAI_SPEAKER_THRESHOLD", 0.45))
+    margin: float = field(default_factory=lambda: _env_float("HOMEAI_SPEAKER_MARGIN", 0.1))
+    # Follow-ups (no wake word) from a voice that is confidently NOT the
+    # person in the conversation are ignored: family chatter is not an answer.
+    followup_same_speaker: bool = field(
+        default_factory=lambda: _env_bool("HOMEAI_SPEAKER_FOLLOWUP_GATE", True)
+    )
+    # Similarity below which a follow-up voice counts as someone else.
+    different_below: float = field(
+        default_factory=lambda: _env_float("HOMEAI_SPEAKER_DIFFERENT_BELOW", 0.25)
+    )
+
+
+@dataclass(frozen=True)
 class Config:
     audio: AudioConfig = field(default_factory=AudioConfig)
     stt: SttConfig = field(default_factory=SttConfig)
@@ -276,6 +306,7 @@ class Config:
     agent: AgentConfig = field(default_factory=AgentConfig)
     wake: WakeConfig = field(default_factory=WakeConfig)
     transcript: TranscriptConfig = field(default_factory=TranscriptConfig)
+    speaker: SpeakerConfig = field(default_factory=SpeakerConfig)
 
     def validation_errors(self) -> list[str]:
         """Return human-readable problems. Empty list means good to start.

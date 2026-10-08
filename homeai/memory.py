@@ -95,6 +95,11 @@ class ConversationMemory:
         self._entry_chars = max(0, entry_chars)
         self._clock = clock
         self._entries: list[Exchange] = []
+        # Speaker recognition: whose window ``_entries`` is, who was named on
+        # the current turn, and other people's windows set aside meanwhile.
+        self._owner: str | None = None
+        self._named: str | None = None
+        self._stash: dict[str, list[Exchange]] = {}
         self._lock = threading.Lock()
 
     # -- writing -----------------------------------------------------------
@@ -133,6 +138,38 @@ class ConversationMemory:
     def clear(self) -> None:
         with self._lock:
             self._entries.clear()
+            self._stash.clear()
+            self._owner = self._named = None
+
+    def switch_speaker(self, name: str | None) -> None:
+        """Point the window at the person speaking this turn.
+
+        Two recognised people each keep their own context. An unrecognised
+        turn (``None``) keeps the current window: a missed identification
+        must not cost Adam his conversation. A window started by an unknown
+        voice is adopted by the first person recognised in it.
+        """
+        with self._lock:
+            self._expire_locked()
+            self._named = name
+            if name is None or name == self._owner:
+                return
+            if self._owner is None:
+                self._owner = name
+                self._stash.pop(name, None)
+                return
+            if self._entries:
+                self._stash[self._owner] = self._entries
+            self._entries = self._stash.pop(name, [])
+            self._expire_locked()
+            self._owner = name
+
+    @property
+    def speaker(self) -> str | None:
+        """Who the current window belongs to, if anyone was recognised."""
+        with self._lock:
+            self._expire_locked()
+            return self._owner
 
     # -- reading -----------------------------------------------------------
 
@@ -178,11 +215,15 @@ class ConversationMemory:
         return "\n".join(lines)
 
     def build_request(self, utterance: str) -> str:
-        """Combine context with the current utterance."""
+        """Combine context, and the speaker's name if known, with the utterance."""
         context = self.context_prompt()
+        with self._lock:
+            named = self._named
+        prefix = (f"(The person speaking is {named}, recognised by voice. Use the name "
+                  f"naturally and only now and then.)\n\n") if named else ""
         if not context:
-            return utterance
-        return f"{context}User: {utterance}"
+            return f"{prefix}{utterance}"
+        return f"{prefix}{context}User: {utterance}"
 
     # -- internals ---------------------------------------------------------
 
@@ -197,6 +238,8 @@ class ConversationMemory:
             return
         if self._clock() - self._entries[-1].at > self._idle_expiry_s:
             self._entries.clear()
+            # An expired window belongs to nobody; the next voice starts fresh.
+            self._owner = None
 
     def _trim_locked(self) -> None:
         self._expire_locked()

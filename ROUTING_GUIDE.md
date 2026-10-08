@@ -95,8 +95,8 @@ Naming tells you what a script does without opening it:
 
 | Prefix | Does | Examples |
 |---|---|---|
-| `bench_*` | Measures; writes results with `--out` | `bench_llm.py` (answer quality per model), `bench_conversation.py` (multi-turn repetition, length, hedging), `bench_tokps.py` (llama-server prompt/generation tok/s), `bench_whisper.py` (STT models) |
-| `probe_*` | Inspects one thing on the live system | `probe_agent_prompt.py` (exact request ZeroClaw sends; `--set` tries config changes on a temp copy, `--with-memory`), `probe_voice_tools.py` (can the voice agent cause side effects? checks physical evidence), `probe_bargein.py` (wake scores during our own speech), `probe_soul.py` (SOUL.md canary), `wake_word_similarity.py` (how close a misheard word is to the wake word; tunes `WAKE_SIMILARITY`), `say_to_jarvis.sh` (speak a phrase through the speakers to the live daemon and print what it logged), `probe_wake_reset.py` (does the wake detector re-fire on silence after reset?), `piper_voice_samples.py` (same reply in every Piper voice; timings + `--play`), `test_memory_privacy_sandbox.sh` (`homeai-mode memory` against the real zeroclaw on a copy of ~/.zeroclaw; proves purged text is gone from disk), `probe_tool_cap.py` (how many sequential tool calls an agent really gets; detects shell loops by timing) |
+| `bench_*` | Measures; writes results with `--out` | `bench_llm.py` (answer quality per model), `bench_conversation.py` (multi-turn repetition, length, hedging), `bench_tokps.py` (llama-server prompt/generation tok/s), `bench_whisper.py` (STT models), `bench_speaker_separation.py` (speaker-id go/no-go: same- vs different-speaker similarity and embed time; `--clips DIR` for household recordings, `--model` to compare models) |
+| `probe_*` | Inspects one thing on the live system | `probe_agent_prompt.py` (exact request ZeroClaw sends; `--set` tries config changes on a temp copy, `--with-memory`), `probe_voice_tools.py` (can the voice agent cause side effects? checks physical evidence), `probe_bargein.py` (wake scores during our own speech), `probe_soul.py` (SOUL.md canary), `wake_word_similarity.py` (how close a misheard word is to the wake word; tunes `WAKE_SIMILARITY`), `say_to_jarvis.sh` (speak a phrase through the speakers to the live daemon and print what it logged), `probe_wake_reset.py` (does the wake detector re-fire on silence after reset?), `piper_voice_samples.py` (same reply in every Piper voice; timings + `--play`), `test_memory_privacy_sandbox.sh` (`homeai-mode memory` against the real zeroclaw on a copy of ~/.zeroclaw; proves purged text is gone from disk), `probe_tool_cap.py` (how many sequential tool calls an agent really gets; detects shell loops by timing), `probe_speaker_fbank.py` / `probe_speaker_vs_sherpa.py` (homeai's speaker features vs kaldi-native-fbank and sherpa-onnx; run from a throwaway venv, see docstrings) |
 | `report_*` / `inspect_*` | Reads saved output without re-running | `report_bench.py`, `inspect_conversation_bench.py` (`compare` runs, `show` flagged conversations), `inspect_captured_prompt.py` (tool calls and results in a capture), `inspect_zc_memory.py` (read-only view of ZeroClaw's brain.db) |
 | `mutation/` | Proves tests guard real behaviour | `check_mutants.sh` breaks the code on purpose and requires the named tests to fail |
 | `eval_*` | Scores an agent on real tasks with an objective check | `eval_local_coder.py` (builder agent: PASS / LIED / FAIL, and checks the main checkout is untouched) |
@@ -1333,3 +1333,51 @@ fallback. Live, "thanks a lot" once got a sentence *about* gratitude, so
 the hint now says not to talk about gratitude. An example reply in the
 hint made the model parrot it (even "bye" -> "You're welcome."), so it has
 none. `tools/eval_closing_hint.py --rep 4` checks this: 20/20 acceptable.
+
+## Speaker recognition (2026-10-07)
+
+Adam asked to build the voice-ID plan (`plans/VOICE_ID_PLAN.md`); the
+pressing reason is room audio: other people's speech answered Jarvis's
+follow-up questions. Off by default; `homeai-mode speaker on`.
+
+Model: no ECAPA ONNX export could be verified, so WeSpeaker's
+**ResNet34-LM** (sherpa-onnx release, SHA256 from its checksum.txt). On the
+release's sample clips (3 speakers, 14 clips) it separated same from
+different speakers with a gap of 0.152 (same >= 0.503, different <= 0.351)
+against CAM++'s 0.076, at 40 ms per utterance on the CPU
+(`tools/bench_speaker_separation.py`). The plan's step 3 was the go/no-go.
+
+Features are computed in numpy (Kaldi fbank, hamming, as WeSpeaker trains,
+then per-utterance mean subtraction) to avoid a dependency. Two checks,
+because a feature mismatch would not crash, it would just be quietly worse:
+- `probe_speaker_fbank.py`: equal to kaldi-native-fbank within 0.0005.
+- `probe_speaker_vs_sherpa.py`: sherpa-onnx's own pipeline disagreed
+  completely (cosine ~0.1). It skips mean subtraction for these models (no
+  `feature_normalize_type` in their metadata) and, measured, does not
+  separate the speakers at all (gap -0.08 to -0.64). homeai's does. Lesson:
+  "the reference implementation" was the wrong one here; the test that
+  decided it was separation, not agreement.
+
+Design choices:
+- Unknown is a normal answer: name only when score >= 0.45 AND it leads
+  the next voice by 0.1 (two similar voices are not guessed between).
+- A follow-up is ignored only when sure it is someone else: recognised as
+  another enrolled person, or below 0.25 against the conversation's owner.
+  Too little speech, or nobody enrolled, lets it through.
+- Memory: separate windows per recognised person; an unrecognised turn
+  keeps the current window, so a missed identification costs nothing.
+- Enrolment by voice reuses the follow-up window (the daemon holds the
+  mic exclusively; a CLI recorder could not open it). 8 s of speech total,
+  up to 4 answers; "stop" cancels; a new wake turn abandons it.
+- "do you recognise my voice" first parsed as an enrol command; caught by
+  a test, "who" is now checked before "enrol".
+
+Not done: splitting a single capture by speaker (diarisation). A wake turn
+with someone else talking over it is still one blended utterance.
+
+Mutation-script bug found along the way: after a full mutant run, the real
+suite failed in code that was correct. A same-length mutant ("if named" ->
+"if False") restored within the same second left its .pyc valid (Python
+checks whole-second mtime + size), so the mutated bytecode kept running.
+`check_mutants.sh` now sets PYTHONDONTWRITEBYTECODE and deletes the file's
+.pyc after mutating and after restoring. Always run the suite after mutants.

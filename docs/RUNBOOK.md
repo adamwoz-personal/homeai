@@ -149,6 +149,49 @@ Set `HOMEAI_PIPER_VOICE=<name>` in `.env`, then run
 2026-10-02). Every installed voice starts speaking in about 0.6 s, so choose
 by ear.
 
+## Who is speaking (speaker recognition)
+
+Off by default. Jarvis learns voices and then:
+- tells the model who is speaking, so it can use your name now and then;
+- keeps a separate conversation window per recognised person (an
+  unrecognised turn stays in the current window, so a miss costs nothing);
+- **ignores follow-ups (no wake word) from a voice that is clearly not the
+  person it is talking to**, so family chatter is not taken as your answer.
+
+Anyone, known or not, still gets full service. This is courtesy, not
+security: a recording of your voice will pass.
+
+```bash
+homeai-mode speaker on        # downloads the model if needed, restarts homeai
+homeai-mode speaker           # on/off, thresholds, who is enrolled
+homeai-mode speaker off
+homeai-mode speaker remove Adam
+```
+
+By voice (best: same mic and distance as everyday use):
+- "Hey Jarvis, remember my voice as Adam." Then talk about anything for
+  about ten seconds; Jarvis asks for more if it needs it and says "Got it"
+  when done. Saying "stop" cancels. Re-enrolling replaces the old profile.
+- "Hey Jarvis, who am I?" says who it thinks you are (no model call).
+- "Hey Jarvis, forget my voice." removes the voice it recognises.
+
+Checking how it does:
+```bash
+journalctl --user -u homeai | grep -E "speaker:|another voice|enroll"
+```
+Each line shows the best match and its score, e.g. `speaker: Adam (0.62,
+margin 0.40)` or `unknown (best Adam 0.31: below threshold)`; the score is
+also saved as `speaker_score` in transcript.jsonl. Tuning in `.env`:
+`HOMEAI_SPEAKER_THRESHOLD` (0.45: score needed to name someone),
+`HOMEAI_SPEAKER_MARGIN` (0.1: lead over the next-best voice),
+`HOMEAI_SPEAKER_DIFFERENT_BELOW` (0.25: a follow-up scoring below this
+against the person in the conversation is ignored),
+`HOMEAI_SPEAKER_FOLLOWUP_GATE=0` turns that gate off.
+
+Voices are stored in `~/.config/homeai/speakers.json` (mode 600). The model
+is `vendor/speaker/wespeaker_en_voxceleb_resnet34_LM.onnx` (SHA256-checked,
+~40 ms per utterance on the CPU).
+
 ## What ZeroClaw remembers (privacy)
 
 ZeroClaw saves every request to every agent, including speech Jarvis
