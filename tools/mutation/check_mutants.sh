@@ -86,6 +86,8 @@ MUTANTS=(
   "speaker-fetch-no-checksum|homeai/speaker_admin.py|s/        if got != expected:/        if False:/|tests/test_speaker_admin.py -k checksum"
   "transcript-no-speaker|homeai/transcript.py|s/        if turn.speaker_score is not None or turn.speaker:/        if False:/|tests/test_transcript.py -k speaker"
   "registry-never-reloads|homeai/speaker.py|s/        if stamp == self._stamp:/        if True:/|tests/test_speaker.py -k another_process"
+  "enrol-name-is-not-filler|homeai/voice_id.py|s/_FILLER = {\"as\", \"is\", /_FILLER = {\"as\", /|tests/test_voice_id.py -k parse_command"
+  "enrol-no-name-not-asked|homeai/daemon.py|s/            reply, listen = vid.MSG_ENROL_NO_NAME, True/            reply, listen = vid.MSG_ENROL_NO_NAME, False/|tests/test_daemon.py -k without_a_name"
 )
 
 filter="${1:-}"

@@ -169,7 +169,8 @@ homeai-mode speaker remove Adam   # takes effect without a restart
 ```
 
 By voice (best: same mic and distance as everyday use):
-- "Hey Jarvis, remember my voice as Adam." Then talk about anything for
+- "Hey Jarvis, remember my voice as Adam." ("is Adam" or just "Adam" also
+  work; with no name heard, Jarvis asks for one.) Then talk about anything for
   about ten seconds; Jarvis asks for more if it needs it and says "Got it"
   when done. Saying "stop" cancels. Re-enrolling replaces the old profile.
 - "Hey Jarvis, who am I?" says who it thinks you are (no model call).

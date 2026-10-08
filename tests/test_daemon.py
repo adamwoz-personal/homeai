@@ -847,10 +847,23 @@ def test_enrolment_is_abandoned_by_a_new_wake_turn(voiced) -> None:
     assert voiced._enrolment is None
 
 
-def test_enrolment_without_a_name_asks_for_one(voiced) -> None:
-    _, spoken = _speak_as(voiced, ADAM, "Hey Jarvis, remember my voice.")
-    assert spoken == ["Say: remember my voice as, and then your name."]
-    assert voiced._enrolment is None
+def test_enrolment_without_a_name_asks_for_one(voiced, monkeypatch) -> None:
+    import homeai.voice_id as vid
+    monkeypatch.setattr(vid, "ENROL_TARGET_SPEECH_S", 4.0)
+    _, spoken = _speak_as(voiced, ADAM, "Hey Jarvis, remember my voice.", seconds=1.0)
+    assert spoken == ["Sure. What name should I remember you by?"]
+    assert voiced._followup_armed.is_set()
+    _, spoken = _speak_as(voiced, ADAM, "It's Adam.", source="followup", seconds=1.0)
+    assert spoken[0].startswith("Okay, Adam.") and voiced._enrolment.name == "Adam"
+    _, spoken = _speak_as(voiced, ADAM, "Busy day today.", source="followup", seconds=3.0)
+    assert spoken == ["Got it. I'll know your voice now, Adam."]
+
+
+def test_enrolment_gives_up_if_the_answer_has_no_name(voiced) -> None:
+    _speak_as(voiced, ADAM, "Hey Jarvis, remember my voice.")
+    _, spoken = _speak_as(voiced, ADAM, "I don't know.", source="followup")
+    assert spoken[0].startswith("Sorry, I didn't catch a name")
+    assert voiced._enrolment is None and not voiced._followup_armed.is_set()
 
 
 def test_forget_my_voice(voiced) -> None:

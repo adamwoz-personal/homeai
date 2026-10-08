@@ -583,7 +583,10 @@ class VoiceAssistant:
         if self._enrolment is not None:
             if source == "followup" and not self._enrolment.expired() \
                     and not is_dismissal(text, self.cfg.wake.model):
-                self._continue_enrolment(turn, audio, total)
+                if self._enrolment.name is None:
+                    self._name_enrolment(turn, text, audio, total)
+                else:
+                    self._continue_enrolment(turn, audio, total)
                 return True
             log.info("enrolment for %s abandoned", self._enrolment.name)
             self._enrolment = None
@@ -607,7 +610,11 @@ class VoiceAssistant:
         if self.voice_id is None:
             reply = vid.MSG_OFF
         elif cmd.kind == "enrol" and not cmd.name:
-            reply = vid.MSG_ENROL_NO_NAME
+            # Ask, and take the name from the answer.
+            self._enrolment = vid.Enrolment(None)
+            self._enrolment.add(audio)
+            reply, listen = vid.MSG_ENROL_NO_NAME, True
+            log.info("enrolling: no name heard in %r; asking", text)
         elif cmd.kind == "enrol":
             self._enrolment = vid.Enrolment(cmd.name)
             self._enrolment.add(audio)
@@ -627,6 +634,20 @@ class VoiceAssistant:
         turn.verdict = f"voice-{cmd.kind}"
         self._say_turn(turn, reply, total, listen)
         return True
+
+    def _name_enrolment(self, turn: Turn, text: str, audio: np.ndarray, total: Stopwatch) -> None:
+        """The answer to "what name should I remember you by?"."""
+        name = vid.extract_name(text)
+        turn.verdict = "voice-enrol"
+        if not name:
+            log.info("enrolling: still no name in %r; giving up", text)
+            self._enrolment = None
+            self._say_turn(turn, vid.MSG_ENROL_NAME_AGAIN, total)
+            return
+        self._enrolment.name = name
+        self._enrolment.add(audio)
+        log.info("enrolling %s", name)
+        self._say_turn(turn, vid.MSG_ENROL_START.format(name=name), total, listen=True)
 
     def _continue_enrolment(self, turn: Turn, audio: np.ndarray, total: Stopwatch) -> None:
         enrolment = self._enrolment

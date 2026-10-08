@@ -28,6 +28,11 @@ def unit(*xs):
     ("please remember my voice, I'm Charlie", Command("enrol", "Charlie")),
     ("remember my voice", Command("enrol", None)),
     ("remember my voice as the boss", Command("enrol", None)),
+    # Live 2026-10-08: Whisper heard "as Adam" as "is Adam".
+    ("remember my voice is Adam.", Command("enrol", "Adam")),
+    ("Remember my voice for Adam", Command("enrol", "Adam")),
+    ("remember my voice, Adam", Command("enrol", "Adam")),
+    ("remember my voice, my name's Adam", Command("enrol", "Adam")),
     ("who am I?", Command("who")),
     ("Do you recognize my voice?", Command("who")),
     ("forget my voice", Command("forget")),
@@ -124,3 +129,11 @@ def test_describe():
     assert "best Adam 0.31: below threshold" in vid.describe(
         Identification(None, 0.31, "Adam", 0.31, "below threshold"))
     assert vid.describe(Identification(None, reason="nobody enrolled")) == "unknown (nobody enrolled)"
+
+
+@pytest.mark.parametrize("answer,name", [
+    ("Adam.", "Adam"), ("It's Adam.", "Adam"), ("My name is adam", "Adam"),
+    ("Um, Adam", "Adam"), ("I don't know.", None), ("", None),
+])
+def test_extract_name(answer, name):
+    assert vid.extract_name(answer) == name

@@ -1381,3 +1381,11 @@ suite failed in code that was correct. A same-length mutant ("if named" ->
 checks whole-second mtime + size), so the mutated bytecode kept running.
 `check_mutants.sh` now sets PYTHONDONTWRITEBYTECODE and deletes the file's
 .pyc after mutating and after restoring. Always run the suite after mutants.
+
+Live 2026-10-08: Adam's first enrolment failed twice. Whisper heard
+"remember my voice as Adam" as "...voice is Adam", the name parser only
+accepted "as/I'm/my name is...", and the fallback recited instructions.
+Now the parser takes the first non-filler word after "my voice", and with
+no name Jarvis asks "What name should I remember you by?" and listens.
+Lesson: a spoken command parser must expect Whisper's homophones, and a
+failed parse should ask, not lecture.

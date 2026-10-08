@@ -44,7 +44,8 @@ MSG_ENROL_START = ("Okay, {name}. To learn your voice, talk to me for about ten 
 MSG_ENROL_MORE = "Thanks. A little more, please."
 MSG_ENROL_DONE = "Got it. I'll know your voice now, {name}."
 MSG_ENROL_FAILED = "Sorry, I didn't hear enough to learn your voice. We can try again later."
-MSG_ENROL_NO_NAME = "Say: remember my voice as, and then your name."
+MSG_ENROL_NO_NAME = "Sure. What name should I remember you by?"
+MSG_ENROL_NAME_AGAIN = "Sorry, I didn't catch a name. Say hey Jarvis, remember my voice, to try again."
 MSG_OFF = "Voice recognition is turned off."
 MSG_WHO_KNOWN = "You sound like {name}."
 MSG_WHO_UNSURE = "I'm not sure who you are."
@@ -53,11 +54,33 @@ MSG_FORGOTTEN = "Okay, {name}. I've forgotten your voice."
 MSG_FORGET_UNKNOWN = "I don't recognise your voice, so there's nothing to forget."
 
 _ENROL = re.compile(r"\b(?:remember|learn|memori[sz]e|save)\b.{0,20}\bmy voice\b", re.I)
-_NAME = re.compile(r"\b(?:as|i am|i'm|my name is|this is|call me|it's)\s+([a-z][a-z'\-]{1,30})", re.I)
+_WORD = re.compile(r"[a-z][a-z'\-]*", re.I)
+# Words that can sit between "my voice" and the name. Whisper hears "as
+# Adam" as "is Adam" (live 2026-10-08), so this is generous on purpose.
+_FILLER = {"as", "is", "it's", "its", "for", "under", "with", "to", "be", "i", "am", "i'm",
+           "im", "my", "name", "name's", "this", "call", "me", "please", "jarvis", "and",
+           "so", "that", "the", "of", "it", "s", "okay", "ok", "um", "uh", "oh", "yes",
+           "yeah", "sure", "hi", "hey", "hello", "you", "can", "should", "remember"}
 _WHO = re.compile(r"\b(?:who am i|do you know who i am|do you recogni[sz]e (?:me|my voice)|"
                   r"who(?:'s| is) (?:this|speaking|talking))\b", re.I)
 _FORGET = re.compile(r"\b(?:forget|delete|erase|remove)\b.{0,10}\bmy voice\b", re.I)
-_NOT_NAMES = {"a", "an", "the", "my", "your", "me", "him", "her", "it", "well", "please", "now"}
+_NOT_NAMES = {"a", "an", "your", "him", "her", "well", "now", "voice", "boss", "here",
+              "there", "what", "who", "not", "no", "don't", "know", "sorry"}
+
+
+def extract_name(text: str) -> str | None:
+    """The first name-like word in ``text``, skipping filler.
+
+    "is Adam", "as Adam", "it's Adam", "my name is Adam", "Adam." -> "Adam".
+    """
+    for word in _WORD.findall(text):
+        low = word.lower().strip("'-")
+        if low in _FILLER:
+            continue
+        if low in _NOT_NAMES or len(low) < 2 or len(low) > 30:
+            return None
+        return low.capitalize()
+    return None
 
 
 @dataclass(frozen=True)
@@ -73,9 +96,8 @@ def parse_command(text: str) -> Command | None:
     if _WHO.search(text):
         return Command("who")
     if _ENROL.search(text):
-        m = _NAME.search(text.split("voice", 1)[-1]) or _NAME.search(text)
-        name = m.group(1) if m and m.group(1).lower() not in _NOT_NAMES else None
-        return Command("enrol", name.strip("'-").capitalize() if name else None)
+        after = re.split(r"\bmy voice\b", text, maxsplit=1, flags=re.I)[-1]
+        return Command("enrol", extract_name(after))
     return None
 
 
@@ -83,7 +105,7 @@ def parse_command(text: str) -> Command | None:
 class Enrolment:
     """Speech collected so far for one person's new voice profile."""
 
-    name: str
+    name: str | None     # None until asked for
     clips: list[np.ndarray] = field(default_factory=list)
     speech_s: float = 0.0
     rounds: int = 0
