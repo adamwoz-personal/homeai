@@ -122,6 +122,8 @@ class VoiceId:
         return self.embedder.load()
 
     def identify(self, audio: np.ndarray) -> tuple[Identification, np.ndarray | None]:
+        if self.registry.reload_if_changed():
+            log.info("speaker registry reloaded: %s", ", ".join(self.registry.names()) or "nobody")
         emb = self.embedder.embed(audio)
         return self.identifier.identify(emb), emb
 

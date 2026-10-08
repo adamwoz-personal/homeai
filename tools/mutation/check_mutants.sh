@@ -85,6 +85,7 @@ MUTANTS=(
   "memory-name-never-sent|homeai/memory.py|s/naturally and only now and then.)\\\\n\\\\n\") if named else \"\"/naturally and only now and then.)\\\\n\\\\n\") if False else \"\"/|tests/test_memory.py -k name_goes"
   "speaker-fetch-no-checksum|homeai/speaker_admin.py|s/        if got != expected:/        if False:/|tests/test_speaker_admin.py -k checksum"
   "transcript-no-speaker|homeai/transcript.py|s/        if turn.speaker_score is not None or turn.speaker:/        if False:/|tests/test_transcript.py -k speaker"
+  "registry-never-reloads|homeai/speaker.py|s/        if stamp == self._stamp:/        if True:/|tests/test_speaker.py -k another_process"
 )
 
 filter="${1:-}"

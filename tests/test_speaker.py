@@ -231,3 +231,18 @@ def test_threshold_and_margin_are_inclusive(tmp_path, monkeypatch):
     ident = identifier(tmp_path, Adam=unit(1, 0))
     monkeypatch.setattr(speaker, "cosine", lambda a, b: 0.5)
     assert ident.identify(unit(1, 0)).name == "Adam"
+
+
+def test_registry_picks_up_changes_made_by_another_process(tmp_path):
+    path = tmp_path / "s.json"
+    daemon = SpeakerRegistry(path, MODEL)
+    daemon.add("Adam", unit(1, 0))
+    daemon.add("Ryan", unit(0, 1))
+    daemon.save()
+    assert not daemon.reload_if_changed()  # its own save is not "a change"
+    cli = SpeakerRegistry(path, MODEL)
+    cli.remove("Ryan")
+    cli.save()
+    assert daemon.reload_if_changed() and daemon.names() == ["Adam"]
+    path.unlink()
+    assert daemon.reload_if_changed() and daemon.names() == []

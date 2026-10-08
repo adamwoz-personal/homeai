@@ -243,9 +243,29 @@ class SpeakerRegistry:
         self._profiles: dict[str, SpeakerProfile] = {}
         self._corrupt = False
         self._lock = threading.Lock()
+        self._stamp = None
         self._load()
 
+    def _file_stamp(self):
+        try:
+            st = self.path.stat()
+        except OSError:
+            return None
+        return (st.st_mtime_ns, st.st_size)
+
+    def reload_if_changed(self) -> bool:
+        """Pick up edits made by another process (``homeai-mode speaker
+        remove`` while the daemon runs). Returns True if it reloaded."""
+        stamp = self._file_stamp()
+        if stamp == self._stamp:
+            return False
+        with self._lock:
+            self._profiles, self.problem, self._corrupt = {}, "", False
+            self._load()
+        return True
+
     def _load(self) -> None:
+        self._stamp = self._file_stamp()
         if not self.path.exists():
             return
         try:
@@ -331,6 +351,7 @@ class SpeakerRegistry:
                     json.dump(data, fh, indent=1)
                 os.chmod(tmp, 0o600)
                 os.replace(tmp, self.path)
+                self._stamp = self._file_stamp()
             except BaseException:
                 Path(tmp).unlink(missing_ok=True)
                 raise
