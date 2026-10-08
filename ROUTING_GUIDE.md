@@ -1389,3 +1389,11 @@ Now the parser takes the first non-filler word after "my voice", and with
 no name Jarvis asks "What name should I remember you by?" and listens.
 Lesson: a spoken command parser must expect Whisper's homophones, and a
 failed parse should ask, not lecture.
+
+## Home Assistant (planned)
+
+Plan: `plans/HOME_ASSISTANT_PLAN.md`. Home-control requests (lights, timers,
+announcements, music, garage) will route to narrow typed tools in
+`homeai/mcp_server.py` that call HA's REST API, never to HA's full MCP server
+(that is for coding mode only). Opening the garage by voice requires an
+enrolled, recognised speaker plus spoken confirmation.
