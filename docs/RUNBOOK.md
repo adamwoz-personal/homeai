@@ -224,3 +224,15 @@ tools/mutation/check_mutants.sh                              # are the tests rea
 tools/test_installer_sandbox.sh                              # fresh install end to end (~5 min)
 .venv/bin/python tools/probe_voice_tools.py                  # voice agent cannot touch the machine
 ```
+
+## Home Assistant container
+
+Device backend for Jarvis (plan: `plans/HOME_ASSISTANT_PLAN.md`). Docker
+container `homeassistant`, host networking, config in `~/homeassistant-config`,
+restarts on boot.
+
+- Status / start / stop / logs: `tools/ha/ha_container.sh status|start|stop|logs`
+- Upgrade to the latest stable: `tools/ha/ha_container.sh update` (config is kept)
+- Web UI: http://192.168.1.242:8123 (LAN) or http://127.0.0.1:8123
+- Bluetooth permission errors in the log are expected and harmless; we don't
+  use Bluetooth in HA.
