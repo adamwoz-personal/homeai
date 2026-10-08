@@ -165,7 +165,7 @@ security: a recording of your voice will pass.
 homeai-mode speaker on        # downloads the model if needed, restarts homeai
 homeai-mode speaker           # on/off, thresholds, who is enrolled
 homeai-mode speaker off
-homeai-mode speaker remove Adam
+homeai-mode speaker remove Adam   # takes effect without a restart
 ```
 
 By voice (best: same mic and distance as everyday use):
