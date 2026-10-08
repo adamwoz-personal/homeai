@@ -84,6 +84,7 @@ MUTANTS=(
   "memory-unknown-switches-window|homeai/memory.py|s/            if name is None or name == self._owner:/            if name == self._owner:/|tests/test_memory.py -k unrecognised"
   "memory-name-never-sent|homeai/memory.py|s/naturally and only now and then.)\\\\n\\\\n\") if named else \"\"/naturally and only now and then.)\\\\n\\\\n\") if False else \"\"/|tests/test_memory.py -k name_goes"
   "speaker-fetch-no-checksum|homeai/speaker_admin.py|s/        if got != expected:/        if False:/|tests/test_speaker_admin.py -k checksum"
+  "transcript-no-speaker|homeai/transcript.py|s/        if turn.speaker_score is not None or turn.speaker:/        if False:/|tests/test_transcript.py -k speaker"
 )
 
 filter="${1:-}"

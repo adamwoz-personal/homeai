@@ -184,3 +184,17 @@ def test_numpy_wake_score_does_not_drop_the_record(tmp_path: Path) -> None:
     path = tmp_path / "t.jsonl"
     TranscriptLog(str(path)).write(Turn(heard="a", wake_score=np.float32(0.9)))
     assert json.loads(path.read_text())["wake_score"] == 0.9
+
+
+def test_speaker_fields_written_when_speaker_id_ran(tmp_path: Path) -> None:
+    import json
+    import numpy as np
+    path = tmp_path / "t.jsonl"
+    log = TranscriptLog(str(path))
+    log.write(Turn(heard="a", speaker="Adam", speaker_score=np.float32(0.6234), speaker_ms=41.2))
+    log.write(Turn(heard="b", speaker=None, speaker_score=0.21, speaker_ms=39.0))
+    log.write(Turn(heard="c"))
+    a, b, c = (json.loads(line) for line in path.read_text().splitlines())
+    assert (a["speaker"], a["speaker_score"], a["timings_ms"]["speaker"]) == ("Adam", 0.623, 41)
+    assert b["speaker"] is None and b["speaker_score"] == 0.21
+    assert "speaker" not in c and "speaker" not in c["timings_ms"]

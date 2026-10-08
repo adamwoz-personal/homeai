@@ -113,6 +113,11 @@ class TranscriptLog:
         }
         if turn.wake_score is not None:
             record["wake_score"] = round(float(turn.wake_score), 3)
+        if turn.speaker_score is not None or turn.speaker:
+            record["speaker"] = turn.speaker
+            if turn.speaker_score is not None:
+                record["speaker_score"] = round(float(turn.speaker_score), 3)
+            record["timings_ms"]["speaker"] = round(turn.speaker_ms)
         if turn.error:
             record["error"] = turn.error
 
