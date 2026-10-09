@@ -20,7 +20,9 @@
 #      tier's context length. The VRAM guard needs sudo: see --sudo.
 #   6. ZeroClaw: add the locked-down voice agent and copy its persona.
 #   7. .env and the systemd user service.
-#   8. Verify: `python -m homeai.daemon --check` and one real agent reply.
+#   8. Home control (optional): if ~/.config/homeai/ha.env exists, check that
+#      Home Assistant answers; otherwise print how to set it up. Never fatal.
+#   9. Verify: `python -m homeai.daemon --check` and one real agent reply.
 #
 # Options:
 #   --dry-run              print actions instead of performing them
@@ -291,7 +293,19 @@ else
     run systemctl --user enable homeai.service
 fi
 
-# -- 8. verify --------------------------------------------------------------------
+# -- 8. home control (optional) ----------------------------------------------------
+
+step "Home control (Home Assistant, optional)"
+# Read-only, so it also runs in a dry run. Never fatal: the voice assistant
+# works without a house, and HA may simply be down right now.
+HA_OUT="$(.venv/bin/python -m homeai.ha_client --check 2>&1)" && HA_RC=0 || HA_RC=$?
+case $HA_RC in
+    0) info "$HA_OUT" ;;
+    1) info "$HA_OUT" ;;
+    *) note "$HA_OUT" ;;
+esac
+
+# -- 9. verify --------------------------------------------------------------------
 
 if [[ $DRY_RUN -eq 1 ]]; then
     step "Verify (skipped in a dry run)"

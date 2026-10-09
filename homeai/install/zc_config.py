@@ -119,7 +119,7 @@ servers = ["{MCP_SERVER}"]
 """),
         (("mcp", "servers", MCP_SERVER), f"""
 [[mcp.servers]]
-# Local weather and research tools; see homeai/mcp_server.py.
+# Local weather, research and (with Home Assistant) home tools; see homeai/mcp_server.py.
 name = "{MCP_SERVER}"
 transport = "stdio"
 command = "{mcp_command}"

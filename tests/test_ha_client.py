@@ -130,3 +130,36 @@ def test_websocket_unreachable_is_unavailable():
     client = hc.HAClient(hc.HASettings(f"http://127.0.0.1:{_free_port()}", "tok"), timeout=1)
     with pytest.raises(hc.HAUnavailable):
         client.devices()
+
+
+# -- installer check -----------------------------------------------------------
+
+def test_check_not_set_up(tmp_path):
+    code, msg = hc.check(tmp_path / "missing.env")
+    assert code == 1 and "not set up" in msg and "ha_container.sh" in msg
+
+
+def test_check_working(tmp_path):
+    from tests.fake_ha import FakeHA
+
+    f = tmp_path / "ha.env"
+    f.write_text("HA_TOKEN=t\n")
+    code, msg = hc.check(f, client_factory=lambda settings: FakeHA())
+    assert code == 0
+    assert "lights" in msg and "Alexa devices" in msg and " 0 Alexa" not in msg
+
+
+def test_check_broken(tmp_path):
+    from tests.fake_ha import FakeHA
+
+    f = tmp_path / "ha.env"
+    f.write_text("HA_TOKEN=t\n")
+    broken = FakeHA(fail=hc.HAAuthError("the house controller rejected my access token"))
+    code, msg = hc.check(f, client_factory=lambda settings: broken)
+    assert code == 2 and "rejected my access token" in msg
+
+
+def test_check_cli_exit_code(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("HOMEAI_HA_ENV", str(tmp_path / "missing.env"))
+    assert hc.main(["--check"]) == 1
+    assert "not set up" in capsys.readouterr().out

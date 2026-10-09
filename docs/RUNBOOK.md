@@ -247,6 +247,9 @@ restarts on boot.
   `kitchen`) picks the Echo for timers and music.
 - Startup log line: `home control: Home Assistant at ... (fast path on)`.
   Each action logs `home <kind> {...} -> <reply>` and `HA call ...`.
+- Quick connection check (also run by `install.sh`):
+  `.venv/bin/python -m homeai.ha_client --check` (exit 0 working, 1 not set
+  up, 2 configured but broken).
 - Live check (read-only): `.venv/bin/python tools/ha/test_home_live.py`;
   `--act` toggles a Hue room and sets/cancels a timer, restoring both;
   `--announce` speaks on every Echo.

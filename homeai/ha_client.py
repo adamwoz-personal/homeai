@@ -185,3 +185,43 @@ class HAClient:
             raise HAUnavailable("I can't reach the house controller") from exc
         except Exception as exc:  # noqa: BLE001 - websocket library errors vary by version
             raise HAUnavailable(f"I can't reach the house controller ({type(exc).__name__})") from exc
+
+
+def check(path: Path | None = None, client_factory=None) -> tuple[int, str]:
+    """(exit code, message) for the installer: 0 working, 1 not set up, 2 broken."""
+    if not is_configured(path):
+        return 1, ("home control not set up (optional). To add it: start Home Assistant "
+                   "(tools/ha/ha_container.sh start), create a non-admin user with a "
+                   f"long-lived token, and put HA_URL= and HA_TOKEN= in {DEFAULT_ENV} "
+                   "(chmod 600). See docs/RUNBOOK.md \"Home control\".")
+    try:
+        settings = load_settings(path)
+        client = (client_factory or HAClient)(settings)
+        states = client.states()
+        devices = client.devices()
+    except HAError as exc:
+        return 2, f"home control is configured but not working: {exc}"
+    echos = sum(1 for d in devices if any(i and i[0] == "alexa_devices"
+                                          for i in d.get("identifiers") or []))
+    lights = sum(1 for s in states if s.get("entity_id", "").startswith("light."))
+    return 0, (f"Home Assistant at {settings.url}: {len(states)} entities, "
+               f"{lights} lights, {echos} Alexa devices")
+
+
+def main(argv: list[str] | None = None) -> int:
+    import argparse  # noqa: PLC0415
+
+    ap = argparse.ArgumentParser(description="Home Assistant connection for homeai")
+    ap.add_argument("--check", action="store_true", help="test the connection and exit "
+                    "0 working, 1 not set up, 2 configured but broken")
+    args = ap.parse_args(argv)
+    if not args.check:
+        ap.print_help()
+        return 0
+    code, message = check()
+    print(message)
+    return code
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

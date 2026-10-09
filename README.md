@@ -48,6 +48,11 @@ refuses with an explanation if the machine is not powerful enough:
 See [docs/RUNBOOK.md](docs/RUNBOOK.md) for requirements, operation and
 troubleshooting.
 
+Home control (lights, Alexa timers, announcements, music) is optional and
+needs a Home Assistant instance. The installer checks it if
+`~/.config/homeai/ha.env` exists; see "Home control" in the runbook. Test the
+connection any time with `.venv/bin/python -m homeai.ha_client --check`.
+
 Manual setup of the Python environment only:
 ```bash
 python -m venv .venv
