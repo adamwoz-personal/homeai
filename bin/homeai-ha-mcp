@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# stdio MCP proxy to Home Assistant's MCP server, for CODING tools only
+# (Copilot CLI, ZeroClaw `builder`). Never attach it to the voice agent.
+# See homeai/ha_mcp_proxy.py and docs/RUNBOOK.md.
+set -euo pipefail
+cd "$(dirname "$(readlink -f "$0")")/.."
+exec .venv/bin/python -m homeai.ha_mcp_proxy "$@"

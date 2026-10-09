@@ -234,8 +234,25 @@ restarts on boot.
 - Status / start / stop / logs: `tools/ha/ha_container.sh status|start|stop|logs`
 - Upgrade to the latest stable: `tools/ha/ha_container.sh update` (config is kept)
 - Web UI: http://192.168.1.242:8123 (LAN) or http://127.0.0.1:8123
-- Bluetooth permission errors in the log are expected and harmless; we don't
-  use Bluetooth in HA.
+- Log noise is silenced by `tools/ha/ha_quiet_logs.py` (idempotent; `--dry-run`,
+  `--scan --hours N`). It disables HA's Bluetooth entry (we don't use it) and
+  sets `aioamazondevices` logging to error. Re-run it after rebuilding the
+  config. Backups are `*.homeai-bak` in `~/homeassistant-config`.
+
+## Home Assistant MCP for coding
+
+Lets Copilot CLI and ZeroClaw's `builder` agent inspect/control HA via HA's own
+MCP server (Assist API, exposed entities only). Never attach it to the voice
+agent, and keep the garage out of Assist exposure.
+
+1. HA UI: Settings > Devices & services > Add > "Model Context Protocol
+   Server". By default it needs an admin user; turn off "Require admin" in its
+   options to use a non-admin one.
+2. Create a long-lived token for that user and save it in
+   `~/.config/homeai/ha-coding.env` (mode 600) as `HA_URL=` / `HA_TOKEN=`
+   (separate from the voice token; `HOMEAI_HA_MCP_ENV` overrides the path).
+3. Check: `.venv/bin/python tools/ha/ha_mcp_check.py`.
+4. Clients run `bin/homeai-ha-mcp` (stdio proxy, `homeai/ha_mcp_proxy.py`).
 
 ## Home control (Jarvis -> Home Assistant)
 
