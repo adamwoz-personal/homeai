@@ -251,6 +251,8 @@ agent, and keep the garage out of Assist exposure.
 2. Create a long-lived token for that user and save it in
    `~/.config/homeai/ha-coding.env` (mode 600) as `HA_URL=` / `HA_TOKEN=`
    (separate from the voice token; `HOMEAI_HA_MCP_ENV` overrides the path).
+   Currently the same `jarvis` user/token as `ha.env` with "Require admin"
+   off; split them later by creating a separate user and token.
 3. Check: `.venv/bin/python tools/ha/ha_mcp_check.py`.
 4. Clients run `bin/homeai-ha-mcp` (stdio proxy, `homeai/ha_mcp_proxy.py`).
 
