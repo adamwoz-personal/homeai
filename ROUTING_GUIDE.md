@@ -1390,10 +1390,47 @@ no name Jarvis asks "What name should I remember you by?" and listens.
 Lesson: a spoken command parser must expect Whisper's homophones, and a
 failed parse should ask, not lecture.
 
-## Home Assistant (planned)
+## Home Assistant (home control, live 2026-10-09)
 
-Plan: `plans/HOME_ASSISTANT_PLAN.md`. Home-control requests (lights, timers,
-announcements, music, garage) will route to narrow typed tools in
-`homeai/mcp_server.py` that call HA's REST API, never to HA's full MCP server
-(that is for coding mode only). Opening the garage by voice requires an
-enrolled, recognised speaker plus spoken confirmation.
+Plan: `plans/HOME_ASSISTANT_PLAN.md`. HA runs in Docker as the device backend;
+Jarvis stays the voice and brain. Code: `homeai/ha_client.py` (REST +
+websocket registries), `homeai/home.py` (lights, Echos, announce, music,
+timers), `homeai/home_intents.py` (fast-path parser).
+
+Routing, in order:
+1. **Fast path** (`daemon._handle_home`): `home_intents.parse()` matches plain
+   commands ("set a pasta timer for 5 minutes", "turn off the foyer", "stop the
+   pasta timer", "announce dinner is ready", "play jazz") and calls `Home`
+   directly, no model, ~20 ms. It runs **before** `safety.check_utterance`,
+   which would otherwise CONFIRM-refuse "turn on/off". Same idea as HA Assist's
+   local intents first.
+2. **Model tools**: anything else reaches the 8B model, which has the MCP tools
+   `homeai__lights/timer/announce/music` (listed only when HA is configured).
+   The readonly voice profile does not block them (verified with
+   `tools/probe_agent_prompt.py`).
+3. HA's own `mcp_server` is for coding mode only, never voice.
+
+Learnings (all hit live):
+- The `jarvis` HA user is non-admin: `/api/template` is 401; use `/api/states`
+  and the websocket `config/device_registry/list`.
+- `alexa_devices` does not expose Alexa smart-home lights. Unknown light names
+  go to the default Echo as the template "turn on the X".
+- **Never send free-form text to Alexa.** Only templates, with `safe_phrase()`
+  (BLOCKED_WORDS: buy, order, unlock, open, call...). Alexa would happily buy.
+- An Echo announcement containing "Jarvis" wakes Jarvis. Wake words are
+  stripped from announcements and `EchoQuiet` ignores wakes while Echos speak.
+- Alexa **silently ignores a timer cancel sent seconds after the set** (3 s:
+  the timer rang, twice). `Home._settle_timers` holds a cancel until
+  `TIMER_CANCEL_MIN_GAP_S` (15 s) after the set.
+- `sensor.<echo>_next_timer` lags ~90 s, has no label, and keeps a rung timer's
+  past timestamp (only a future one means "running"). Jarvis keeps its own
+  ledger (`$XDG_RUNTIME_DIR/homeai/timers.json`) and reconciles after 150 s.
+- Models send brightness as strings and map "dark" to 0; HA clamps 0 to 1%, so
+  brightness <= 0 means off.
+- Whisper mishearings leave stray articles in labels ("set aside the timer");
+  `_label()` trims them.
+- A Whisper `--prompt "Hey Jarvis."` makes wake verification **worse** (53/72
+  vs 71/72 accepted, plus a false wake): Whisper drops prompted words from the
+  transcript. `tools/eval_wake_prompt.py`.
+- Opening the garage by voice will require an enrolled, recognised speaker
+  plus spoken confirmation.

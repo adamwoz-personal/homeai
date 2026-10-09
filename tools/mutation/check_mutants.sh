@@ -87,6 +87,13 @@ MUTANTS=(
   "transcript-no-speaker|homeai/transcript.py|s/        if turn.speaker_score is not None or turn.speaker:/        if False:/|tests/test_transcript.py -k speaker"
   "registry-never-reloads|homeai/speaker.py|s/        if stamp == self._stamp:/        if True:/|tests/test_speaker.py -k another_process"
   "enrol-name-is-not-filler|homeai/voice_id.py|s/_FILLER = {\"as\", \"is\", /_FILLER = {\"as\", /|tests/test_voice_id.py -k parse_command"
+  "home-alexa-blocklist-off|homeai/home.py|s/    if BLOCKED_WORDS \& {w.strip(\"'\") for w in words}:/    if False:/|tests/test_home.py -k safe_phrase"
+  "home-wake-word-kept|homeai/home.py|s/        text = re.sub(rf\"\\\\b(?:hey/        text = re.sub(rf\"\\\\bNOPE(?:hey/|tests/test_home.py tests/test_daemon_home.py -k wake"
+  "home-quiet-window-ignored|homeai/daemon.py|s/                            if quiet > 0:/                            if False:/|tests/test_daemon_home.py -k wake_ignored"
+  "home-garage-is-a-light|homeai/home_intents.py|s/            if target and re.search(r\"\\\\b(?:music/            if False and re.search(r\"\\\\b(?:music/|tests/test_home_intents.py -k not_lights"
+  "home-zero-brightness-dims|homeai/home.py|s/            if brightness <= 0:/            if brightness < 0:/|tests/test_home.py -k zero_means_off"
+  "home-reconcile-too-early|homeai/home.py|s/            if now - first.set_at < 150:/            if False:/|tests/test_home.py -k timer"
+  "home-cancel-right-after-set|homeai/home.py|s/            if wait > 0:/            if False:/|tests/test_home.py -k right_after_set"
   "enrol-no-name-not-asked|homeai/daemon.py|s/            reply, listen = vid.MSG_ENROL_NO_NAME, True/            reply, listen = vid.MSG_ENROL_NO_NAME, False/|tests/test_daemon.py -k without_a_name"
 )
 

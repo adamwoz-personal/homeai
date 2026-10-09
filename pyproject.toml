@@ -12,7 +12,7 @@ classifiers = [
     "License :: Other/Proprietary License",
     "Private :: Do Not Upload",
 ]
-dependencies = ["numpy", "requests", "sounddevice", "onnxruntime"]
+dependencies = ["numpy", "requests", "sounddevice", "onnxruntime", "websockets"]
 
 [project.optional-dependencies]
 # The wake word and speech synthesis. Separate so the unit tests and the MCP

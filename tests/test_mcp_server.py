@@ -278,3 +278,73 @@ def test_unexpected_tool_exception_is_error_result_and_loop_continues(
     assert responses[0]["result"]["isError"] is True
     assert _text(responses[0]) == "tool weather failed: boom"
     assert responses[1]["result"]["serverInfo"]["name"] == "homeai"
+
+
+# -- home tools ---------------------------------------------------------------
+
+from homeai.home import EchoQuiet, Home, TimerLedger  # noqa: E402
+from tests.fake_ha import FakeHA  # noqa: E402
+
+HOME_TOOL_NAMES = {"lights", "timer", "announce", "music"}
+
+
+@pytest.fixture
+def house(monkeypatch, tmp_path):
+    ha = FakeHA()
+    monkeypatch.setattr(mcp, "_HOME", Home(ha, ledger=TimerLedger(tmp_path / "t.json"),
+                                           quiet=EchoQuiet(tmp_path / "q"),
+                                           sleep=ha.slept.append))
+    return ha
+
+
+def _tool_names(response):
+    return {t["name"] for t in response["result"]["tools"]}
+
+
+def test_home_tools_hidden_without_a_house():
+    assert not HOME_TOOL_NAMES & _tool_names(mcp.handle_message(_request("tools/list")))
+
+
+def test_home_tools_listed_with_a_house(monkeypatch):
+    monkeypatch.setenv("HA_TOKEN", "tok")
+    assert HOME_TOOL_NAMES <= _tool_names(mcp.handle_message(_request("tools/list")))
+
+
+def test_home_tool_without_a_house_is_a_clean_error(monkeypatch):
+    monkeypatch.setattr(mcp, "_HOME", None)
+    response = _call_tool("lights", {"target": "foyer", "action": "off"})
+    assert response["result"]["isError"] is True
+    assert "isn't set up" in _text(response)
+
+
+def test_lights_tool(house):
+    response = _call_tool("lights", {"target": "foyer", "action": "off"})
+    assert _text(response) == "Foyer off."
+    assert house.calls[-1] == ("light", "turn_off", {"entity_id": ["light.foyer_foyer"]})
+
+
+def test_timer_tool_minutes(house):
+    assert _text(_call_tool("timer", {"action": "set", "minutes": 2.5, "label": "eggs"})) == \
+        "Eggs timer set for 2 minutes and 30 seconds."
+    assert _text(_call_tool("timer", {"action": "status"})).startswith("The eggs timer has")
+    assert _text(_call_tool("timer", {"action": "cancel"})) == "Eggs timer cancelled."
+
+
+@pytest.mark.parametrize("args", [{"action": "set"}, {"action": "set", "minutes": "soon"},
+                                  {"action": "snooze"}])
+def test_timer_tool_bad_arguments(house, args):
+    response = _call_tool("timer", args)
+    assert response["result"]["isError"] is True
+    assert house.calls == []
+
+
+def test_announce_and_music_tools(house):
+    assert _text(_call_tool("announce", {"message": "dinner"})) == "Announced."
+    assert _text(_call_tool("music", {"action": "play", "request": "jazz"})) == \
+        "Playing jazz on the Kitchen alexa."
+
+
+def test_music_tool_refuses_purchases(house):
+    response = _call_tool("music", {"action": "play", "request": "buy it"})
+    assert response["result"]["isError"] is True
+    assert house.alexa_commands() == []

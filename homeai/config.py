@@ -299,6 +299,25 @@ class SpeakerConfig:
 
 
 @dataclass(frozen=True)
+class HomeConfig:
+    """Home control through Home Assistant (plans/HOME_ASSISTANT_PLAN.md).
+
+    On whenever the HA credentials file exists; HOMEAI_HOME=0 turns it off.
+    """
+
+    enabled: bool = field(default_factory=lambda: _env_bool("HOMEAI_HOME", True))
+    env_path: Path = field(
+        default_factory=lambda: Path(_env_str(
+            "HOMEAI_HA_ENV", os.path.expanduser("~/.config/homeai/ha.env")
+        ))
+    )
+    # Echo used for timers, music and unknown lights when no room is named.
+    default_echo: str = field(default_factory=lambda: _env_str("HOMEAI_HA_DEFAULT_ECHO", "kitchen"))
+    # Recognise everyday commands without the model (homeai/home_intents.py).
+    fast_path: bool = field(default_factory=lambda: _env_bool("HOMEAI_HOME_FASTPATH", True))
+
+
+@dataclass(frozen=True)
 class Config:
     audio: AudioConfig = field(default_factory=AudioConfig)
     stt: SttConfig = field(default_factory=SttConfig)
@@ -307,6 +326,7 @@ class Config:
     wake: WakeConfig = field(default_factory=WakeConfig)
     transcript: TranscriptConfig = field(default_factory=TranscriptConfig)
     speaker: SpeakerConfig = field(default_factory=SpeakerConfig)
+    home: HomeConfig = field(default_factory=HomeConfig)
 
     def validation_errors(self) -> list[str]:
         """Return human-readable problems. Empty list means good to start.

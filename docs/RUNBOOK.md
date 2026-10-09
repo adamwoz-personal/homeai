@@ -236,3 +236,21 @@ restarts on boot.
 - Web UI: http://192.168.1.242:8123 (LAN) or http://127.0.0.1:8123
 - Bluetooth permission errors in the log are expected and harmless; we don't
   use Bluetooth in HA.
+
+## Home control (Jarvis -> Home Assistant)
+
+- Credentials: `~/.config/homeai/ha.env` (mode 600) with `HA_URL=` and
+  `HA_TOKEN=` (long-lived token of the non-admin `jarvis` HA user). Env vars
+  override; `HOMEAI_HA_ENV` points elsewhere.
+- `HOMEAI_HOME=0` disables home control; `HOMEAI_HOME_FASTPATH=0` sends every
+  home request through the model instead; `HOMEAI_HA_DEFAULT_ECHO` (default
+  `kitchen`) picks the Echo for timers and music.
+- Startup log line: `home control: Home Assistant at ... (fast path on)`.
+  Each action logs `home <kind> {...} -> <reply>` and `HA call ...`.
+- Live check (read-only): `.venv/bin/python tools/ha/test_home_live.py`;
+  `--act` toggles a Hue room and sets/cancels a timer, restoring both;
+  `--announce` speaks on every Echo.
+- Echo list / manual commands: `tools/ha/ha_alexa_probe.py`
+  (`--command kitchen "cancel all timers"` stops a runaway timer).
+- Timer cancel behaviour: `tools/ha/timer_cancel_experiment.py`.
+

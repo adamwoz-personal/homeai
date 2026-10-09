@@ -53,8 +53,12 @@ from .dialogue import (
     split_for_budget,
 )
 from .wake import CaptureMachine, State, build_detector
+from . import home_intents
+from .ha_client import HAError
+from .home import EchoQuiet, HomeError, build_home, run_intent
 from . import voice_id as vid
 from .wake_verify import (
+    _name_words,
     closing_reply,
     is_hallucination_only,
     is_pleasantry_only,
@@ -86,6 +90,9 @@ MSG_FRAGMENT = "Sorry, I only caught part of that. Say hey Jarvis again if you m
 MSG_WORKING = "Let me look that up."
 PROGRESS_AFTER_S = 2.5
 
+# How long an unanswered "Which lights?" stays open.
+HOME_PENDING_S = 30.0
+
 # Pause between the end of a reply and opening a follow-up window, so the
 # capture does not start on the acoustic tail of Jarvis's own voice.
 FOLLOWUP_SETTLE_S = 0.25
@@ -104,6 +111,12 @@ class VoiceAssistant:
         # Who is speaking; None when turned off or the model failed to load.
         self.voice_id = vid.VoiceId(self.cfg.speaker) if self.cfg.speaker.enabled else None
         self._enrolment: vid.Enrolment | None = None
+        # Home control; built in start() when HA credentials exist.
+        self.home = None
+        # Set while an Echo announcement plays, so it cannot wake us.
+        self._echo_quiet = EchoQuiet()
+        # A light command waiting for "which lights?" to be answered.
+        self._pending_home: tuple[home_intents.HomeIntent, float] | None = None
         self.transcript = TranscriptLog(
             self.cfg.transcript.path, enabled=self.cfg.transcript.enabled
         )
@@ -224,6 +237,13 @@ class VoiceAssistant:
                             continue
                         if self._detector and self._detector.detect(frame):
                             wake_score = getattr(self._detector, "last_score", None)
+                            quiet = self._echo_quiet.remaining()
+                            if quiet > 0:
+                                # An Echo is reading out our announcement.
+                                log.info("wake word ignored (score %.3f): Echo announcement "
+                                         "playing for %.0fs more", wake_score or 0.0, quiet)
+                                self._detector.reset()
+                                continue
                             if wake_score is None:
                                 log.info("wake word detected")
                             else:
@@ -507,6 +527,9 @@ class VoiceAssistant:
             self.transcript.write(turn)
             return
 
+        if self._handle_home(turn, transcript.text, source, total):
+            return
+
         if is_trailing_fragment(transcript.text):
             log.info("fragment: %r - probably not addressed to me", transcript.text)
             turn.verdict = "fragment"
@@ -557,6 +580,61 @@ class VoiceAssistant:
             sanitise_for_speech(flatten_markdown(reply.text))
         )
         self._deliver(turn, spoken, total)
+
+    # -- home control ----------------------------------------------------------
+
+    def _home_intent(self, text: str, source: str) -> home_intents.HomeIntent | None:
+        intent = home_intents.parse(text) if self.cfg.home.fast_path else None
+        pending, self._pending_home = self._pending_home, None
+        if intent is not None or pending is None or source != "followup":
+            return intent
+        waiting, asked_at = pending
+        if time.monotonic() - asked_at > HOME_PENDING_S:
+            return None
+        # The answer to "Which lights?": "the foyer", "den lamp please".
+        target = home_intents._light_target(home_intents._clean(text))
+        if not target or len(target.split()) > 4:
+            return None
+        return home_intents.HomeIntent(waiting.kind, {**waiting.args, "target": target})
+
+    def _handle_home(self, turn: Turn, text: str, source: str, total: Stopwatch) -> bool:
+        """Everyday home commands, without the model. True if handled."""
+        if self.home is None:
+            return False
+        intent = self._home_intent(text, source)
+        if intent is None:
+            return False
+        stage = Stopwatch()
+        listen = False
+        try:
+            reply = run_intent(self.home, intent.kind, intent.args)
+        except HomeError as exc:
+            reply = str(exc)
+            if intent.kind == "lights" and reply == "Which lights?":
+                self._pending_home = (intent, time.monotonic())
+                listen = True
+        except HAError as exc:
+            log.error("home %s failed: %s", intent.kind, exc)
+            reply = f"Sorry, {exc}."
+        except Exception:  # noqa: BLE001 - a broken house must not break Jarvis
+            log.exception("home %s crashed", intent.kind)
+            reply = MSG_AGENT_ERROR
+        turn.agent_ms = stage.ms()
+        turn.verdict = f"home-{intent.kind}"
+        log.info("home %s %s -> %s  [%.0fms]", intent.kind, intent.args, reply, turn.agent_ms)
+        self.memory.add(text, reply)
+        self._say_turn(turn, reply, total, listen)
+        return True
+
+    def _start_home(self) -> None:
+        if not self.cfg.home.enabled:
+            log.info("home control: off (HOMEAI_HOME=0)")
+            return
+        self.home = build_home(self.cfg.home.env_path, default_echo=self.cfg.home.default_echo,
+                               wake_words=_name_words(self.cfg.wake.model))
+        if self.home is not None:
+            log.info("home control: Home Assistant at %s (fast path %s)",
+                     self.home.client.settings.url, "on" if self.cfg.home.fast_path else "off")
 
     # -- speaker recognition -------------------------------------------------
 
@@ -752,6 +830,7 @@ class VoiceAssistant:
         self._detector, description = build_detector(self.cfg.wake)
         log.info("wake detector: %s", description)
         self._start_voice_id()
+        self._start_home()
 
         # Warm the agent loop. The first request against a cold session was
         # measured at ~29s versus ~4s steady state; without this the user's

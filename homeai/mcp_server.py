@@ -35,11 +35,15 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 from typing import Any, Callable
 
+from .ha_client import HAError, is_configured
+from .home import HomeError, build_home, run_intent
 from .research import research_prompt
 from .weather import WeatherError, get_weather
+from .wake_verify import _name_words
 
 log = logging.getLogger("homeai.mcp")
 
@@ -98,6 +102,127 @@ def _tool_research(arguments: dict[str, Any]) -> str:
 
     return research_prompt(query, limit=limit)
 
+
+_HOME = None
+
+
+def _home():
+    """Built on first use: the server starts before anyone needs the house."""
+    global _HOME
+    if _HOME is None:
+        _HOME = build_home(
+            default_echo=os.environ.get("HOMEAI_HA_DEFAULT_ECHO", "kitchen"),
+            wake_words=_name_words(os.environ.get("HOMEAI_WAKE_MODEL", "hey_jarvis")),
+        )
+        if _HOME is None:
+            raise HomeError("Home control isn't set up on this machine.")
+    return _HOME
+
+
+def _tool_lights(arguments: dict[str, Any]) -> str:
+    return run_intent(_home(), "lights", {
+        "target": arguments.get("target"), "action": arguments.get("action", ""),
+        "brightness": arguments.get("brightness")})
+
+
+def _tool_timer(arguments: dict[str, Any]) -> str:
+    action = str(arguments.get("action") or "").lower()
+    label = arguments.get("label")
+    if action == "set":
+        try:
+            seconds = float(arguments.get("minutes") or 0) * 60
+        except (TypeError, ValueError):
+            seconds = 0
+        return run_intent(_home(), "timer_set", {"seconds": seconds, "label": label})
+    if action == "cancel":
+        return run_intent(_home(), "timer_cancel", {"label": label})
+    if action == "status":
+        return run_intent(_home(), "timer_status", {"label": label})
+    raise HomeError("The timer action must be set, cancel or status.")
+
+
+def _tool_announce(arguments: dict[str, Any]) -> str:
+    return run_intent(_home(), "announce", {"message": arguments.get("message", ""),
+                                            "where": arguments.get("where")})
+
+
+def _tool_music(arguments: dict[str, Any]) -> str:
+    return run_intent(_home(), "music", {"action": arguments.get("action", "play"),
+                                         "request": arguments.get("request"),
+                                         "where": arguments.get("where")})
+
+
+HOME_TOOLS: list[dict[str, Any]] = [
+    {
+        "name": "lights",
+        "description": (
+            "Turn the house lights on or off, dim, brighten, or set brightness. "
+            "Rooms include foyer, den fan, den lamp, kitchen cabinets, "
+            "breakfast nook, fireplace spots, fireplace strips, can lights, "
+            "living room fan, playroom, utility room. Use target 'all' for "
+            "every light. Say what the tool returns."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "target": {"type": "string", "description": "Room or light name, or 'all'."},
+                "action": {"type": "string", "enum": ["on", "off", "dim", "brighten", "set"]},
+                "brightness": {"type": "integer", "description": "Percent, 1-100, for 'set'."},
+            },
+            "required": ["target", "action"],
+        },
+    },
+    {
+        "name": "timer",
+        "description": (
+            "Kitchen timers on the Echo. action 'set' needs minutes (fractions "
+            "allowed) and optionally a label like 'pasta'; 'cancel' and "
+            "'status' take an optional label."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["set", "cancel", "status"]},
+                "minutes": {"type": "number"},
+                "label": {"type": "string", "description": "One or two words, e.g. 'pasta'."},
+            },
+            "required": ["action"],
+        },
+    },
+    {
+        "name": "announce",
+        "description": (
+            "Announce a short message on the Echo speakers, everywhere in the "
+            "house unless a room is given. Only when the user asks for an "
+            "announcement."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "message": {"type": "string"},
+                "where": {"type": "string", "description": "Room, or omit for everywhere."},
+            },
+            "required": ["message"],
+        },
+    },
+    {
+        "name": "music",
+        "description": (
+            "Play music on an Echo (Amazon Music) or control playback. "
+            "request is what to play, e.g. 'jazz' or 'songs by Adele'. "
+            "Defaults to the kitchen; where 'everywhere' plays in every room."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["play", "stop", "pause", "resume", "next"]},
+                "request": {"type": "string"},
+                "where": {"type": "string"},
+            },
+            "required": ["action"],
+        },
+    },
+]
 
 TOOLS: list[dict[str, Any]] = [
     {
@@ -163,7 +288,17 @@ TOOLS: list[dict[str, Any]] = [
 HANDLERS: dict[str, Callable[[dict[str, Any]], str]] = {
     "weather": _tool_weather,
     "research": _tool_research,
+    "lights": _tool_lights,
+    "timer": _tool_timer,
+    "announce": _tool_announce,
+    "music": _tool_music,
 }
+
+
+def list_tools() -> list[dict[str, Any]]:
+    """Home tools only where the house is set up: a small model offered a
+    tool that can only fail will still try it."""
+    return TOOLS + (HOME_TOOLS if is_configured() else [])
 
 
 def _result(request_id: Any, result: Any) -> dict[str, Any]:
@@ -208,7 +343,7 @@ def handle_message(message: dict[str, Any]) -> dict[str, Any] | None:
         )
 
     if method == "tools/list":
-        return _result(request_id, {"tools": TOOLS})
+        return _result(request_id, {"tools": list_tools()})
 
     if method == "tools/call":
         params = message.get("params") or {}
@@ -223,7 +358,7 @@ def handle_message(message: dict[str, Any]) -> dict[str, Any] | None:
 
         try:
             return _result(request_id, _text_content(handler(arguments)))
-        except WeatherError as exc:
+        except (WeatherError, HomeError, HAError) as exc:
             # Expected, actionable failure: report it as tool output so the
             # model can tell the user plainly rather than inventing a forecast.
             return _result(request_id, _text_content(str(exc), is_error=True))
