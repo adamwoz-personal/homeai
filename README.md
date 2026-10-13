@@ -43,6 +43,7 @@ refuses with an explanation if the machine is not powerful enough:
 ```bash
 ./install.sh --dry-run   # assess and show the plan, change nothing
 ./install.sh --sudo      # install (sudo is only for the Ollama VRAM guard)
+./install.sh --home-assistant   # also set up Home Assistant (optional; see docs/RUNBOOK.md)
 ```
 
 See [docs/RUNBOOK.md](docs/RUNBOOK.md) for requirements, operation and

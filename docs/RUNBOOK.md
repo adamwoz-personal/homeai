@@ -274,6 +274,21 @@ agent, and keep the garage out of Assist exposure.
   Set the variables in the service's environment, then restart homeai.
 - Startup log line: `home control: Home Assistant at ... (fast path on)`.
   Each action logs `home <kind> {...} -> <reply>` and `HA call ...`.
+- Set up from scratch: `./install.sh --home-assistant` (add `--sudo` to let it
+  install Docker). It checks Docker, starts the container, walks through
+  onboarding, validates the token you paste (hidden, never printed or logged;
+  `HOMEAI_HA_TOKEN` supplies it non-interactively) and writes `ha.env`
+  (mode 600). It lists the browser-only steps: Hue button, Alexa login with
+  the authenticator code, Ring, the phone app. Safe to re-run.
+- `--check` failures say what to do: HA down -> `tools/ha/ha_container.sh
+  status|start`; token rejected -> new long-lived token; package missing ->
+  re-run `install.sh`; no lights/Alexa devices -> that integration isn't added.
+- Routines (Jarvis does them; the `jarvis` HA user can't create HA
+  automations): "goodnight routine" / "I'm going to bed" turns every light off.
+  A bare "good night" stays a farewell. With the Home Assistant app on a phone,
+  rings are also pushed to it (`HOMEAI_DOORBELL_PHONE=0` stops that); the push
+  is not silenced by quiet hours. A garage-left-open alert waits on
+  `garage-hardware`.
 - Quick connection check (also run by `install.sh`):
   `.venv/bin/python -m homeai.ha_client --check` (exit 0 working, 1 not set
   up, 2 configured but broken).

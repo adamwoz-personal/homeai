@@ -1439,3 +1439,10 @@ Learnings (all hit live):
   transcript. `tools/eval_wake_prompt.py`.
 - Opening the garage by voice will require an enrolled, recognised speaker
   plus spoken confirmation.
+
+Routines (2026-10-13): "goodnight routine" / "I'm going to bed" (not a bare
+"good night": that is a farewell pleasantry and must stay one) turns all
+lights off via `Home.goodnight()`. `Home.notify_phones()` pushes to every
+`notify.mobile_app_*` service; the doorbell uses it, outside quiet hours too.
+Installer: `./install.sh --home-assistant` runs `homeai/install/ha_setup.py`
+(side effects injected; the token is never printed).
