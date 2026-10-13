@@ -21,7 +21,8 @@
 #   6. ZeroClaw: add the locked-down voice agent and copy its persona.
 #   7. .env and the systemd user service.
 #   8. Home control (optional): if ~/.config/homeai/ha.env exists, check that
-#      Home Assistant answers; otherwise print how to set it up. Never fatal.
+#      Home Assistant answers; otherwise print how to set it up. With
+#      --home-assistant it also sets Home Assistant up (see below). Never fatal.
 #   9. Verify: `python -m homeai.daemon --check` and one real agent reply.
 #
 # Options:
@@ -31,7 +32,9 @@
 #   --no-audio-required    allow installing on a machine without mic/speaker
 #   --agent NAME           ZeroClaw agent name (default: HOMEAI_AGENT_NAME in .env, else jarvis)
 #   --zeroclaw-dir DIR     ZeroClaw config dir (default: ~/.zeroclaw)
-#   --skip-verify          skip step 8 (it loads the model, ~10s)
+#   --home-assistant       set up Home Assistant (Docker check, container, token for a
+#                          non-admin jarvis user; combine with --sudo to install Docker)
+#   --skip-verify          skip step 9 (it loads the model, ~10s)
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
@@ -44,8 +47,9 @@ AUDIO_FLAG=""
 AGENT=""
 ZC_DIR="${HOME}/.zeroclaw"
 VERIFY=1
+HOME_ASSISTANT=0
 
-usage() { sed -n '4,31p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '4,37p' "$0" | sed 's/^# \{0,1\}//'; }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -55,6 +59,7 @@ while [[ $# -gt 0 ]]; do
         --no-audio-required) AUDIO_FLAG="--no-audio-required" ;;
         --agent) AGENT="${2:?--agent needs a name}"; shift ;;
         --zeroclaw-dir) ZC_DIR="${2:?--zeroclaw-dir needs a path}"; shift ;;
+        --home-assistant) HOME_ASSISTANT=1 ;;
         --skip-verify) VERIFY=0 ;;
         -h|--help) usage; exit 0 ;;
         *) echo "unknown option: $1 (see --help)" >&2; exit 64 ;;
@@ -296,6 +301,18 @@ fi
 # -- 8. home control (optional) ----------------------------------------------------
 
 step "Home control (Home Assistant, optional)"
+if [[ $HOME_ASSISTANT -eq 1 ]]; then
+    HA_SETUP_ARGS=()
+    [[ $DRY_RUN -eq 1 ]] && HA_SETUP_ARGS+=(--dry-run)
+    [[ $USE_SUDO -eq 1 ]] && HA_SETUP_ARGS+=(--sudo)
+    # Exit 1 means it needs something from the user; every reason is printed.
+    if [[ ! -x .venv/bin/python ]]; then
+        info "would run: python -m homeai.install.ha_setup (the venv doesn't exist yet)"
+    else
+        .venv/bin/python -m homeai.install.ha_setup ${HA_SETUP_ARGS[@]+"${HA_SETUP_ARGS[@]}"} \
+            || note "Home Assistant setup isn't finished (see above); re-run ./install.sh --home-assistant"
+    fi
+fi
 # Read-only, so it also runs in a dry run. Never fatal: the voice assistant
 # works without a house, and HA may simply be down right now.
 HA_OUT="$(.venv/bin/python -m homeai.ha_client --check 2>&1)" && HA_RC=0 || HA_RC=$?

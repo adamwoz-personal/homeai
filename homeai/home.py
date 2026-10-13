@@ -38,7 +38,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Iterable
 
-from .ha_client import HAClient
+from .ha_client import HAClient, HAError
 
 log = logging.getLogger("homeai.home")
 
@@ -352,6 +352,40 @@ class Home:
         self._alexa(echo, command)
         return "Okay."
 
+    # -- routines and phones ---------------------------------------------------
+
+    def goodnight(self) -> str:
+        """Bedtime: every light off. Lights that are unreachable are not an error."""
+        try:
+            self.lights("all", "off")
+        except HomeError as exc:
+            return f"Goodnight. {exc}"
+        return "Goodnight. All the lights are off."
+
+    def phone_services(self) -> list[str]:
+        """notify services of phones with the Home Assistant companion app."""
+        for domain in self.client.services():
+            if domain.get("domain") == "notify":
+                return sorted(n for n in (domain.get("services") or {}) if n.startswith("mobile_app_"))
+        return []
+
+    def notify_phones(self, message: str, title: str = "Jarvis") -> int:
+        """Push to every phone with the companion app; returns how many accepted.
+        No phone (or a failure) is not an error: the Echo announcement still happened."""
+        sent = 0
+        try:
+            names = self.phone_services()
+        except HAError as exc:
+            log.warning("phone notification skipped: %s", exc)
+            return 0
+        for name in names:
+            try:
+                self.client.call_service("notify", name, {"title": title, "message": message})
+                sent += 1
+            except HAError as exc:
+                log.warning("couldn't notify %s: %s", name, exc)
+        return sent
+
     # -- echos --------------------------------------------------------------
 
     def echos(self) -> list[Echo]:
@@ -590,6 +624,8 @@ def run_intent(home: Home, kind: str, args: dict) -> str:
         return home.announce(args.get("message", ""), args.get("where") or "everywhere")
     if kind == "music":
         return home.music(args.get("action", "play"), args.get("request"), args.get("where"))
+    if kind == "goodnight":
+        return home.goodnight()
     if kind in ("door", "door_battery"):
         from . import doorbell  # noqa: PLC0415 - doorbell imports this module
         return (doorbell.door_status if kind == "door" else doorbell.door_battery)(

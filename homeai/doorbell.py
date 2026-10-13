@@ -170,10 +170,11 @@ class DoorbellWatcher:
     """Announces rings (and optionally motion) on the Echos."""
 
     def __init__(self, home: Home, *, announce_motion: bool = False, where: str = "everywhere",
-                 poll_s: float = 2.0, quiet_hours: tuple[dtime, dtime] | None = None,
+                 poll_s: float = 2.0, phone: bool = True, quiet_hours: tuple[dtime, dtime] | None = None,
                  local_time: Callable[[], dtime] = lambda: datetime.now().time()) -> None:
         self.home = home
         self.quiet_hours = quiet_hours
+        self.phone = phone
         self._local_time = local_time
         self.announce_motion = announce_motion
         self.where = where
@@ -201,6 +202,11 @@ class DoorbellWatcher:
     def announce(self, event: DoorEvent) -> None:
         if event.kind == "motion" and not self.announce_motion:
             return
+        if self.phone:  # unaffected by quiet hours: the phone is how you hear at night
+            sent = self.home.notify_phones(
+                f"Someone is at the {event.door}." if event.kind == "ding"
+                else f"Motion at the {event.door}.", "Front door" if event.kind == "ding" else "Motion")
+            log.info("doorbell: notified %d phone(s)", sent)
         if in_quiet_hours(self.quiet_hours, self._local_time()):
             log.info("doorbell: %s at the %s during quiet hours; not announcing",
                      event.kind, event.door)

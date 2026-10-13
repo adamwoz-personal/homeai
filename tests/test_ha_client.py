@@ -163,3 +163,63 @@ def test_check_cli_exit_code(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("HOMEAI_HA_ENV", str(tmp_path / "missing.env"))
     assert hc.main(["--check"]) == 1
     assert "not set up" in capsys.readouterr().out
+
+
+# -- installer hints per cause -------------------------------------------------
+
+def _broken_check(tmp_path, exc):
+    from tests.fake_ha import FakeHA
+
+    f = tmp_path / "ha.env"
+    f.write_text("HA_TOKEN=t\n")
+    return hc.check(f, client_factory=lambda settings: FakeHA(fail=exc))
+
+
+@pytest.mark.parametrize("exc,words", [
+    (hc.HAUnavailable("I can't reach the house controller"), ["ha_container.sh status", "start"]),
+    (hc.HAAuthError("rejected"), ["long-lived token", "HA_TOKEN"]),
+    (hc.HAMissingDependency("the websockets package is missing"), ["install.sh"]),
+    (hc.HARequestError("refused"), ["RUNBOOK", "ha_container.sh logs"]),
+])
+def test_check_says_what_to_do_per_cause(tmp_path, exc, words):
+    code, msg = _broken_check(tmp_path, exc)
+    assert code == 2
+    for word in words:
+        assert word in msg
+
+
+def test_hint_is_actionable_for_every_error_class():
+    for exc in (hc.HAUnavailable("x"), hc.HAAuthError("x"), hc.HAMissingDependency("x"),
+                hc.HANotConfigured("x"), hc.HARequestError("x")):
+        assert len(hc.hint_for(exc)) > 30
+
+
+def test_websockets_missing_is_a_dependency_error(monkeypatch):
+    import builtins
+
+    real = builtins.__import__
+
+    def fake(name, *a, **k):
+        if name == "websockets":
+            raise ImportError(name)
+        return real(name, *a, **k)
+
+    monkeypatch.setattr(builtins, "__import__", fake)
+    client = hc.HAClient(hc.HASettings("http://127.0.0.1:1", "t"))
+    with pytest.raises(hc.HAMissingDependency):
+        client.devices()
+
+
+def test_no_lights_or_no_alexa_is_partial(tmp_path):
+    from tests.fake_ha import FakeHA
+
+    f = tmp_path / "ha.env"
+    f.write_text("HA_TOKEN=t\n")
+    code, msg = hc.check(f, client_factory=lambda s: FakeHA(states=[], devices=[]))
+    assert code == 2 and "Hue" in msg and "Alexa Devices" in msg
+    only_lights = FakeHA(devices=[])
+    code, msg = hc.check(f, client_factory=lambda s: only_lights)
+    assert code == 2 and "Alexa Devices" in msg and "Hue" not in msg
+    no_lights = FakeHA(states=[s for s in FakeHA().states() if not s["entity_id"].startswith("light.")])
+    code, msg = hc.check(f, client_factory=lambda s: no_lights)
+    assert code == 2 and "Hue" in msg and "Alexa Devices" not in msg

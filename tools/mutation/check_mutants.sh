@@ -99,6 +99,9 @@ MUTANTS=(
   "door-quiet-hours-ignored|homeai/doorbell.py|s/        if in_quiet_hours(self.quiet_hours, self._local_time()):/        if False:/|tests/test_doorbell.py -k quiet"
   "door-unavailable-is-a-ring|homeai/doorbell.py|s/                and parse_time(state) is not None]/                ]/|tests/test_doorbell.py -k unavailable"
   "door-quiet-window-wraps|homeai/doorbell.py|s/    return start <= now < end if start < end else now >= start or now < end/    return start <= now < end/|tests/test_doorbell.py -k window"
+  "door-phone-silenced-by-quiet-hours|homeai/doorbell.py|s/        if self.phone:  # unaffected/        if self.phone and not in_quiet_hours(self.quiet_hours, self._local_time()):  # unaffected/|tests/test_doorbell.py -k quiet_hours"
+  "door-phone-targets-any-notify|homeai/home.py|s/if n.startswith(\"mobile_app_\"))/if True)/|tests/test_doorbell.py -k phones"
+  "home-goodnight-does-nothing|homeai/home.py|s/            self.lights(\"all\", \"off\")/            pass/|tests/test_doorbell.py -k goodnight"
   "home-cancel-right-after-set|homeai/home.py|s/            if wait > 0:/            if False:/|tests/test_home.py -k right_after_set"
   "enrol-no-name-not-asked|homeai/daemon.py|s/            reply, listen = vid.MSG_ENROL_NO_NAME, True/            reply, listen = vid.MSG_ENROL_NO_NAME, False/|tests/test_daemon.py -k without_a_name"
 )

@@ -135,6 +135,11 @@ _DOOR_QUESTION = re.compile(
 _DOOR_BATTERY = re.compile(
     r"^(?:how(?:'s| is)|what(?:'s| is)|check) (?:the )?(?:front door ?bell|doorbell|front door|ring)"
     r"(?: doorbell)? battery(?: level)?$")
+# Not a bare "good night": that is a farewell, handled as a pleasantry.
+_GOODNIGHT = re.compile(
+    r"^(?:(?:run |start |do )?(?:the |my )?(?:good ?night|bed ?time) routine|"
+    r"(?:i'm |i am |we're |we are )?(?:going|heading|off|ready) (?:to )?(?:to )?bed|"
+    r"(?:it's |it is )?time for bed|(?:i'm|we're) (?:going )?to bed)$")
 _TIMER_BARE = re.compile(r"^(?:set|start|make|create)(?: me)?(?: a| an| the)? timer$")
 _TIMER_CANCEL = re.compile(
     rf"^(?:cancel|stop|delete|remove|clear|end|kill|turn off)(?: the| my| all(?: the| my| of the| of my)?)?"
@@ -208,6 +213,8 @@ def parse(text: str) -> HomeIntent | None:
             if seconds:
                 return HomeIntent("timer_set", {"seconds": seconds,
                                                 "label": _label(m.group("label"), m.group("label2"))})
+    if _GOODNIGHT.match(t):
+        return HomeIntent("goodnight", {})
     if _DOOR_QUESTION.match(t):
         return HomeIntent("door", {})
     if _DOOR_BATTERY.match(t):

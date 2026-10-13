@@ -70,7 +70,8 @@ def default_devices():
 class FakeHA:
     """Stands in for HAClient. Records every service call."""
 
-    def __init__(self, states=None, devices=None, fail: HAError | None = None):
+    def __init__(self, states=None, devices=None, fail: HAError | None = None, phones=()):
+        self.phones = list(phones)  # names of mobile_app notify services
         self._states = default_states() if states is None else states
         self._devices = default_devices() if devices is None else devices
         self.calls: list[tuple[str, str, dict]] = []
@@ -81,6 +82,12 @@ class FakeHA:
         if self.fail:
             raise self.fail
         return self._states
+
+    def services(self):
+        if self.fail:
+            raise self.fail
+        return [{"domain": "notify", "services": {
+            "send_message": {}, **{f"mobile_app_{p}": {} for p in self.phones}}}]
 
     def devices(self, max_age_s: float = 600.0):
         if self.fail:

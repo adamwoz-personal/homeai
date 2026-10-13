@@ -249,3 +249,88 @@ def test_run_loop_stops(ha, home):
 
     watcher.run(stop, wait)
     assert waits == [0.5, 0.5, 0.5]
+
+
+# -- phone notifications ------------------------------------------------
+
+def phone_calls(ha):
+    return [(svc, d) for dom, svc, d in ha.calls if dom == "notify" and svc.startswith("mobile_app_")]
+
+
+def ring(watcher, ha):
+    watcher.tick()
+    ha.set_state("event.front_door_ding", stamp(1))
+    watcher.tick()
+
+
+def test_ring_also_notifies_phones(home):
+    ha = home.client
+    ha.phones = ["adams_pixel", "ani_phone"]
+    ring(DoorbellWatcher(home), ha)
+    calls = phone_calls(ha)
+    assert [c[0] for c in calls] == ["mobile_app_adams_pixel", "mobile_app_ani_phone"]
+    assert calls[0][1]["message"] == "Someone is at the front door."
+    # only phones got the push; the Echo announcement is the single send_message
+    assert [svc for dom, svc, _ in ha.calls if dom == "notify"].count("send_message") == 1
+
+
+def test_no_phones_is_fine(ha, home):
+    ring(DoorbellWatcher(home), ha)
+    assert phone_calls(ha) == [] and announcements(ha) == ["Someone is at the front door."]
+
+
+def test_phone_can_be_turned_off(home):
+    home.client.phones = ["pixel"]
+    ring(DoorbellWatcher(home, phone=False), home.client)
+    assert phone_calls(home.client) == []
+
+
+def test_phone_still_buzzes_in_quiet_hours(home):
+    home.client.phones = ["pixel"]
+    watcher = DoorbellWatcher(home, quiet_hours=(dtime(22), dtime(7)), local_time=lambda: dtime(23))
+    ring(watcher, home.client)
+    assert len(phone_calls(home.client)) == 1 and announcements(home.client) == []
+
+
+def test_phone_failure_does_not_block_the_echo(home, monkeypatch):
+    home.client.phones = ["pixel"]
+    real = home.client.call_service
+
+    def flaky(domain, service, data=None):
+        if service.startswith("mobile_app_"):
+            raise HAUnavailable("phone offline")
+        return real(domain, service, data)
+
+    monkeypatch.setattr(home.client, "call_service", flaky)
+    ring(DoorbellWatcher(home), home.client)
+    assert announcements(home.client) == ["Someone is at the front door."]
+
+
+def test_notify_phones_survives_service_listing_failure(home, monkeypatch):
+    monkeypatch.setattr(home.client, "services", lambda: (_ for _ in ()).throw(HAUnavailable("x")))
+    assert home.notify_phones("hi") == 0
+
+
+# -- goodnight ----------------------------------------------------------
+
+def test_goodnight_turns_everything_off(ha, home):
+    reply = home.goodnight()
+    assert reply == "Goodnight. All the lights are off."
+    assert any(svc == "turn_off" for _, svc, _ in ha.calls)
+
+
+def test_goodnight_when_house_unreachable_is_still_polite(home):
+    home.client.fail = None
+    home.client._states = [s for s in home.client._states if not s["entity_id"].startswith("light.")]
+    assert home.goodnight().startswith("Goodnight.")
+
+
+@pytest.mark.parametrize("text", ["goodnight routine", "run the bedtime routine", "I'm going to bed",
+                                  "time for bed", "heading to bed"])
+def test_goodnight_phrases(text):
+    assert parse(text).kind == "goodnight"
+
+
+@pytest.mark.parametrize("text", ["good night", "goodnight", "what time is bedtime", "bed"])
+def test_bare_goodnight_stays_a_farewell(text):
+    assert parse(text) is None

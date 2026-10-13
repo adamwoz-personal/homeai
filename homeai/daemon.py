@@ -644,7 +644,7 @@ class VoiceAssistant:
             log.info("doorbell watch: off (HOMEAI_DOORBELL=0)")
             return
         watcher = DoorbellWatcher(self.home, announce_motion=cfg.doorbell_motion,
-                                  where=cfg.doorbell_where,
+                                  where=cfg.doorbell_where, phone=cfg.doorbell_phone,
                                   quiet_hours=parse_quiet_hours(cfg.doorbell_quiet_hours))
         thread = threading.Thread(target=watcher.run, args=(self._stop,), name="doorbell",
                                   daemon=True)

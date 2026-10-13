@@ -54,6 +54,10 @@ class HARequestError(HAError):
     pass
 
 
+class HAMissingDependency(HARequestError):
+    pass
+
+
 @dataclass(frozen=True)
 class HASettings:
     url: str
@@ -135,6 +139,10 @@ class HAClient:
         result = self._request("GET", "/api/states")
         return result if isinstance(result, list) else []
 
+    def services(self) -> list[dict]:
+        result = self._request("GET", "/api/services")
+        return result if isinstance(result, list) else []
+
     def state(self, entity_id: str) -> dict:
         return self._request("GET", f"/api/states/{entity_id}")
 
@@ -156,7 +164,7 @@ class HAClient:
         try:
             import websockets  # noqa: PLC0415 - optional until a device lookup is needed
         except ImportError as exc:
-            raise HARequestError("the websockets package is missing; reinstall homeai") from exc
+            raise HAMissingDependency("the websockets package is missing; reinstall homeai") from exc
 
         url = self.settings.url.replace("http", "ws", 1) + "/api/websocket"
 
@@ -187,12 +195,30 @@ class HAClient:
             raise HAUnavailable(f"I can't reach the house controller ({type(exc).__name__})") from exc
 
 
+def hint_for(exc: HAError, path: Path | None = None) -> str:
+    """What to do about a failure, for the installer and --check."""
+    env = path or DEFAULT_ENV
+    if isinstance(exc, HAAuthError):
+        return (f"Home Assistant rejected the token: in HA open your profile > Security, create a "
+                f"new long-lived token for the jarvis user, and replace HA_TOKEN in {env}.")
+    if isinstance(exc, HAUnavailable):
+        return ("Home Assistant isn't answering: run tools/ha/ha_container.sh status, and "
+                "tools/ha/ha_container.sh start if it is stopped. If HA runs elsewhere, "
+                f"fix HA_URL in {env}.")
+    if isinstance(exc, HAMissingDependency):
+        return "A Python package is missing: re-run ./install.sh, or .venv/bin/pip install -e ."
+    if isinstance(exc, HANotConfigured):
+        return f"Put HA_URL= and HA_TOKEN= in {env} (chmod 600)."
+    return "See docs/RUNBOOK.md \"Home control\" and the Home Assistant log: tools/ha/ha_container.sh logs."
+
+
 def check(path: Path | None = None, client_factory=None) -> tuple[int, str]:
-    """(exit code, message) for the installer: 0 working, 1 not set up, 2 broken."""
+    """(exit code, message) for the installer: 0 working, 1 not set up, 2 broken
+    or only partly set up. Failures say what to do about them."""
     if not is_configured(path):
-        return 1, ("home control not set up (optional). To add it: start Home Assistant "
-                   "(tools/ha/ha_container.sh start), create a non-admin user with a "
-                   f"long-lived token, and put HA_URL= and HA_TOKEN= in {DEFAULT_ENV} "
+        return 1, ("home control not set up (optional). To add it: ./install.sh --home-assistant, "
+                   "or start Home Assistant (tools/ha/ha_container.sh start), create a non-admin "
+                   f"user with a long-lived token, and put HA_URL= and HA_TOKEN= in {DEFAULT_ENV} "
                    "(chmod 600). See docs/RUNBOOK.md \"Home control\".")
     try:
         settings = load_settings(path)
@@ -200,12 +226,22 @@ def check(path: Path | None = None, client_factory=None) -> tuple[int, str]:
         states = client.states()
         devices = client.devices()
     except HAError as exc:
-        return 2, f"home control is configured but not working: {exc}"
+        return 2, f"home control is configured but not working: {exc}. {hint_for(exc, path)}"
     echos = sum(1 for d in devices if any(i and i[0] == "alexa_devices"
                                           for i in d.get("identifiers") or []))
     lights = sum(1 for s in states if s.get("entity_id", "").startswith("light."))
-    return 0, (f"Home Assistant at {settings.url}: {len(states)} entities, "
+    summary = (f"Home Assistant at {settings.url}: {len(states)} entities, "
                f"{lights} lights, {echos} Alexa devices")
+    missing = []
+    if not lights:
+        missing.append("no lights: add the Philips Hue integration in HA "
+                       "(Settings > Devices & services)")
+    if not echos:
+        missing.append("no Alexa devices: add the Alexa Devices integration in HA "
+                       "(needs your Amazon login and an authenticator code)")
+    if missing:
+        return 2, f"{summary}. Partly set up: " + "; ".join(missing) + "."
+    return 0, summary
 
 
 def main(argv: list[str] | None = None) -> int:

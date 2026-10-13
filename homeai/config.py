@@ -319,6 +319,8 @@ class HomeConfig:
     doorbell: bool = field(default_factory=lambda: _env_bool("HOMEAI_DOORBELL", True))
     doorbell_motion: bool = field(default_factory=lambda: _env_bool("HOMEAI_DOORBELL_MOTION", False))
     doorbell_where: str = field(default_factory=lambda: _env_str("HOMEAI_DOORBELL_WHERE", "everywhere"))
+    # Also push rings to phones that have the Home Assistant companion app.
+    doorbell_phone: bool = field(default_factory=lambda: _env_bool("HOMEAI_DOORBELL_PHONE", True))
     # Local-time window with no announcements, e.g. "22:00-07:00". Empty = always announce.
     doorbell_quiet_hours: str = field(default_factory=lambda: _env_str("HOMEAI_DOORBELL_QUIET_HOURS", ""))
 
