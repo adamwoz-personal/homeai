@@ -180,3 +180,10 @@ def test_not_home(text):
 def test_timer_label_drops_stray_articles(text, label):
     intent = parse(text)
     assert intent.kind == "timer_set" and intent.args["label"] == label
+
+
+@pytest.mark.parametrize("text", ["set a timer", "Set a timer.", "start the timer", "set me a timer"])
+def test_timer_without_duration_asks_how_long(text):
+    intent = parse(text)
+    assert intent.kind == "timer_set" and intent.args["seconds"] is None
+

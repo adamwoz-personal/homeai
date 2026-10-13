@@ -22,6 +22,7 @@ from homeai.home import (
     format_duration,
     format_remaining,
     norm_light,
+    run_intent,
     safe_phrase,
     strip_wake_words,
 )
@@ -163,7 +164,7 @@ def test_light_unavailable(home, ha):
 def test_light_unknown_falls_back_to_alexa(home, ha):
     reply = home.lights("porch", "on")
     assert ha.alexa_commands() == [("dev-kitchen_alexa", "turn on the porch")]
-    assert "asked Alexa" in reply
+    assert reply == "Okay."  # no explanation of the Alexa detour
 
 
 def test_light_alexa_fallback_is_sanitised(home, ha):
@@ -439,3 +440,8 @@ def test_ledger_shared_between_instances(tmp_path, clock):
 def test_timer_set_uses_an_before_vowels(home, ha):
     home.timer_set(60, "egg")
     assert ha.alexa_commands()[-1][1] == "set an egg timer for 1 minute"
+
+
+def test_timer_without_duration_asks_how_long(home):
+    with pytest.raises(HomeError, match="How long"):
+        run_intent(home, "timer_set", {"seconds": None, "label": None})

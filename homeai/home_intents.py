@@ -125,6 +125,7 @@ _TIMER_FOR = re.compile(
 _TIMER_LEAD = re.compile(
     rf"^(?:set|start|make|create)(?: me)? (?:a |an )?(?P<dur>{_NUMBER}(?:[ -]and[ -]a[ -]half)?[ -]{_UNIT}) "
     rf"(?:(?P<label>{_LABEL}) )?timer(?: (?:called|named|for(?: the)?) (?P<label2>{_LABEL}))?$")
+_TIMER_BARE = re.compile(r"^(?:set|start|make|create)(?: me)?(?: a| an| the)? timer$")
 _TIMER_CANCEL = re.compile(
     rf"^(?:cancel|stop|delete|remove|clear|end|kill|turn off)(?: the| my| all(?: the| my| of the| of my)?)?"
     rf"(?: (?P<label>{_LABEL}))? timers?$")
@@ -197,6 +198,8 @@ def parse(text: str) -> HomeIntent | None:
             if seconds:
                 return HomeIntent("timer_set", {"seconds": seconds,
                                                 "label": _label(m.group("label"), m.group("label2"))})
+    if _TIMER_BARE.match(t):  # timer_set asks "How long should the timer be?"
+        return HomeIntent("timer_set", {"seconds": None, "label": None})
     m = _TIMER_CANCEL.match(t)
     if m:
         label = _label(m.group("label"))

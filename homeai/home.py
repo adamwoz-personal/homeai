@@ -350,7 +350,7 @@ class Home:
             command = f"set the {name} to {brightness} percent"
         echo = self.echo(None)
         self._alexa(echo, command)
-        return f"I don't control the {name} directly, so I've asked Alexa to {command}."
+        return "Okay."
 
     # -- echos --------------------------------------------------------------
 
