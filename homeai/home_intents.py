@@ -98,7 +98,7 @@ def parse_duration(text: str) -> int | None:
 
 @dataclass(frozen=True)
 class HomeIntent:
-    kind: str                       # lights | timer_set | timer_cancel | timer_status | announce | music
+    kind: str                       # lights | timer_set | timer_cancel | timer_status | announce | music | door | door_battery
     args: dict = field(default_factory=dict)
 
 
@@ -125,6 +125,16 @@ _TIMER_FOR = re.compile(
 _TIMER_LEAD = re.compile(
     rf"^(?:set|start|make|create)(?: me)? (?:a |an )?(?P<dur>{_NUMBER}(?:[ -]and[ -]a[ -]half)?[ -]{_UNIT}) "
     rf"(?:(?P<label>{_LABEL}) )?timer(?: (?:called|named|for(?: the)?) (?P<label2>{_LABEL}))?$")
+_DOOR_QUESTION = re.compile(
+    r"^(?:who(?:'s| is| was) (?:at|on|by) (?:the |my )?(?:front )?(?:door|porch)|"
+    r"(?:did|has|have) (?:anyone|anybody|someone|somebody) "
+    r"(?:ring|rung|rang|been at|come to|come by|knocked at)(?: the)?(?: front)?(?: door(?:bell)?| bell)?|"
+    r"(?:was|is) (?:there )?(?:anyone|anybody|someone|somebody) (?:at|on|by) the (?:front )?(?:door|porch)|"
+    r"(?:any|check the|what(?:'s| is) the) (?:front )?(?:door(?:bell)?|ring) (?:activity|status)|"
+    r"did the doorbell (?:ring|go off))$")
+_DOOR_BATTERY = re.compile(
+    r"^(?:how(?:'s| is)|what(?:'s| is)|check) (?:the )?(?:front door ?bell|doorbell|front door|ring)"
+    r"(?: doorbell)? battery(?: level)?$")
 _TIMER_BARE = re.compile(r"^(?:set|start|make|create)(?: me)?(?: a| an| the)? timer$")
 _TIMER_CANCEL = re.compile(
     rf"^(?:cancel|stop|delete|remove|clear|end|kill|turn off)(?: the| my| all(?: the| my| of the| of my)?)?"
@@ -198,6 +208,10 @@ def parse(text: str) -> HomeIntent | None:
             if seconds:
                 return HomeIntent("timer_set", {"seconds": seconds,
                                                 "label": _label(m.group("label"), m.group("label2"))})
+    if _DOOR_QUESTION.match(t):
+        return HomeIntent("door", {})
+    if _DOOR_BATTERY.match(t):
+        return HomeIntent("door_battery", {})
     if _TIMER_BARE.match(t):  # timer_set asks "How long should the timer be?"
         return HomeIntent("timer_set", {"seconds": None, "label": None})
     m = _TIMER_CANCEL.match(t)

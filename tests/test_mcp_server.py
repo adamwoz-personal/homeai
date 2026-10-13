@@ -285,7 +285,7 @@ def test_unexpected_tool_exception_is_error_result_and_loop_continues(
 from homeai.home import EchoQuiet, Home, TimerLedger  # noqa: E402
 from tests.fake_ha import FakeHA  # noqa: E402
 
-HOME_TOOL_NAMES = {"lights", "timer", "announce", "music"}
+HOME_TOOL_NAMES = {"lights", "timer", "announce", "music", "door"}
 
 
 @pytest.fixture
@@ -342,6 +342,15 @@ def test_announce_and_music_tools(house):
     assert _text(_call_tool("announce", {"message": "dinner"})) == "Announced."
     assert _text(_call_tool("music", {"action": "play", "request": "jazz"})) == \
         "Playing jazz on the Kitchen alexa."
+
+
+def test_door_tool(monkeypatch, tmp_path):
+    from tests.fake_ha import default_states, ring_entities
+    ha = FakeHA(states=default_states() + ring_entities())
+    monkeypatch.setattr(mcp, "_HOME", Home(ha, ledger=TimerLedger(tmp_path / "t.json"),
+                                           quiet=EchoQuiet(tmp_path / "q")))
+    assert "39 percent" in _text(_call_tool("door", {"question": "battery"}))
+    assert "No activity" in _text(_call_tool("door", {}))
 
 
 def test_music_tool_refuses_purchases(house):

@@ -264,6 +264,14 @@ agent, and keep the garage out of Assist exposure.
 - `HOMEAI_HOME=0` disables home control; `HOMEAI_HOME_FASTPATH=0` sends every
   home request through the model instead; `HOMEAI_HA_DEFAULT_ECHO` (default
   `kitchen`) picks the Echo for timers and music.
+- Ring doorbell (`homeai/doorbell.py`): a ring is announced on the Echos
+  ("Someone is at the front door."). Too chatty? `HOMEAI_DOORBELL=0` turns it
+  off; `HOMEAI_DOORBELL_QUIET_HOURS=22:00-07:00` silences it overnight;
+  `HOMEAI_DOORBELL_WHERE=kitchen` limits it to one Echo;
+  `HOMEAI_DOORBELL_MOTION=1` also announces motion (off by default). Ask
+  "who's at the door" / "how's the doorbell battery". Live check:
+  `.venv/bin/python tools/ha/test_doorbell_live.py` (`--announce` speaks).
+  Set the variables in the service's environment, then restart homeai.
 - Startup log line: `home control: Home Assistant at ... (fast path on)`.
   Each action logs `home <kind> {...} -> <reply>` and `HA call ...`.
 - Quick connection check (also run by `install.sh`):

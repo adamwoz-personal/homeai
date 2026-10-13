@@ -1395,7 +1395,12 @@ failed parse should ask, not lecture.
 Plan: `plans/HOME_ASSISTANT_PLAN.md`. HA runs in Docker as the device backend;
 Jarvis stays the voice and brain. Code: `homeai/ha_client.py` (REST +
 websocket registries), `homeai/home.py` (lights, Echos, announce, music,
-timers), `homeai/home_intents.py` (fast-path parser).
+timers), `homeai/home_intents.py` (fast-path parser), `homeai/doorbell.py`
+(Ring: announces rings, "who's at the door", doorbell battery; a polling
+thread, baseline on first poll so restarts never replay a ring; quiet hours
+and motion announcements are config, see RUNBOOK). The Alexa-fallback light
+reply is just "Okay." and a bare "set a timer" asks "How long should the
+timer be?" -- spoken explanations of how Jarvis did it were unwanted.
 
 Routing, in order:
 1. **Fast path** (`daemon._handle_home`): `home_intents.parse()` matches plain

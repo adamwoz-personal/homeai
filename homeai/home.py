@@ -590,4 +590,8 @@ def run_intent(home: Home, kind: str, args: dict) -> str:
         return home.announce(args.get("message", ""), args.get("where") or "everywhere")
     if kind == "music":
         return home.music(args.get("action", "play"), args.get("request"), args.get("where"))
+    if kind in ("door", "door_battery"):
+        from . import doorbell  # noqa: PLC0415 - doorbell imports this module
+        return (doorbell.door_status if kind == "door" else doorbell.door_battery)(
+            home, args.get("where"))
     raise HomeError(f"I don't know how to {kind}.")

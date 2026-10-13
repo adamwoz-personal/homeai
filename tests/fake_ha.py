@@ -102,3 +102,25 @@ class FakeHA:
     def alexa_commands(self):
         return [(d["device_id"], d["text_command"]) for dom, svc, d in self.calls
                 if (dom, svc) == ("alexa_devices", "send_text_command")]
+
+
+def ring_entities(name: str = "Front Door", ding: str = "unknown", motion: str = "unknown",
+                  battery: str = "39", activity: str | None = None, category: str = "motion"):
+    """The Ring entities Home Assistant creates for one doorbell."""
+    slug = name.lower().replace(" ", "_")
+    attrib = {"attribution": "Data provided by Ring.com"}
+    out = [
+        {"entity_id": f"event.{slug}_ding", "state": ding, "attributes": {
+            **attrib, "device_class": "doorbell", "friendly_name": f"{name} Ding"}},
+        {"entity_id": f"event.{slug}_motion", "state": motion, "attributes": {
+            **attrib, "device_class": "motion", "friendly_name": f"{name} Motion"}},
+        {"entity_id": f"sensor.{slug}_battery", "state": battery, "attributes": {
+            **attrib, "device_class": "battery", "friendly_name": f"{name} Battery"}},
+        {"entity_id": f"camera.{slug}_live_view", "state": "idle", "attributes": {
+            **attrib, "friendly_name": f"{name} Live view"}},
+    ]
+    if activity:
+        out.append({"entity_id": f"sensor.{slug}_last_activity", "state": activity, "attributes": {
+            **attrib, "device_class": "timestamp", "category": category,
+            "friendly_name": f"{name} Last activity"}})
+    return out

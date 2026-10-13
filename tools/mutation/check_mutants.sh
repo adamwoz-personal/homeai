@@ -93,6 +93,12 @@ MUTANTS=(
   "home-garage-is-a-light|homeai/home_intents.py|s/            if target and re.search(r\"\\\\b(?:music/            if False and re.search(r\"\\\\b(?:music/|tests/test_home_intents.py -k not_lights"
   "home-zero-brightness-dims|homeai/home.py|s/            if brightness <= 0:/            if brightness < 0:/|tests/test_home.py -k zero_means_off"
   "home-reconcile-too-early|homeai/home.py|s/            if now - first.set_at < 150:/            if False:/|tests/test_home.py -k timer"
+  "door-ring-announced-twice|homeai/doorbell.py|s/        previous, self._seen = self._seen, current/        previous = self._seen/|tests/test_doorbell.py -k once"
+  "door-baseline-replays-old-ring|homeai/doorbell.py|s/        if previous is None:/        if False:/|tests/test_doorbell.py -k baseline"
+  "door-motion-always-announced|homeai/doorbell.py|s/        if event.kind == \"motion\" and not self.announce_motion:/        if False:/|tests/test_doorbell.py -k motion"
+  "door-quiet-hours-ignored|homeai/doorbell.py|s/        if in_quiet_hours(self.quiet_hours, self._local_time()):/        if False:/|tests/test_doorbell.py -k quiet"
+  "door-unavailable-is-a-ring|homeai/doorbell.py|s/                and parse_time(state) is not None]/                ]/|tests/test_doorbell.py -k unavailable"
+  "door-quiet-window-wraps|homeai/doorbell.py|s/    return start <= now < end if start < end else now >= start or now < end/    return start <= now < end/|tests/test_doorbell.py -k window"
   "home-cancel-right-after-set|homeai/home.py|s/            if wait > 0:/            if False:/|tests/test_home.py -k right_after_set"
   "enrol-no-name-not-asked|homeai/daemon.py|s/            reply, listen = vid.MSG_ENROL_NO_NAME, True/            reply, listen = vid.MSG_ENROL_NO_NAME, False/|tests/test_daemon.py -k without_a_name"
 )

@@ -152,7 +152,29 @@ def _tool_music(arguments: dict[str, Any]) -> str:
                                          "where": arguments.get("where")})
 
 
+def _tool_door(arguments: dict[str, Any]) -> str:
+    return run_intent(_home(), "door_battery" if arguments.get("question") == "battery" else "door",
+                      {"where": arguments.get("where")})
+
+
 HOME_TOOLS: list[dict[str, Any]] = [
+    {
+        "name": "door",
+        "description": (
+            "Ring doorbell: when someone last rang or was seen at the front "
+            "door (question 'activity', the default), or the doorbell "
+            "battery (question 'battery'). It cannot show or describe who. "
+            "Say what the tool returns."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "question": {"type": "string", "enum": ["activity", "battery"]},
+                "where": {"type": "string", "description": "Door name, e.g. 'front door'."},
+            },
+            "required": [],
+        },
+    },
     {
         "name": "lights",
         "description": (
@@ -292,6 +314,7 @@ HANDLERS: dict[str, Callable[[dict[str, Any]], str]] = {
     "timer": _tool_timer,
     "announce": _tool_announce,
     "music": _tool_music,
+    "door": _tool_door,
 }
 
 

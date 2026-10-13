@@ -315,6 +315,12 @@ class HomeConfig:
     default_echo: str = field(default_factory=lambda: _env_str("HOMEAI_HA_DEFAULT_ECHO", "kitchen"))
     # Recognise everyday commands without the model (homeai/home_intents.py).
     fast_path: bool = field(default_factory=lambda: _env_bool("HOMEAI_HOME_FASTPATH", True))
+    # Ring doorbell: announce rings on the Echos (homeai/doorbell.py).
+    doorbell: bool = field(default_factory=lambda: _env_bool("HOMEAI_DOORBELL", True))
+    doorbell_motion: bool = field(default_factory=lambda: _env_bool("HOMEAI_DOORBELL_MOTION", False))
+    doorbell_where: str = field(default_factory=lambda: _env_str("HOMEAI_DOORBELL_WHERE", "everywhere"))
+    # Local-time window with no announcements, e.g. "22:00-07:00". Empty = always announce.
+    doorbell_quiet_hours: str = field(default_factory=lambda: _env_str("HOMEAI_DOORBELL_QUIET_HOURS", ""))
 
 
 @dataclass(frozen=True)

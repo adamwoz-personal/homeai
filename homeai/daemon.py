@@ -55,6 +55,7 @@ from .dialogue import (
 from .wake import CaptureMachine, State, build_detector
 from . import home_intents
 from .ha_client import HAError
+from .doorbell import DoorbellWatcher, parse_quiet_hours
 from .home import EchoQuiet, HomeError, build_home, run_intent
 from . import voice_id as vid
 from .wake_verify import (
@@ -635,6 +636,20 @@ class VoiceAssistant:
         if self.home is not None:
             log.info("home control: Home Assistant at %s (fast path %s)",
                      self.home.client.settings.url, "on" if self.cfg.home.fast_path else "off")
+            self._start_doorbell()
+
+    def _start_doorbell(self) -> None:
+        cfg = self.cfg.home
+        if not cfg.doorbell:
+            log.info("doorbell watch: off (HOMEAI_DOORBELL=0)")
+            return
+        watcher = DoorbellWatcher(self.home, announce_motion=cfg.doorbell_motion,
+                                  where=cfg.doorbell_where,
+                                  quiet_hours=parse_quiet_hours(cfg.doorbell_quiet_hours))
+        thread = threading.Thread(target=watcher.run, args=(self._stop,), name="doorbell",
+                                  daemon=True)
+        thread.start()
+        self._threads.append(thread)
 
     # -- speaker recognition -------------------------------------------------
 
