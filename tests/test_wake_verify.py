@@ -102,6 +102,7 @@ def test_hallucinations_are_a_subset_of_pleasantries(text, expected):
     ("Bye bye.", "Bye for now."),
     ("Okay.", ""),
     ("Great.", ""),
+    ("Good night.", "Good night."),
 ])
 def test_closing_reply(text, reply):
     from homeai.wake_verify import closing_reply

@@ -897,3 +897,9 @@ def test_missing_speaker_model_turns_speaker_id_off(quick, tmp_path) -> None:
                                            registry_path=tmp_path / "s.json"))
     quick._start_voice_id()
     assert quick.voice_id is None
+
+
+def test_goodnight_is_answered_even_without_a_conversation(quick) -> None:
+    quick.memory.clear() if hasattr(quick.memory, "clear") else None
+    _, spoken = _closing(quick, "Sleep well, Adam.", heard="Hey Jarvis, good night.")
+    assert spoken == ["Sleep well, Adam."]

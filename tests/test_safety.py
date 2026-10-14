@@ -252,3 +252,17 @@ class TestLeakedReasoning:
     def test_normal_replies_pass(self, text):
         from homeai.safety import detect_leaked_reasoning
         assert not detect_leaked_reasoning(text)
+
+
+def test_strip_narration_removes_tool_decision_preamble() -> None:
+    from homeai.safety import sanitise_for_speech, strip_narration
+    raw = ('No function call is needed for this response. The answer is a spoken reply. '
+           '"Good night to you as well."')
+    assert strip_narration(raw) == "Good night to you as well."
+    assert sanitise_for_speech(raw) == "Good night to you as well."
+
+
+def test_strip_narration_leaves_normal_text_alone() -> None:
+    from homeai.safety import strip_narration
+    assert strip_narration("It is a function of time.") == "It is a function of time."
+    assert strip_narration("") == ""

@@ -38,6 +38,7 @@ _CLOSINGS = (
     "thank you", "thanks", "thank you very much", "thank you so much", "thanks a lot",
     "you're welcome", "you are welcome", "bye", "goodbye", "bye bye",
     "okay", "ok", "great", "cool", "nice", "amazing",
+    "good night", "goodnight", "night night", "nighty night",
 )
 
 
@@ -106,6 +107,13 @@ def is_pleasantry_only(text: str) -> bool:
     return bool(normalised) and bool(_PLEASANTRY_RE.match(normalised))
 
 
+def is_goodnight(text: str) -> bool:
+    """A bare "good night": answered even with no conversation in progress,
+    because it is addressed to Jarvis (the wake word was verified) and a
+    hallucinated one is vanishingly rare."""
+    return bool(re.match(r"^(?:good ?night|night night|nighty night)\b[\s,.!]*$", _normalise(text)))
+
+
 def closing_reply(text: str) -> str:
     """What Jarvis says to a closing mid-conversation; "" means stay quiet.
 
@@ -116,6 +124,8 @@ def closing_reply(text: str) -> str:
     normalised = _normalise(text)
     if re.search(r"\bthank|\bthanks\b", normalised):
         return "You're welcome."
+    if is_goodnight(normalised):
+        return "Good night."
     if re.search(r"\bbye\b|\bgoodbye\b", normalised):
         return "Bye for now."
     return ""

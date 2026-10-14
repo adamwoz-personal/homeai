@@ -61,6 +61,7 @@ from . import voice_id as vid
 from .wake_verify import (
     _name_words,
     closing_reply,
+    is_goodnight,
     is_hallucination_only,
     is_pleasantry_only,
     mentions_wake_word,
@@ -498,8 +499,8 @@ class VoiceAssistant:
         # to keep talking (23 s, live 2026-10-03).
         if is_pleasantry_only(transcript.text):
             in_conversation = bool(self.memory.recent())
-            fallback = "" if is_hallucination_only(transcript.text) or not in_conversation \
-                else closing_reply(transcript.text)
+            fallback = "" if is_hallucination_only(transcript.text) or not (
+                in_conversation or is_goodnight(transcript.text)) else closing_reply(transcript.text)
             self._held.clear()
             if not fallback:
                 log.info("pleasantry with no conversation in progress: %r - staying quiet",

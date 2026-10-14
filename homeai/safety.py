@@ -184,6 +184,30 @@ def check_utterance(text: str) -> SafetyResult:
     return SafetyResult(Verdict.ALLOW)
 
 
+# The 8B voice model sometimes narrates its tool-use decision before answering:
+# 'No function call is needed for this response. The answer is a spoken reply.
+# "Good night..."' (spoken aloud for 17 s, live 2026-10-13).
+_NARRATION = re.compile(
+    r"(?:no (?:function|tool) calls? (?:is|are) (?:needed|required|necessary)[^.!?]*[.!?]\s*|"
+    r"the (?:answer|response|reply) is (?:a )?(?:spoken|direct|simple) (?:reply|response|answer)[^.!?]*[.!?]\s*|"
+    r"i (?:do not|don't) need (?:to use )?(?:a |any )?(?:function|tool)s?(?: call)?[^.!?]*[.!?]\s*)+",
+    re.IGNORECASE)
+_QUOTED_WHOLE = re.compile(r'^\s*["\u201c](.+)["\u201d]\s*$', re.DOTALL)
+
+
+def strip_narration(text: str) -> str:
+    """Drop the model's "no function call is needed" preamble, and the quote
+    marks it wraps the real answer in. Text without such a preamble is untouched."""
+    if not text:
+        return ""
+    match = _NARRATION.match(text.lstrip())
+    if not match:
+        return text
+    rest = text.lstrip()[match.end():]
+    quoted = _QUOTED_WHOLE.match(rest)
+    return quoted.group(1).strip() if quoted else rest
+
+
 def sanitise_for_speech(text: str, limit: int = 4000) -> str:
     """Make agent output safe and sensible to read aloud.
 
@@ -200,6 +224,7 @@ def sanitise_for_speech(text: str, limit: int = 4000) -> str:
     if not text:
         return ""
 
+    text = strip_narration(text)
     without_code = re.sub(r"```.*?```", " (code omitted) ", text, flags=re.DOTALL)
     without_inline = re.sub(r"`([^`]*)`", r"\1", without_code)
     collapsed = re.sub(r"\s+", " ", without_inline).strip()
