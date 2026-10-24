@@ -19,6 +19,11 @@ dependencies = ["numpy", "requests", "sounddevice", "onnxruntime", "websockets"]
 # server can be installed without them. Lower bounds are the tested versions.
 voice = ["openwakeword>=0.4", "piper-tts>=1.8"]
 dev = ["pytest", "pytest-cov"]
+# Avatar window (plans/AVATAR_PLAN.md). The daemon never imports these.
+avatar = ["pygame-ce>=2.5.8", "moderngl>=5.13"]
+# Offline avatar asset pipeline; onnx is only for patching the Piper voice
+# with phoneme alignments at install time.
+avatar-build = ["mediapipe>=1.1", "opencv-python-headless>=5.0", "scipy>=1.18", "onnx"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
