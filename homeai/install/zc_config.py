@@ -38,6 +38,9 @@ MCP_BUNDLE = "homeai-tools"
 OLLAMA_MODEL = "llama31-voice"
 OLLAMA_URI = "http://127.0.0.1:11434/v1"
 SCHEMA_VERSION = 3
+# MCP servers for coding agents only. The voice agent answers anyone within
+# earshot: it must never reach Home Assistant's full API or the memory tools.
+CODING_ONLY_SERVERS = ("ha", "memory")
 
 
 class ConfigError(Exception):
@@ -143,6 +146,27 @@ def _mcp_server(data: dict, name: str) -> dict | None:
     return next((s for s in servers if isinstance(s, dict) and s.get("name") == name), None)
 
 
+def voice_leaks(data: dict) -> list[str]:
+    """Problems if any voice agent (one using the voice bundle or risk
+    profile) can reach a coding-only MCP server."""
+    bundles = data.get("mcp_bundles", {})
+    bundles = bundles if isinstance(bundles, dict) else {}
+    agents = data.get("agents", {})
+    out = []
+    for name, agent in (agents.items() if isinstance(agents, dict) else ()):
+        if not isinstance(agent, dict):
+            continue
+        used = agent.get("mcp_bundles") or []
+        if MCP_BUNDLE not in used and agent.get("risk_profile") != RISK_PROFILE:
+            continue
+        reach = {s for b in used for s in (bundles.get(b) or {}).get("servers", [])}
+        bad = sorted(reach & set(CODING_ONLY_SERVERS))
+        if bad:
+            out.append(f"voice agent '{name}' can reach coding-only MCP server(s) "
+                       f"{', '.join(bad)}: remove that bundle from its mcp_bundles")
+    return out
+
+
 def merge(existing: str, *, repo: Path, home: Path, num_ctx: int,
           agent: str = DEFAULT_AGENT) -> MergeResult:
     """Return the config text with any missing voice-agent sections appended."""
@@ -150,6 +174,9 @@ def merge(existing: str, *, repo: Path, home: Path, num_ctx: int,
         data = tomllib.loads(existing) if existing.strip() else {}
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"existing config does not parse, refusing to touch it: {exc}") from exc
+    leaks = voice_leaks(data)
+    if leaks:
+        raise ConfigError("; ".join(leaks))
 
     result = MergeResult(existing)
     parts: list[str] = []
@@ -228,13 +255,28 @@ def write_config(path: Path, result: MergeResult) -> Path | None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Add the homeai voice agent to ZeroClaw")
     parser.add_argument("--config", type=Path, default=Path.home() / ".zeroclaw" / "config.toml")
-    parser.add_argument("--repo", type=Path, required=True)
+    parser.add_argument("--repo", type=Path)
     parser.add_argument("--num-ctx", type=int, default=16384)
     parser.add_argument("--agent", default=DEFAULT_AGENT)
     parser.add_argument("--dry-run", action="store_true", help="print, do not write")
+    parser.add_argument("--check", action="store_true",
+                        help="only check that no voice agent reaches a coding-only MCP server")
     args = parser.parse_args(argv)
 
     existing = args.config.read_text(encoding="utf-8") if args.config.exists() else ""
+    if args.check:
+        try:
+            leaks = voice_leaks(tomllib.loads(existing))
+        except tomllib.TOMLDecodeError as exc:
+            print(f"zeroclaw config: does not parse: {exc}", file=sys.stderr)
+            return 2
+        for leak in leaks:
+            print(f"zeroclaw config: {leak}", file=sys.stderr)
+        if not leaks:
+            print("  zeroclaw config: voice agents reach no coding-only MCP server")
+        return 2 if leaks else 0
+    if args.repo is None:
+        parser.error("--repo is required")
     try:
         result = merge(existing, repo=args.repo.resolve(), home=Path.home(),
                        num_ctx=args.num_ctx, agent=args.agent)

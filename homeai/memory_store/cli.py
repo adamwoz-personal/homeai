@@ -14,6 +14,8 @@
     homeai-memory export --as adam > adam.json
     homeai-memory stats
     homeai-memory backfill [--dry-run] [--include-unknown]
+    homeai-memory backup [--keep 14] [--no-check]   pg_dump + restore check (nightly timer)
+    homeai-memory restore-check [FILE]
 
 ``--as`` is who is asking (default: adam). Admins see everyone's memories;
 others see their own plus the household's.
@@ -130,7 +132,17 @@ def main(argv: list[str] | None = None, *, cfg: Config | None = None, embedder=N
     p.add_argument("--include-unknown", action="store_true",
                    help="unrecognised turns go to 'household' (may include test voices)")
     p.add_argument("--transcript", default=cfg.transcript.path)
+    p = sub.add_parser("backup", help="pg_dump now, then prove the dump restores")
+    p.add_argument("--dir", default=cfg.memory.backup_dir)
+    p.add_argument("--keep", type=int, default=cfg.memory.backup_keep)
+    p.add_argument("--no-check", action="store_true", help="skip the restore check")
+    p = sub.add_parser("restore-check", help="restore a dump into a scratch database and compare")
+    p.add_argument("file", nargs="?", help="default: the newest dump")
+    p.add_argument("--dir", default=cfg.memory.backup_dir)
     a = ap.parse_args(argv)
+
+    if a.cmd in ("backup", "restore-check"):
+        return _backup(a, cfg, out)
 
     if a.cmd == "migrate":
         from .db import migrate
@@ -157,6 +169,34 @@ def main(argv: list[str] | None = None, *, cfg: Config | None = None, embedder=N
         return 2
     finally:
         store.db.close()
+
+
+def _backup(a, cfg: Config, out) -> int:
+    """Owner-level work (pg_dump/pg_restore as the login user), no store needed."""
+    from . import backup
+
+    if not cfg.memory.enabled:
+        print("long-term memory is off (HOMEAI_LTM=0); nothing to back up", file=out)
+        return 0
+    dest = Path(a.dir).expanduser()
+    try:
+        if a.cmd == "backup":
+            path = backup.dump(cfg.memory.dsn, dest, keep=a.keep)
+            print(f"wrote {path} ({path.stat().st_size} bytes)", file=out)
+            if a.no_check:
+                return 0
+        else:
+            path = Path(a.file).expanduser() if a.file else (backup.dumps(dest) or [None])[-1]
+            if path is None:
+                print(f"error: no dumps in {dest}", file=sys.stderr)
+                return 2
+        r = backup.restore_check(path)
+        print(f"restore check ok: {r['file']} schema {r['schema_version']} "
+              + " ".join(f"{k}={v}" for k, v in r["counts"].items()), file=out)
+        return 0
+    except backup.BackupError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
 
 
 def _read(path: str) -> list[str]:

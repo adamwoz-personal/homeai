@@ -366,6 +366,10 @@ class MemoryConfig:
     extract_batch: int = field(default_factory=lambda: _env_int("HOMEAI_LTM_EXTRACT_BATCH", 20))
     # Rebuild a profile this long after its facts last changed.
     reflect_delay_s: int = field(default_factory=lambda: _env_int("HOMEAI_LTM_REFLECT_DELAY_S", 1800))
+    # Nightly pg_dump target (0700; dumps hold everything people said) and how many to keep.
+    backup_dir: str = field(default_factory=lambda: _env_str(
+        "HOMEAI_LTM_BACKUP_DIR", "~/.local/share/homeai/backups"))
+    backup_keep: int = field(default_factory=lambda: _env_int("HOMEAI_LTM_BACKUP_KEEP", 14))
 
 
 @dataclass(frozen=True)

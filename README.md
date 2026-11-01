@@ -18,7 +18,7 @@ unit tests.
 - `speech.py` - Makes text speakable: units, symbols, markdown, sentence splitting
 - `safety.py` - Validates utterances and sanitises responses before they are spoken
 - `memory.py` - Bounded, self-expiring conversation context between turns
-- `memory_store/` - Long-term memory in PostgreSQL + pgvector: recording, hybrid recall, background note extraction and profiles (CPU helper model), spoken remember/forget commands, `homeai-memory` CLI
+- `memory_store/` - Long-term memory in PostgreSQL + pgvector: recording, hybrid recall, background note extraction and profiles (CPU helper model), spoken remember/forget commands, `homeai-memory` CLI, nightly verified backups, and `homeai-memory-mcp` (memory tools for coding agents, never the voice agent)
 - `agent_cli.py` - Default subprocess transport to ZeroClaw
 - `agent_client.py` - Alternative HTTP transport via the ZeroClaw gateway
 - `mcp_server.py` - Exposes local tools to the agent over JSON-RPC stdio

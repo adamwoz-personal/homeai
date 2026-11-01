@@ -141,3 +141,74 @@ class TestWrite:
         cfg.write_text("[agents\nbroken")
         assert Z.main(["--config", str(cfg), "--repo", str(REPO)]) == 2
         assert cfg.read_text() == "[agents\nbroken"
+
+
+SPLIT = """\
+[mcp]
+enabled = true
+
+[[mcp.servers]]
+name = "homeai"
+command = "/opt/homeai/bin/homeai-mcp"
+
+[[mcp.servers]]
+name = "memory"
+command = "/opt/homeai/bin/homeai-memory-mcp"
+
+[mcp_bundles.homeai-tools]
+servers = ["homeai"]
+
+[mcp_bundles.memory-admin]
+servers = ["memory"]
+
+[mcp_bundles.ha-coding]
+servers = ["ha"]
+
+[agents.local]
+mcp_bundles = ["homeai-tools"]
+
+[agents.builder]
+mcp_bundles = ["memory-admin", "ha-coding"]
+"""
+
+
+class TestVoiceIsolation:
+    """The voice agent answers anyone within earshot: it must never reach the
+    memory tools or Home Assistant's full API (plan §9)."""
+
+    def test_coding_agents_may_have_them(self) -> None:
+        assert Z.voice_leaks(tomllib.loads(SPLIT)) == []
+
+    @pytest.mark.parametrize("bundle,server", [("memory-admin", "memory"), ("ha-coding", "ha")])
+    def test_voice_bundle_agent_may_not(self, bundle: str, server: str) -> None:
+        text = SPLIT.replace('[agents.local]\nmcp_bundles = ["homeai-tools"]',
+                             f'[agents.local]\nmcp_bundles = ["homeai-tools", "{bundle}"]')
+        (leak,) = Z.voice_leaks(tomllib.loads(text))
+        assert f"voice agent 'local'" in leak and server in leak
+        with pytest.raises(Z.ConfigError, match="coding-only"):
+            merge(text)
+
+    def test_voice_risk_profile_agent_may_not(self) -> None:
+        text = SPLIT + f'\n[agents.jarvis]\nrisk_profile = "{Z.RISK_PROFILE}"\n' \
+                       'mcp_bundles = ["memory-admin"]\n'
+        (leak,) = Z.voice_leaks(tomllib.loads(text))
+        assert "'jarvis'" in leak and "memory" in leak
+
+    def test_bundle_that_mixes_servers_is_caught(self) -> None:
+        text = SPLIT.replace('[mcp_bundles.homeai-tools]\nservers = ["homeai"]',
+                             '[mcp_bundles.homeai-tools]\nservers = ["homeai", "memory"]')
+        assert len(Z.voice_leaks(tomllib.loads(text))) == 1
+
+    def test_cli_check(self, tmp_path: Path, capsys) -> None:
+        cfg = tmp_path / "config.toml"
+        cfg.write_text(SPLIT)
+        assert Z.main(["--config", str(cfg), "--check"]) == 0
+        cfg.write_text(SPLIT.replace('["homeai-tools"]', '["homeai-tools", "memory-admin"]'))
+        assert Z.main(["--config", str(cfg), "--check"]) == 2
+        assert "memory" in capsys.readouterr().err
+        cfg.write_text("[broken")
+        assert Z.main(["--config", str(cfg), "--check"]) == 2
+
+    def test_cli_needs_repo_unless_checking(self, tmp_path: Path) -> None:
+        with pytest.raises(SystemExit):
+            Z.main(["--config", str(tmp_path / "c.toml")])

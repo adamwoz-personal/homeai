@@ -75,13 +75,13 @@ def test_dry_run_needs_no_database(tmp_path):
 
 # -- with a throwaway database ----------------------------------------------------------
 
-def make_cli(dsn, tmp_path, helper=None):
+def make_cli(dsn, tmp_path, helper=None, **memory):
     from homeai.memory_store.embed import HashEmbedder
 
     reg = tmp_path / "s.json"
     reg.write_text(json.dumps({"speakers": {"Adam": {}}}))
     cfg = Config()
-    cfg = replace(cfg, memory=replace(cfg.memory, dsn=dsn, min_similarity=0.2),
+    cfg = replace(cfg, memory=replace(cfg.memory, dsn=dsn, min_similarity=0.2, **memory),
                   speaker=replace(cfg.speaker, registry_path=reg))
 
     def go(*argv):

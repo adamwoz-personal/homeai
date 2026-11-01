@@ -260,6 +260,55 @@ sheet in `~/homeai-bench/`).
 - One-time setup already done: Postgres 18 + pgvector, `adam` has
   CREATEROLE/CREATEDB, and `vector` is in `template1`.
 
+**Backups.** A user timer (`homeai-memory-backup.timer`, 03:30 daily) dumps
+the database to `~/.local/share/homeai/backups/` (mode 0700, last 14 kept),
+then restores it into a scratch database and checks row counts, schema
+version and forced row security. A failed check fails the unit.
+
+```bash
+bin/homeai-memory backup [--keep N] [--no-check]   # dump now (+ restore check)
+bin/homeai-memory restore-check [FILE]             # check newest (or FILE) again
+systemctl --user list-timers homeai-memory-backup.timer
+journalctl --user -u homeai-memory-backup -n 20
+```
+
+Settings: `HOMEAI_LTM_BACKUP_DIR`, `HOMEAI_LTM_BACKUP_KEEP` (14). Disaster
+recovery (stop `homeai` first). Roles are cluster-wide, not in the dump: on a
+brand-new Postgres, create them once with `createdb scratch &&
+HOMEAI_LTM_DSN=dbname=scratch bin/homeai-memory migrate && dropdb scratch`.
+
+```bash
+dropdb homeai && createdb homeai
+PGOPTIONS='-c app.scope=admin' pg_restore --no-comments -d homeai \
+    ~/.local/share/homeai/backups/memory-<stamp>.dump
+bin/homeai-memory migrate     # applies anything newer than the dump
+```
+
+**Memory tools for coding agents (MCP).** `bin/homeai-memory-mcp --scope
+admin|person --user NAME --client NAME` serves `memory_search`, `memory_get`,
+`memory_add`, `memory_update`, `memory_supersede`, `memory_delete`,
+`memory_topics`, `memory_health` over stdio, as the `homeai_mcp` role.
+Registered for ZeroClaw's `builder` (bundle `memory-admin`, client
+`builder`) and Copilot CLI (`~/.copilot/mcp-config.json`, client
+`copilot`), both admin scope as `adam`.
+
+- Never give it to the voice agent. `python3 -m homeai.install.zc_config
+  --check` fails if any voice agent can reach the `memory` or `ha` server;
+  the installer refuses such a config too.
+- Person scope: reads own + household, writes own only. Admin scope needs
+  `is_admin` in `memory.people`. The scope is a per-transaction setting any
+  local program could set: it stops agent mistakes and injected arguments,
+  not local code.
+- Agents can't write `instruction`, `profile` or `summary` facts; theirs are
+  `source=mcp`, `trust=household`. A near-duplicate (similarity ≥ 0.92) is
+  not added; 0.65–0.92 matches come back as `similar` so the agent decides
+  whether to supersede. Deletes record a reason word (`wrong`, `outdated`,
+  `duplicate`, `requested`, `dead_end`) and the client, never text.
+- Checks: `.venv/bin/python tools/memory/mcp_probe.py` (every tool over
+  stdio on the real database, cleans up) and
+  `tools/memory/builder_memory_check.sh` (the builder agent uses the tools;
+  verified from the audit log).
+
 ## What ZeroClaw remembers (privacy)
 
 ZeroClaw saves every request to every agent, including speech Jarvis

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Long-term memory MCP server (stdio) for agents other than the voice agent.
+# Usage: homeai-memory-mcp --scope admin|person --user NAME --client NAME
+# See homeai/memory_store/mcp.py and docs/RUNBOOK.md.
+set -euo pipefail
+cd "$(dirname "$(readlink -f "$0")")/.."
+exec .venv/bin/python -m homeai.memory_store.mcp "$@"

@@ -1,0 +1,21 @@
+# Template rendered by install.sh: @REPO@ is substituted.
+# Nightly dump of the long-term memory database, then a restore into a
+# scratch database to prove the dump is usable. Failures show in
+# `systemctl --user --failed` and `journalctl --user -u homeai-memory-backup`.
+[Unit]
+Description=Home AI memory backup (pg_dump + restore check)
+Documentation=file://@REPO@/docs/RUNBOOK.md
+After=postgresql.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=@REPO@
+EnvironmentFile=-@REPO@/.env
+ExecStart=@REPO@/bin/homeai-memory backup
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+# Dumps land in ~/.local/share/homeai/backups (HOMEAI_LTM_BACKUP_DIR).
+ReadWritePaths=%h/.local/share/homeai

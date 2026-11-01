@@ -141,7 +141,7 @@ class PostgresStore:
     def add_fact(self, username: str, summary: str, *, kind: str = "fact",
                  topics: tuple[str, ...] = (), importance: float = 0.5, pinned: bool = False,
                  trust: str = "owner", source: str = "explicit", actor: str = "cli",
-                 detail: dict[str, Any] | None = None) -> uuid.UUID:
+                 detail: dict[str, Any] | None = None, thread_id=None) -> uuid.UUID:
         if kind not in FACT_KINDS:
             raise StoreError(f"unknown fact kind {kind!r}")
         summary = redact(" ".join((summary or "").split()))
@@ -151,19 +151,23 @@ class PostgresStore:
         with self.db.scoped(username, "person") as conn:
             fid = conn.execute(
                 "INSERT INTO memory.facts (username, topics, detail, kind, summary, embedding,"
-                " embed_model, importance, pinned, trust, source) VALUES"
-                " (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                " embed_model, importance, pinned, trust, source, thread_id) VALUES"
+                " (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
                 (username, list(topics), json.dumps({"v": 1, **(detail or {})}), kind, summary, vec,
-                 self.embedder.name, importance, pinned, trust, source)).fetchone()[0]
+                 self.embedder.name, importance, pinned, trust, source,
+                 thread_id and uuid.UUID(str(thread_id)))).fetchone()[0]
+            self._add_topics(conn, topics)
             self._audit(conn, fid, username, "fact.add", actor, {"kind": kind})
         return fid
 
     # -- forgetting ------------------------------------------------------------
 
-    def forget(self, object_id: uuid.UUID | str, actor: str, scope: str = "person") -> str | None:
+    def forget(self, object_id: uuid.UUID | str, actor: str, scope: str = "person", *,
+               via: str | None = None, reason: str | None = None) -> str | None:
         """Delete an episode or fact the actor can see. Returns what was deleted.
 
-        The audit row records that something was deleted, never its text.
+        The audit row records that something was deleted, never its text;
+        ``via`` (the client) and ``reason`` (a fixed word) are recorded with it.
         """
         oid = uuid.UUID(str(object_id))
         if scope == "admin" and not self.is_admin(actor):
@@ -181,7 +185,8 @@ class PostgresStore:
                         conn.execute("DELETE FROM memory.facts f WHERE f.source = 'extractor'"
                                      " AND NOT EXISTS (SELECT 1 FROM memory.fact_sources s"
                                      " WHERE s.fact_id = f.id)")
-                    self._audit(conn, oid, row[0], f"{what}.forget", actor, {})
+                    self._audit(conn, oid, row[0], f"{what}.forget", via or actor,
+                                {"reason": reason} if reason else {})
                     break
             else:
                 return None
@@ -356,7 +361,9 @@ class PostgresStore:
                 " ON f.id = s.fact_id WHERE f.username = %s AND s.fact_id = ANY(%s)",
                 (username, list(fact_ids)))]
 
-    def supersede_fact(self, username: str, old_id, summary: str, *, actor: str) -> uuid.UUID:
+    def supersede_fact(self, username: str, old_id, summary: str, *, actor: str,
+                       source: str = "explicit", trust: str = "owner",
+                       detail: dict[str, Any] | None = None) -> uuid.UUID:
         """The person corrected a fact: a new explicit fact replaces it."""
         summary = redact(" ".join((summary or "").split()))[:300]
         if len(summary) < 1:
@@ -371,10 +378,11 @@ class PostgresStore:
             kind = "fact" if old[0] in ("profile", "summary") else old[0]
             fid = conn.execute(
                 "INSERT INTO memory.facts (username, topics, kind, summary, embedding, embed_model,"
-                " importance, pinned, trust, source, thread_id, supersedes) VALUES"
-                " (%s,%s,%s,%s,%s,%s,%s,%s,'owner','explicit',%s,%s) RETURNING id",
+                " importance, pinned, trust, source, thread_id, supersedes, detail) VALUES"
+                " (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
                 (username, old[1], kind, summary, vec, self.embedder.name, max(old[3], 0.7),
-                 old[2], old[4], old_id)).fetchone()[0]
+                 old[2], trust, source, old[4], old_id,
+                 json.dumps({"v": 1, **(detail or {})}))).fetchone()[0]
             if old[0] == "profile":
                 # A wrong profile line is rebuilt from facts; just drop it.
                 conn.execute("DELETE FROM memory.facts WHERE id = %s", (old_id,))
@@ -431,6 +439,165 @@ class PostgresStore:
                 " + (SELECT count(*) FROM memory.facts WHERE username = %s AND state = 'active')",
                 (username, username)).fetchone()[0]
 
+    # -- agent tools (Phase 3: MCP) -----------------------------------------------------
+    # ``actor`` + ``scope`` as everywhere: "person" sees own + household rows,
+    # "admin" sees all. Writes to another person's rows need admin scope.
+
+    def _as(self, actor: str, scope: str):
+        return self.db.scoped(actor, scope)
+
+    def search(self, actor: str, scope: str, vec, *, owners: list[str] | None = None,
+               topics: tuple[str, ...] = (), kinds: tuple[str, ...] = (),
+               since: datetime | None = None, until: datetime | None = None,
+               include_episodes: bool = False, limit: int = 10) -> list[dict[str, Any]]:
+        """Nearest facts (and optionally episodes) by meaning, with filters.
+
+        Returned facts count as accessed (maintenance keeps used facts).
+        """
+        p: dict[str, Any] = {"v": vec, "n": limit, "owners": owners, "topics": list(topics),
+                             "kinds": list(kinds), "since": since, "until": until}
+
+        def filt(alias: str, at: str) -> str:
+            w = [f"{alias}.state = 'active'", f"{alias}.embedding IS NOT NULL"]
+            if owners:
+                w.append(f"{alias}.username = ANY(%(owners)s)")
+            if since:
+                w.append(f"{alias}.{at} >= %(since)s")
+            if until:
+                w.append(f"{alias}.{at} < %(until)s")
+            return " AND ".join(w)
+
+        fw = filt("f", "created_at")
+        if topics:
+            fw += " AND f.topics && %(topics)s"
+        if kinds:
+            fw += " AND f.kind = ANY(%(kinds)s)"
+        with self._as(actor, scope) as conn:
+            rows = [("fact", *r) for r in conn.execute(
+                "SELECT f.id, f.username, f.created_at, 1 - (f.embedding <=> %(v)s::vector),"
+                " f.kind, f.summary, f.topics, f.pinned, f.source, f.trust, f.thread_id"
+                f" FROM memory.facts f WHERE {fw}"
+                " ORDER BY f.embedding <=> %(v)s::vector LIMIT %(n)s", p)]
+            if include_episodes and not topics and not kinds:
+                rows += [("episode", *r) for r in conn.execute(
+                    "SELECT e.id, e.username, e.occurred_at, 1 - (e.embedding <=> %(v)s::vector),"
+                    " e.kind, (e.content->>'user') || ' -> ' || (e.content->>'assistant'),"
+                    " '{}'::text[], false, e.channel, e.trust, NULL::uuid"
+                    f" FROM memory.episodes e WHERE {filt('e', 'occurred_at')}"
+                    " ORDER BY e.embedding <=> %(v)s::vector LIMIT %(n)s", p)]
+            rows = sorted(rows, key=lambda r: -float(r[4] or 0))[:limit]
+            seen = [r[1] for r in rows if r[0] == "fact"]
+            if seen:
+                conn.execute("UPDATE memory.facts SET last_accessed = now(),"
+                             " access_count = access_count + 1 WHERE id = ANY(%s)", (seen,))
+        keys = ("type", "id", "username", "at", "sim", "kind", "text", "topics", "pinned",
+                "source", "trust", "thread_id")
+        return [dict(zip(keys, r)) for r in rows]
+
+    def get(self, actor: str, scope: str, object_id) -> dict[str, Any] | None:
+        """A fact with its detail, source exchanges and links; or an episode."""
+        oid = uuid.UUID(str(object_id))
+        with self._as(actor, scope) as conn:
+            f = conn.execute(
+                "SELECT id, username, kind, summary, topics, detail, importance, pinned, trust,"
+                " source, state, thread_id, supersedes, created_at, updated_at, access_count"
+                " FROM memory.facts WHERE id = %s", (oid,)).fetchone()
+            if f:
+                keys = ("id", "username", "kind", "summary", "topics", "detail", "importance",
+                        "pinned", "trust", "source", "state", "thread_id", "supersedes",
+                        "created_at", "updated_at", "access_count")
+                out = {"type": "fact", **dict(zip(keys, f))}
+                # The join through facts/episodes lets RLS hide what the actor can't see.
+                out["sources"] = [dict(zip(("id", "at", "said"), r)) for r in conn.execute(
+                    "SELECT e.id, e.occurred_at, e.content->>'user' FROM memory.fact_sources s"
+                    " JOIN memory.episodes e ON e.id = s.episode_id AND e.occurred_at = s.episode_at"
+                    " WHERE s.fact_id = %s ORDER BY e.occurred_at", (oid,))]
+                out["links"] = [dict(zip(("rel", "id", "summary", "direction"), r)) for r in
+                                conn.execute(
+                    "SELECT l.rel, o.id, o.summary, CASE WHEN l.src = %(i)s THEN 'to' ELSE 'from'"
+                    " END FROM memory.fact_links l JOIN memory.facts o"
+                    " ON o.id = CASE WHEN l.src = %(i)s THEN l.dst ELSE l.src END"
+                    " WHERE l.src = %(i)s OR l.dst = %(i)s", {"i": oid})]
+                return out
+            e = conn.execute("SELECT id, username, occurred_at, channel, trust, kind, content"
+                             " FROM memory.episodes WHERE id = %s", (oid,)).fetchone()
+        if e is None:
+            return None
+        return {"type": "episode", **dict(zip(("id", "username", "at", "channel", "trust", "kind"),
+                                              e[:6])), **{k: v for k, v in e[6].items() if k != "v"}}
+
+    def update_fact(self, actor: str, scope: str, fact_id, *, summary: str | None = None,
+                    topics: list[str] | None = None, importance: float | None = None,
+                    pinned: bool | None = None, detail: dict[str, Any] | None = None,
+                    kind: str | None = None, via: str | None = None) -> uuid.UUID:
+        """Edit a fact in place (re-embedded if the summary changes)."""
+        if kind is not None and kind not in FACT_KINDS:
+            raise StoreError(f"unknown fact kind {kind!r}")
+        vec = None
+        if summary is not None:
+            summary = redact(" ".join(summary.split()))
+            if not 1 <= len(summary) <= 300:
+                raise StoreError("a fact summary must be 1-300 characters")
+            vec = self.embedder.embed([summary], kind="doc")[0]
+        fid = uuid.UUID(str(fact_id))
+        with self._as(actor, scope) as conn:
+            row = conn.execute("SELECT username, source, summary, kind FROM memory.facts"
+                               " WHERE id = %s AND state = 'active' FOR UPDATE", (fid,)).fetchone()
+            if row is None:
+                raise StoreError("no active memory you can see has that id")
+            owner, source, old, old_kind = row
+            if scope != "admin" and owner != actor:
+                raise StoreError("that memory belongs to someone else")
+            if source == "reflection" or old_kind in ("profile", "summary"):
+                raise StoreError("summaries and profile lines are rebuilt from facts:"
+                                 " change or delete those")
+            sets, args, fields = ["updated_at = now()"], [], []
+            for col, val in (("summary", summary), ("embedding", vec), ("topics", topics),
+                             ("importance", importance), ("pinned", pinned), ("kind", kind)):
+                if val is not None:
+                    sets.append(f"{col} = %s")
+                    args.append(val)
+                    fields.append(col)
+            if detail is not None:
+                sets.append("detail = %s")
+                args.append(json.dumps({"v": 1, **detail}))
+                fields.append("detail")
+            conn.execute(f"UPDATE memory.facts SET {', '.join(sets)} WHERE id = %s", (*args, fid))
+            self._add_topics(conn, topics or ())
+            if summary is not None and summary != old:
+                self._drop_derived(conn, fid, owner)
+            self._audit(conn, fid, owner, "fact.update", via or actor,
+                        {"fields": [f for f in fields if f != "embedding"]})
+        return fid
+
+    def forget_thread(self, actor: str, scope: str, thread, *, via: str | None = None,
+                      reason: str | None = None) -> int:
+        """Delete every fact in a thread (a line of thought that led nowhere)."""
+        tid = uuid.UUID(str(thread))
+        own = "" if scope == "admin" else " AND f.username = %s"
+        args = (tid,) if scope == "admin" else (tid, actor)
+        with self._as(actor, scope) as conn:
+            n = self._delete_facts(conn, "f.thread_id = %s" + own, args)
+            if n:
+                self._audit(conn, tid, None if scope == "admin" else actor, "thread.forget",
+                            via or actor, {"facts": n, **({"reason": reason} if reason else {})})
+        if n:
+            self._prune_topics()
+        return n
+
+    def topic_counts(self, actor: str, scope: str, *, owners: list[str] | None = None,
+                     prefix: str = "", limit: int = 100) -> list[tuple[str, int]]:
+        """Topics of the facts the actor can see (never the shared topics table:
+        that would name other people's topics)."""
+        with self._as(actor, scope) as conn:
+            return [tuple(r) for r in conn.execute(
+                "SELECT t, count(*) FROM memory.facts f, unnest(f.topics) t"
+                " WHERE f.state = 'active'"
+                + (" AND f.username = ANY(%(o)s)" if owners else "")
+                + " AND t LIKE %(p)s GROUP BY t ORDER BY count(*) DESC, t LIMIT %(n)s",
+                {"o": owners, "p": prefix.replace("%", r"\%").replace("_", r"\_") + "%",
+                 "n": limit})]
+
     # -- stats -------------------------------------------------------------------
 
     def stats(self) -> dict[str, Any]:
@@ -443,6 +610,13 @@ class PostgresStore:
         return {"episodes": ep, "facts": facts, "db_bytes": size}
 
     # -- internals -----------------------------------------------------------------
+
+    @staticmethod
+    def _add_topics(conn, topics) -> None:
+        for t in topics:
+            conn.execute("INSERT INTO memory.topics (name, use_count) VALUES (%s, 1)"
+                         " ON CONFLICT (name) DO UPDATE SET use_count = memory.topics.use_count + 1",
+                         (t,))
 
     def _prune_topics(self) -> int:
         """Drop topic names no fact uses any more: a forgotten fact's topic

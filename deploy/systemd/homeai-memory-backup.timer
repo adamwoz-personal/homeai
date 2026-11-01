@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly Home AI memory backup
+
+[Timer]
+OnCalendar=*-*-* 03:30
+RandomizedDelaySec=10min
+# Run at the next boot if the machine was off at 03:30.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

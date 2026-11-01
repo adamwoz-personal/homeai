@@ -46,7 +46,7 @@ delegation in the scorecard at the end.
 4. Measure before claiming; repeat measurements; label unverified claims.
 5. Change one thing at a time; keep the baseline in `~/homeai-bench/`.
 
-**Long-term memory (Phases 1-2 built 2026-11-01; `plans/MEMORY_PLAN.md` §15):**
+**Long-term memory (Phases 1-3 built 2026-11-01; `plans/MEMORY_PLAN.md` §15):**
 Postgres `homeai` (socket, peer auth), code in `homeai/memory_store/`, CLI
 `bin/homeai-memory`. Tests create and drop their own `homeai_test_<pid>`
 databases; conftest blocks the real DSN. Postgres lessons from the bench
@@ -71,6 +71,22 @@ in `daemon._handle_memory` before the dismissal check. Lessons:
 - `pg_dump` fails under FORCE RLS: use
   `PGOPTIONS='-c app.scope=admin' pg_dump --enable-row-security`.
 - Shared lookup tables (`memory.topics`) leak forgotten text; prune them.
+
+**Memory Phase 3 (built 2026-11-01): agents use memory via MCP.** Server
+`bin/homeai-memory-mcp` (`memory_store/mcp.py`, role `homeai_mcp`), 8 tools
+`memory_*`. Available to me (Copilot CLI, client `copilot`) and ZeroClaw
+`builder` (bundle `memory-admin`), admin scope as adam; NEVER the voice agent
+(`python3 -m homeai.install.zc_config --check`). Nightly backup + restore check
+(`homeai-memory-backup.timer`). How to use it:
+- Before re-deriving something about Adam, the house or past decisions,
+  `memory_search` first. Record durable household/project facts with
+  `memory_add` (one sentence; topics; `thread` for a line of work). If it
+  returns `similar`, decide: `memory_supersede` the old one or keep both.
+- Don't store secrets, code, or anything cheap to re-read from the repo.
+- Probe after changes: `tools/memory/mcp_probe.py`,
+  `tools/memory/builder_memory_check.sh` (verifies via the audit log).
+- RLS on household rows is visible in person scope, so ownership checks live
+  in the store too, not just in the MCP layer (mutants prove both).
 
 ---
 
