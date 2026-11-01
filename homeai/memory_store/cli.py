@@ -177,6 +177,8 @@ def _run(a, cfg: Config, store, out) -> int:
                              (a.username,))
         print("added" if made else "already exists", file=out)
         return 0
+    if store.person(who) is None and who in cfg.memory.admins:
+        store.ensure_person(who, who.title(), is_admin=True)   # bootstrap a fresh database
     if store.person(who) is None:
         raise StoreError(f"no such person {who!r}")
     scope = _scope(store, who)

@@ -75,14 +75,13 @@ def test_dry_run_needs_no_database(tmp_path):
 
 # -- with a throwaway database ----------------------------------------------------------
 
-@pytest.fixture
-def run(clean_db, tmp_path):
+def make_cli(dsn, tmp_path):
     from homeai.memory_store.embed import HashEmbedder
 
     reg = tmp_path / "s.json"
     reg.write_text(json.dumps({"speakers": {"Adam": {}}}))
     cfg = Config()
-    cfg = replace(cfg, memory=replace(cfg.memory, dsn=clean_db, min_similarity=0.2),
+    cfg = replace(cfg, memory=replace(cfg.memory, dsn=dsn, min_similarity=0.2),
                   speaker=replace(cfg.speaker, registry_path=reg))
 
     def go(*argv):
@@ -90,8 +89,23 @@ def run(clean_db, tmp_path):
         code = cli.main(list(argv), cfg=cfg, embedder=HashEmbedder(), out=out)
         return code, out.getvalue()
 
+    return go
+
+
+@pytest.fixture
+def run(clean_db, tmp_path):
+    go = make_cli(clean_db, tmp_path)
     go("add-person", "adam", "Adam")
     return go
+
+
+def test_cli_bootstraps_configured_admin_on_fresh_db(clean_db, tmp_path, capsys):
+    go = make_cli(clean_db, tmp_path)
+    assert go("stats")[0] == 0
+    code, out = go("people")
+    assert "adam         Adam             is_admin" in out
+    assert go("--as", "ryan", "stats")[0] == 2      # non-admins are never auto-created
+    assert "no such person" in capsys.readouterr().err
 
 
 def test_cli_migrate_people_and_add(run):

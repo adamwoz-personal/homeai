@@ -80,6 +80,8 @@ MUTANTS=(
   "ltm-time-window-ignored|homeai/memory_store/service.py|s/recall.time_window(utterance, now))/None)/|tests/test_memory_service.py -k local_clock"
   "ltm-backfill-unknown-by-default|homeai/memory_store/cli.py|s/        elif include_unknown:/        else:/|tests/test_memory_cli.py -k skips"
   "ltm-daemon-no-listener|homeai/daemon.py|s/            self.transcript.add_listener(self.ltm.on_turn)/            pass/|tests/test_memory_config.py -k wires"
+  "ltm-cli-no-admin-bootstrap|homeai/memory_store/cli.py|s/    if store.person(who) is None and who in cfg.memory.admins:/    if False:/|tests/test_memory_cli.py -k bootstraps"
+  "ltm-cli-bootstraps-anyone|homeai/memory_store/cli.py|s/    if store.person(who) is None and who in cfg.memory.admins:/    if store.person(who) is None:/|tests/test_memory_cli.py -k bootstraps"
   "ltm-generic-plans|homeai/memory_store/db.py|s/SET plan_cache_mode = force_custom_plan/SET plan_cache_mode = auto/|tests/test_memory_db.py -k plan_for_hnsw"
   "ltm-no-iterative-scan|homeai/memory_store/db.py|s/SET hnsw.iterative_scan = relaxed_order/SET hnsw.iterative_scan = off/|tests/test_memory_db.py -k plan_for_hnsw"
   "ltm-episode-order-not-indexable|homeai/memory_store/recall.py|s/  ORDER BY e.embedding <=> %(v)s::vector LIMIT/  ORDER BY 1 - (e.embedding <=> %(v)s::vector) DESC LIMIT/|tests/test_memory_db.py -k vector_indexes"
