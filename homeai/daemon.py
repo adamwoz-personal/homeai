@@ -106,9 +106,12 @@ class VoiceAssistant:
         self.mic = Microphone(self.cfg.audio)
         self.stt = Transcriber(self.cfg.stt)
         self.tts = Speaker(self.cfg.tts, self.cfg.audio.output_device)
+        # Long-term memory (plans/MEMORY_PLAN.md). Optional: if Postgres or the
+        # extra packages are missing, Jarvis works exactly as before.
+        self.ltm = self._build_ltm()
         # Continuity between turns. Bounded and self-expiring; see memory.py
         # for why this does not reintroduce session poisoning.
-        self.memory = ConversationMemory()
+        self.memory = ConversationMemory(long_term=self.ltm.recall if self.ltm else None)
         self.agent = build_agent_client(self.cfg.agent, memory=self.memory)
         # Who is speaking; None when turned off or the model failed to load.
         self.voice_id = vid.VoiceId(self.cfg.speaker) if self.cfg.speaker.enabled else None
@@ -122,6 +125,8 @@ class VoiceAssistant:
         self.transcript = TranscriptLog(
             self.cfg.transcript.path, enabled=self.cfg.transcript.enabled
         )
+        if self.ltm is not None:
+            self.transcript.add_listener(self.ltm.on_turn)
         self.machine = CaptureMachine(self.cfg.wake)
 
         self._detector = None
@@ -887,12 +892,25 @@ class VoiceAssistant:
         else:
             log.warning("agent warm-up failed after %.1fs: %s", elapsed, reply.error)
 
+    def _build_ltm(self):
+        if not self.cfg.memory.enabled:
+            return None
+        try:
+            from .memory_store.service import MemoryService
+
+            return MemoryService(self.cfg.memory).start()
+        except Exception as exc:  # noqa: BLE001 - optional feature
+            log.warning("long-term memory disabled: %s", exc)
+            return None
+
     def stop(self) -> None:
         log.info("shutting down")
         self._stop.set()
         for thread in self._threads:
             thread.join(timeout=3)
         self.mic.stop()
+        if self.ltm is not None:
+            self.ltm.close()
 
     def run_forever(self) -> int:
         if not self.start():

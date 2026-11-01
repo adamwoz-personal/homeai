@@ -193,6 +193,36 @@ Voices are stored in `~/.config/homeai/speakers.json` (mode 600). The model
 is `vendor/speaker/wespeaker_en_voxceleb_resnet34_LM.onnx` (SHA256-checked,
 ~40 ms per utterance on the CPU).
 
+## Long-term memory (what Jarvis remembers about you)
+
+This is separate from ZeroClaw's memory below. Jarvis keeps each exchange with
+a **recognised** speaker in Postgres (`homeai` database), and adds relevant
+memories to its prompt before answering. It never records home commands,
+closings, unknown speakers, or test voices (`HOMEAI_LTM_IGNORE_SPEAKERS`,
+default `ryan,amy,joe,alba,hfc`). Secrets such as card numbers, API keys,
+and SSNs are redacted before storage.
+
+```bash
+bin/homeai-memory stats                     # counts, newest, size
+bin/homeai-memory list -n 10                # recent episodes (yours; --owner X as admin)
+bin/homeai-memory search "the snake"        # what recall would find
+bin/homeai-memory note "Allergic to cats" --profile   # always remembered (--pin, --for NAME)
+bin/homeai-memory forget episode 42         # delete one (audit keeps no text)
+bin/homeai-memory export > me.json
+bin/homeai-memory add-person sue [--child]  # name must match the enrolled speaker
+bin/homeai-memory backfill --dry-run        # import past transcript turns
+```
+
+- Off switch: `HOMEAI_LTM=0` in `.env`, then restart. Other settings:
+  `HOMEAI_LTM_DSN`, `HOMEAI_LTM_MIN_SIMILARITY` (0.60),
+  `HOMEAI_LTM_RECALL_TIMEOUT_MS` (150), `HOMEAI_LTM_BUDGET_TOKENS` (600).
+- If Postgres is down, Jarvis answers without memories, logs one warning
+  every 10 minutes, and reconnects on its own.
+- Log line on start: `long-term memory ready`.
+- Speed check (scratch database, ~4 min): `.venv/bin/python tools/memory/recall_bench.py`.
+- One-time setup already done: Postgres 18 + pgvector, `adam` has
+  CREATEROLE/CREATEDB, and `vector` is in `template1`.
+
 ## What ZeroClaw remembers (privacy)
 
 ZeroClaw saves every request to every agent, including speech Jarvis

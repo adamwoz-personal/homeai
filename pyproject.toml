@@ -24,6 +24,12 @@ avatar = ["pygame-ce>=2.5.8", "moderngl>=5.13"]
 # Offline avatar asset pipeline; onnx is only for patching the Piper voice
 # with phoneme alignments at install time.
 avatar-build = ["mediapipe>=1.1", "opencv-python-headless>=5.0", "scipy>=1.18", "onnx"]
+# Long-term memory (plans/MEMORY_PLAN.md): PostgreSQL 16+ with pgvector, and
+# a small ONNX embedding model fetched by tools/memory/embed_bench.py --download.
+memory = ["psycopg[binary,pool]>=3.2", "pgvector>=0.3", "tokenizers>=0.20", "huggingface_hub>=0.25"]
+
+[tool.setuptools.package-data]
+"homeai.memory_store" = ["migrations/*.sql"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

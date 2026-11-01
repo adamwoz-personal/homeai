@@ -262,3 +262,37 @@ def test_clear_forgets_speakers_too():
     m.add("q", "a")
     m.clear()
     assert m.speaker is None and m.build_request("hi") == "hi"
+
+
+# -- long-term recall hook (plans/MEMORY_PLAN.md) ---------------------------------
+
+def test_long_term_block_goes_after_the_name_and_before_the_window():
+    calls = []
+
+    def recall(name, utterance):
+        calls.append((name, utterance))
+        return "REMEMBERED\n\n"
+
+    m = ConversationMemory(long_term=recall)
+    m.switch_speaker("Adam")
+    m.add("q", "a")
+    req = m.build_request("what snake")
+    assert calls == [("Adam", "what snake")]
+    assert req.index("recognised by voice") < req.index("REMEMBERED") < req.index("User: q")
+    assert req.endswith("User: what snake")
+
+
+def test_long_term_not_asked_without_a_recognised_speaker():
+    recall = Mock(return_value="REMEMBERED")
+    m = ConversationMemory(long_term=recall)
+    assert m.build_request("what snake") == "what snake"
+    recall.assert_not_called()
+
+
+def test_long_term_failure_costs_nothing():
+    m = ConversationMemory(long_term=Mock(side_effect=RuntimeError("db down")))
+    m.switch_speaker("Adam")
+    assert m.build_request("hi there").endswith("hi there")
+    m2 = ConversationMemory(long_term=Mock(return_value=None))
+    m2.switch_speaker("Adam")
+    assert "None" not in m2.build_request("hi there")

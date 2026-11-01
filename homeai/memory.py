@@ -39,11 +39,14 @@ request, so there is no session state to corrupt.
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from dataclasses import dataclass
 
 from .safety import detect_leaked_markup
+
+log = logging.getLogger(__name__)
 
 # Defaults chosen for a voice assistant rather than a chat window.
 #
@@ -88,12 +91,15 @@ class ConversationMemory:
         idle_expiry_s: float = DEFAULT_IDLE_EXPIRY_S,
         entry_chars: int = DEFAULT_ENTRY_CHARS,
         clock=time.monotonic,
+        long_term=None,
     ) -> None:
         self._max_turns = max(0, max_turns)
         self._max_chars = max(0, max_chars)
         self._idle_expiry_s = idle_expiry_s
         self._entry_chars = max(0, entry_chars)
         self._clock = clock
+        # ``long_term(speaker, utterance) -> str``: recalled memories, or "".
+        self._long_term = long_term
         self._entries: list[Exchange] = []
         # Speaker recognition: whose window ``_entries`` is, who was named on
         # the current turn, and other people's windows set aside meanwhile.
@@ -221,9 +227,20 @@ class ConversationMemory:
             named = self._named
         prefix = (f"(The person speaking is {named}, recognised by voice. Use the name "
                   f"naturally and only now and then.)\n\n") if named else ""
+        prefix += self._recall(named, utterance)
         if not context:
             return f"{prefix}{utterance}"
         return f"{prefix}{context}User: {utterance}"
+
+    def _recall(self, named: str | None, utterance: str) -> str:
+        """Long-term memories for a recognised speaker; "" on any problem."""
+        if self._long_term is None or not named:
+            return ""
+        try:
+            return self._long_term(named, utterance) or ""
+        except Exception:  # noqa: BLE001 - recall must never cost a reply
+            log.exception("long-term recall failed")
+            return ""
 
     # -- internals ---------------------------------------------------------
 

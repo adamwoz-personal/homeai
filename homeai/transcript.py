@@ -67,6 +67,9 @@ class TranscriptLog:
         self._enabled = enabled
         self._lock = threading.Lock()
         self._warned = False
+        # Called with every turn, logged or not (long-term memory). A listener
+        # that raises is reported and skipped; it never stops the write.
+        self._listeners: list = []
 
         if self._enabled:
             try:
@@ -90,7 +93,15 @@ class TranscriptLog:
     def enabled(self) -> bool:
         return self._enabled
 
+    def add_listener(self, fn) -> None:
+        self._listeners.append(fn)
+
     def write(self, turn: Turn) -> None:
+        for fn in self._listeners:
+            try:
+                fn(turn)
+            except Exception:  # noqa: BLE001 - a listener must never break logging
+                log.exception("transcript listener failed")
         if not self._enabled:
             return
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import pytest
 
+from tests.memory_db import clean_db, mem_store, pg_dsn  # noqa: F401 - shared fixtures
 
 @pytest.fixture(autouse=True)
 def _isolated_home(tmp_path, monkeypatch):
@@ -20,4 +21,8 @@ def _isolated_home(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "run"))
     monkeypatch.delenv("HA_TOKEN", raising=False)
     monkeypatch.delenv("HA_URL", raising=False)
+    # Long-term memory: off, and pointed nowhere, unless a test opts in with
+    # its own throwaway database (tests/memory_db.py). Never the real one.
+    monkeypatch.setenv("HOMEAI_LTM", "0")
+    monkeypatch.setenv("HOMEAI_LTM_DSN", "dbname=homeai_tests_must_not_use_this")
     (tmp_path / "run").mkdir(exist_ok=True)

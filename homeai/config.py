@@ -326,6 +326,35 @@ class HomeConfig:
 
 
 @dataclass(frozen=True)
+class MemoryConfig:
+    """Long-term memory in PostgreSQL (plans/MEMORY_PLAN.md).
+
+    Never a hard dependency: if the database is down or slow, Jarvis answers
+    without memories. HOMEAI_LTM=0 turns it off entirely.
+    """
+
+    enabled: bool = field(default_factory=lambda: _env_bool("HOMEAI_LTM", True))
+    # libpq connection string; the default is the local Unix socket, peer auth.
+    dsn: str = field(default_factory=lambda: _env_str("HOMEAI_LTM_DSN", "dbname=homeai"))
+    embed_model: str = field(default_factory=lambda: _env_str("HOMEAI_LTM_EMBED", ""))
+    # Recall must never slow a reply noticeably (plan budget: p95 < 40 ms).
+    recall_timeout_ms: int = field(default_factory=lambda: _env_int("HOMEAI_LTM_TIMEOUT_MS", 150))
+    # Injected memory text, in tokens (about 4 characters each).
+    budget_tokens: int = field(default_factory=lambda: _env_int("HOMEAI_LTM_BUDGET", 600))
+    # Cosine similarity below which a memory is not worth mentioning.
+    # tools/memory/sim_floor.py (nomic, 2026-11-01): 0.60 keeps 92% of
+    # relevant memories; recall also drops anything 0.10 below the best hit.
+    min_similarity: float = field(default_factory=lambda: _env_float("HOMEAI_LTM_MIN_SIM", 0.60))
+    # People who may see and delete everyone's memories (plan §13).
+    admins: tuple[str, ...] = field(default_factory=lambda: tuple(
+        s.strip().lower() for s in _env_str("HOMEAI_LTM_ADMINS", "adam").split(",") if s.strip()))
+    # Piper voices used by tools/say_to_jarvis.sh: never remembered as people.
+    ignore_speakers: tuple[str, ...] = field(default_factory=lambda: tuple(
+        s.strip().lower() for s in
+        _env_str("HOMEAI_LTM_IGNORE_SPEAKERS", "ryan,amy,joe,alba,hfc").split(",") if s.strip()))
+
+
+@dataclass(frozen=True)
 class Config:
     audio: AudioConfig = field(default_factory=AudioConfig)
     stt: SttConfig = field(default_factory=SttConfig)
@@ -335,6 +364,7 @@ class Config:
     transcript: TranscriptConfig = field(default_factory=TranscriptConfig)
     speaker: SpeakerConfig = field(default_factory=SpeakerConfig)
     home: HomeConfig = field(default_factory=HomeConfig)
+    memory: MemoryConfig = field(default_factory=MemoryConfig)
 
     def validation_errors(self) -> list[str]:
         """Return human-readable problems. Empty list means good to start.

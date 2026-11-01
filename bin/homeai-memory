@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Long-term memory admin: migrate, people, list, search, note, forget,
+# export, stats, backfill. See homeai/memory_store/cli.py and docs/RUNBOOK.md.
+set -euo pipefail
+cd "$(dirname "$(readlink -f "$0")")/.."
+exec .venv/bin/python -m homeai.memory_store.cli "$@"

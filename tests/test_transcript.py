@@ -198,3 +198,27 @@ def test_speaker_fields_written_when_speaker_id_ran(tmp_path: Path) -> None:
     assert (a["speaker"], a["speaker_score"], a["timings_ms"]["speaker"]) == ("Adam", 0.623, 41)
     assert b["speaker"] is None and b["speaker_score"] == 0.21
     assert "speaker" not in c and "speaker" not in c["timings_ms"]
+
+
+def test_listeners_see_every_turn_even_when_logging_is_off(tmp_path: Path) -> None:
+    seen = []
+    for enabled in (True, False):
+        log = TranscriptLog(str(tmp_path / f"t{enabled}.jsonl"), enabled=enabled)
+        log.add_listener(seen.append)
+        log.write(Turn(heard=f"x{enabled}"))
+    assert [t.heard for t in seen] == ["xTrue", "xFalse"]
+
+
+def test_a_failing_listener_does_not_stop_the_write(tmp_path: Path) -> None:
+    path = tmp_path / "t.jsonl"
+    log = TranscriptLog(str(path))
+    seen = []
+
+    def boom(turn):
+        raise RuntimeError("listener broke")
+
+    log.add_listener(boom)
+    log.add_listener(seen.append)
+    log.write(Turn(heard="still logged"))
+    assert json.loads(path.read_text())["heard"] == "still logged"
+    assert [t.heard for t in seen] == ["still logged"]

@@ -46,6 +46,18 @@ delegation in the scorecard at the end.
 4. Measure before claiming; repeat measurements; label unverified claims.
 5. Change one thing at a time; keep the baseline in `~/homeai-bench/`.
 
+**Long-term memory (Phase 1 built 2026-11-01; `plans/MEMORY_PLAN.md` §15):**
+Postgres `homeai` (socket, peer auth), code in `homeai/memory_store/`, CLI
+`bin/homeai-memory`. Tests create and drop their own `homeai_test_<pid>`
+databases; conftest blocks the real DSN. Postgres lessons from the bench
+(`tools/memory/recall_bench.py`):
+- Never put the query vector in a CTE or join: HNSW needs
+  `ORDER BY col <=> constant`. The CTE version brute-forced every row (165 ms).
+- psycopg auto-prepares after 5 runs, and generic plans lose HNSW (16 → 72 ms).
+  The pool sets `plan_cache_mode = force_custom_plan`.
+- Under RLS, non-leakproof operators (`@@`) can't be index conditions, so FTS
+  filters via the username B-tree. Fine to 100k episodes (p95 38 ms).
+
 ---
 
 ## The hard limits of ZeroClaw on this host (2026-09; see "Read first")
