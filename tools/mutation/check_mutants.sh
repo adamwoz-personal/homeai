@@ -172,6 +172,8 @@ MUTANTS=(
   "ltm-p4-embedder-eager|homeai/memory_store/cli.py|s/        if self._e is None:/        if True:/|tests/test_memory_cli.py -k embedding_model"
   "ltm-p4-health-not-admin|homeai/memory_store/cli.py|s/            raise StoreError(f\"only an admin can run {a.cmd}\")/            pass/|tests/test_memory_cli.py -k health_and_maintain"
   "ltm-p4-rederive-others|homeai/memory_store/cli.py|s/    if person != who and scope != .admin.:/    if False:/|tests/test_memory_cli.py -k cli_rederive"
+  "av0-tts-gain-exclusive|tools/avatar/tts_latency_bench.py|s/if gain < REQUIRED_GAIN_MS:/if gain <= REQUIRED_GAIN_MS:/|tests/test_avatar_spikes.py"
+  "av0-tts-length-unchecked|tools/avatar/tts_latency_bench.py|s/if ratio > tolerance:/if False:/|tests/test_avatar_spikes.py"
   "wake-numpy-score|homeai/wake.py|s/self.last_score = float(max(scores.values(), default=0.0))/self.last_score = max(scores.values(), default=0.0)/|tests/test_wake.py -k last_score"
   "verify-skipped|homeai/daemon.py|s/            if not mentions_wake_word(transcript.text, self.cfg.wake.model):/            if False:/|tests/test_daemon.py -k wake"
   "verify-no-strip|homeai/daemon.py|s/text=strip_wake_phrase(transcript.text, self.cfg.wake.model))/text=transcript.text)/|tests/test_daemon.py -k verified_wake"
