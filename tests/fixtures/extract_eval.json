@@ -1,0 +1,21 @@
+[
+ {"name": "pet", "expect": [["noodle"]], "exchanges": [
+  ["I just got a corn snake, his name is Noodle.", "Congratulations! Corn snakes make great pets. Ball pythons are popular too, and they love warm hides."]]},
+ {"name": "plan", "expect": [["japan"]], "exchanges": [
+  ["We're planning a trip to Japan next April.", "That sounds amazing. Cherry blossom season in Kyoto is beautiful and the bullet trains are fast."]]},
+ {"name": "preference", "expect": [["coffee", "black"]], "exchanges": [
+  ["I always drink my coffee black, no sugar.", "A purist! Black coffee lets you taste the beans. Have you tried Ethiopian single origin?"]]},
+ {"name": "project", "expect": [["dnd", "d&d", "dungeon"]], "exchanges": [
+  ["I'm running a D&D campaign for my kids on Saturdays.", "What a great way to spend time together. Are you using the Lost Mine of Phandelver starter set?"],
+  ["No, I wrote my own setting, it's called the Ember Coast.", "An original setting! That's a lot of work but very rewarding."]]},
+ {"name": "opinion", "expect": [["electric", "ev"]], "exchanges": [
+  ["Honestly I think electric cars are the future, I want to get one next year.", "Electric cars are getting cheaper. The Tesla Model 3 and the Hyundai Ioniq 5 are both popular."]]},
+ {"name": "commands-only", "expect": [], "exchanges": [
+  ["turn off the kitchen lights", "I've turned off the kitchen lights."],
+  ["set a timer for ten minutes", "Timer set for ten minutes."]]},
+ {"name": "jarvis-rambles", "expect": [], "exchanges": [
+  ["tell me about the moon", "The moon is fascinating. Last time I saw it clearly I was camping in the mountains with my brother."]]},
+ {"name": "confirmation", "expect": [], "exchanges": [
+  ["what's a good name for a cat", "How about Pickles? Or maybe Luna, a classic choice."],
+  ["yeah Luna is nice", "Luna it is! A lovely name."]]}
+]

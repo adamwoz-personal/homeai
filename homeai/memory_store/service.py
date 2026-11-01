@@ -22,27 +22,41 @@ from datetime import datetime, timezone
 from typing import Callable
 
 from ..config import MemoryConfig
-from . import policy, recall
+from . import commands, policy, recall
+from .spoken import MSG_BROKEN
 from .store import Episode
 
 log = logging.getLogger(__name__)
 
+MSG_NOT_READY = "Sorry, my long-term memory isn't available right now."
+
 QUEUE_MAX = 200
 WARN_EVERY_S = 600.0
+WORKER_POLL_S = 30.0
+QUIET_S = 60.0          # background jobs wait for this long a pause in talk
 
 
 class MemoryService:
     def __init__(self, cfg: MemoryConfig, *, store_factory: Callable | None = None,
-                 clock: Callable[[], datetime] | None = None) -> None:
+                 helper_factory: Callable | None = None,
+                 clock: Callable[[], datetime] | None = None,
+                 monotonic: Callable[[], float] = time.monotonic) -> None:
         self.cfg = cfg
         self._store_factory = store_factory or self._default_store
+        self._helper_factory = helper_factory or self._default_helper
         self._now = clock or (lambda: datetime.now().astimezone())
+        self._mono = monotonic
         self.store = None
+        self.worker = None
+        self.spoken = None
         self._ready = threading.Event()
         self._stop = threading.Event()
+        self._wake = threading.Event()
         self._q: queue.Queue = queue.Queue(maxsize=QUEUE_MAX)
         self._warned: dict[str, float] = {}
         self._thread: threading.Thread | None = None
+        self._worker_thread: threading.Thread | None = None
+        self._last_turn = -QUIET_S
         self.last_recall_ms = 0.0
 
     # -- lifecycle ---------------------------------------------------------------
@@ -64,12 +78,17 @@ class MemoryService:
         if self._ready.is_set():
             self.flush(timeout)
         self._stop.set()
+        self._wake.set()
         try:
             self._q.put_nowait(None)
         except queue.Full:
             pass
         if self._thread:
             self._thread.join(timeout)
+        if self._worker_thread:
+            # A helper call can take minutes; the thread is a daemon and its
+            # job is recovered on the next start.
+            self._worker_thread.join(min(timeout, 1.0))
         if self.store is not None:
             try:
                 self.store.db.close()
@@ -90,10 +109,17 @@ class MemoryService:
             raise
         return PostgresStore(db, OnnxEmbedder(self.cfg.embed_model or DEFAULT_MODEL, threads=2))
 
+    def _default_helper(self):
+        from .helper import OllamaHelper
+
+        return OllamaHelper(self.cfg.helper_url, self.cfg.helper_model,
+                            threads=self.cfg.helper_threads)
+
     # -- recording -----------------------------------------------------------------
 
     def on_turn(self, turn) -> None:
         """TranscriptLog listener. Cheap checks here, the work in the thread."""
+        self._last_turn = self._mono()
         d = policy.should_record(heard=turn.heard, reply=turn.reply, verdict=turn.verdict,
                                  speaker=turn.speaker, ok=turn.ok,
                                  ignore_speakers=self.cfg.ignore_speakers)
@@ -118,8 +144,25 @@ class MemoryService:
                 self._warn("connect", "long-term memory unavailable (%s); retrying in 60 s", exc)
                 if self._stop.wait(60):
                     return
+        from .spoken import SpokenCommands
+
+        self.spoken = SpokenCommands(self.store, min_similarity=self.cfg.min_similarity,
+                                     flush=self.flush, clock=self._now, monotonic=self._mono)
+        if self.cfg.extract:
+            try:
+                from .worker import Worker
+
+                self.worker = Worker(self.store, self._helper_factory(),
+                                     batch=self.cfg.extract_batch,
+                                     reflect_delay_s=self.cfg.reflect_delay_s, clock=self._now)
+                self._worker_thread = threading.Thread(target=self._work, name="ltm-worker",
+                                                       daemon=True)
+                self._worker_thread.start()
+            except Exception as exc:  # noqa: BLE001 - recall and recording still work
+                self._warn("worker", "memory extraction disabled: %s", exc)
+                self.worker = None
         self._ready.set()
-        log.info("long-term memory ready")
+        log.info("long-term memory ready%s", "" if self.worker else " (no extraction)")
         while True:
             item = self._q.get()
             try:
@@ -144,12 +187,72 @@ class MemoryService:
             _, ep, display = item
             self.store.ensure_person(ep.username, display, voice_handle=display,
                                      is_admin=ep.username in self.cfg.admins)
-            self.store.add_episode(ep)
+            if self.store.add_episode(ep) is not None and self.worker is not None:
+                self._queue_extract(ep.username)
         elif kind == "touch":
             _, username, ids = item
             with self.store.db.scoped(username, "person") as conn:
                 conn.execute("UPDATE memory.facts SET last_accessed = now(),"
                              " access_count = access_count + 1 WHERE id = ANY(%s)", (ids,))
+
+    # -- background jobs -------------------------------------------------------------
+
+    def _queue_extract(self, username: str) -> None:
+        """Extract once the person has gone quiet, or now if a batch is full."""
+        from . import jobs
+        from .worker import extract_key
+
+        key = extract_key(username)
+        with self.store.db.scoped(None, "admin") as conn:
+            jobs.enqueue(conn, "extract", {"username": username}, key=key,
+                         delay_s=self.cfg.extract_idle_s)
+            if self.store.count_unextracted(username) >= self.cfg.extract_batch:
+                jobs.run_now(conn, key)
+
+    def quiet(self) -> bool:
+        """Nobody has spoken to Jarvis for QUIET_S: the CPU is free for jobs."""
+        return self._mono() - self._last_turn >= QUIET_S
+
+    def _work(self) -> None:
+        try:
+            n = self.worker.recover()
+            if n:
+                log.info("memory: requeued %d interrupted jobs", n)
+        except Exception as exc:  # noqa: BLE001
+            self._warn("worker", "memory job recovery failed: %s", exc)
+        while not self._stop.is_set():
+            self.work_once()
+            self._wake.wait(WORKER_POLL_S)
+            self._wake.clear()
+
+    def work_once(self) -> int:
+        """Run due jobs while it stays quiet. Returns how many ran."""
+        n = 0
+        while not self._stop.is_set() and self.quiet():
+            try:
+                if not self.worker.step():
+                    break
+            except Exception as exc:  # noqa: BLE001 - e.g. the database went away
+                self._warn("job", "memory job loop failed: %s", exc)
+                break
+            n += 1
+        return n
+
+    # -- spoken commands -------------------------------------------------------------
+
+    def handle_command(self, speaker: str | None, utterance: str) -> tuple[str, bool] | None:
+        """(reply, listen) for a memory command, else None. Never raises."""
+        text = policy.clean_heard(utterance)
+        if not self._ready.is_set() or self.spoken is None:
+            return (MSG_NOT_READY, False) if commands.parse(text) else None
+        username = policy.username_for(speaker)
+        if username in self.cfg.ignore_speakers:
+            username = None
+        try:
+            return self.spoken.handle(username, speaker, text)
+        except Exception as exc:  # noqa: BLE001
+            self._warn("command", "memory command failed: %s", exc)
+            return (MSG_BROKEN, False) if commands.parse(text) else None
 
     # -- recall ------------------------------------------------------------------------
 

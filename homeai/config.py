@@ -352,6 +352,20 @@ class MemoryConfig:
     ignore_speakers: tuple[str, ...] = field(default_factory=lambda: tuple(
         s.strip().lower() for s in
         _env_str("HOMEAI_LTM_IGNORE_SPEAKERS", "ryan,amy,joe,alba,hfc").split(",") if s.strip()))
+    # Phase 2: a small CPU model turns conversations into facts while Jarvis is idle.
+    extract: bool = field(default_factory=lambda: _env_bool("HOMEAI_LTM_EXTRACT", True))
+    helper_url: str = field(default_factory=lambda: _env_str("HOMEAI_LTM_HELPER_URL",
+                                                             "http://127.0.0.1:11434"))
+    helper_model: str = field(default_factory=lambda: _env_str(
+        "HOMEAI_LTM_HELPER_MODEL", "qwen3:4b-instruct-2507-q4_K_M"))
+    # CPU threads for the helper; whisper and the voice model keep the rest.
+    helper_threads: int = field(default_factory=lambda: _env_int("HOMEAI_LTM_HELPER_THREADS", 6))
+    # Extract once nobody has spoken for this long (a "session" ended) ...
+    extract_idle_s: int = field(default_factory=lambda: _env_int("HOMEAI_LTM_EXTRACT_IDLE_S", 600))
+    # ... or at once when this many exchanges are waiting.
+    extract_batch: int = field(default_factory=lambda: _env_int("HOMEAI_LTM_EXTRACT_BATCH", 20))
+    # Rebuild a profile this long after its facts last changed.
+    reflect_delay_s: int = field(default_factory=lambda: _env_int("HOMEAI_LTM_REFLECT_DELAY_S", 1800))
 
 
 @dataclass(frozen=True)

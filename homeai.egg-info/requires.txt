@@ -2,6 +2,17 @@ numpy
 requests
 sounddevice
 onnxruntime
+websockets
+
+[avatar]
+pygame-ce>=2.5.8
+moderngl>=5.13
+
+[avatar-build]
+mediapipe>=1.1
+opencv-python-headless>=5.0
+scipy>=1.18
+onnx
 
 [dev]
 pytest

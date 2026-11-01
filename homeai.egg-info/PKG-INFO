@@ -103,12 +103,21 @@ Requires-Dist: numpy
 Requires-Dist: requests
 Requires-Dist: sounddevice
 Requires-Dist: onnxruntime
+Requires-Dist: websockets
 Provides-Extra: voice
 Requires-Dist: openwakeword>=0.4; extra == "voice"
 Requires-Dist: piper-tts>=1.8; extra == "voice"
 Provides-Extra: dev
 Requires-Dist: pytest; extra == "dev"
 Requires-Dist: pytest-cov; extra == "dev"
+Provides-Extra: avatar
+Requires-Dist: pygame-ce>=2.5.8; extra == "avatar"
+Requires-Dist: moderngl>=5.13; extra == "avatar"
+Provides-Extra: avatar-build
+Requires-Dist: mediapipe>=1.1; extra == "avatar-build"
+Requires-Dist: opencv-python-headless>=5.0; extra == "avatar-build"
+Requires-Dist: scipy>=1.18; extra == "avatar-build"
+Requires-Dist: onnx; extra == "avatar-build"
 Dynamic: license-file
 
 # Home AI Voice Assistant
@@ -156,10 +165,16 @@ refuses with an explanation if the machine is not powerful enough:
 ```bash
 ./install.sh --dry-run   # assess and show the plan, change nothing
 ./install.sh --sudo      # install (sudo is only for the Ollama VRAM guard)
+./install.sh --home-assistant   # also set up Home Assistant (optional; see docs/RUNBOOK.md)
 ```
 
 See [docs/RUNBOOK.md](docs/RUNBOOK.md) for requirements, operation and
 troubleshooting.
+
+Home control (lights, Alexa timers, announcements, music) is optional and
+needs a Home Assistant instance. The installer checks it if
+`~/.config/homeai/ha.env` exists; see "Home control" in the runbook. Test the
+connection any time with `.venv/bin/python -m homeai.ha_client --check`.
 
 Manual setup of the Python environment only:
 ```bash

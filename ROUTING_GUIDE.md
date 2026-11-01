@@ -46,7 +46,7 @@ delegation in the scorecard at the end.
 4. Measure before claiming; repeat measurements; label unverified claims.
 5. Change one thing at a time; keep the baseline in `~/homeai-bench/`.
 
-**Long-term memory (Phase 1 built 2026-11-01; `plans/MEMORY_PLAN.md` §15):**
+**Long-term memory (Phases 1-2 built 2026-11-01; `plans/MEMORY_PLAN.md` §15):**
 Postgres `homeai` (socket, peer auth), code in `homeai/memory_store/`, CLI
 `bin/homeai-memory`. Tests create and drop their own `homeai_test_<pid>`
 databases; conftest blocks the real DSN. Postgres lessons from the bench
@@ -57,6 +57,20 @@ databases; conftest blocks the real DSN. Postgres lessons from the bench
   The pool sets `plan_cache_mode = force_custom_plan`.
 - Under RLS, non-leakproof operators (`@@`) can't be index conditions, so FTS
   filters via the username B-tree. Fine to 100k episodes (p95 38 ms).
+
+**Memory Phase 2 (built 2026-11-01):** CPU helper (`qwen3:4b-instruct` in Ollama,
+`num_gpu 0`) draws notes in a background worker (`memory_store/worker.py`,
+queue in `memory.jobs`); spoken commands in `memory_store/spoken.py`, hooked
+in `daemon._handle_memory` before the dismissal check. Lessons:
+- The 4B helper ignores "never note what only Jarvis said": 0 of 5 real
+  notes were true. A deterministic filter (`extract.borrowed`: drop a note
+  using any word only Jarvis used) fixed it. Don't trust prompt rules alone.
+- A BEFORE DELETE trigger that deletes other rows breaks a multi-row DELETE
+  that also targets those rows ("tuple already modified"). Use
+  `store._delete_facts` (top-down) for any multi-fact delete.
+- `pg_dump` fails under FORCE RLS: use
+  `PGOPTIONS='-c app.scope=admin' pg_dump --enable-row-security`.
+- Shared lookup tables (`memory.topics`) leak forgotten text; prune them.
 
 ---
 

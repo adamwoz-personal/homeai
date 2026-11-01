@@ -18,7 +18,8 @@ from homeai.memory_store.service import MemoryService
 from homeai.transcript import Turn
 
 CFG = MemoryConfig(enabled=True, dsn="unused", recall_timeout_ms=2000, budget_tokens=600,
-                   min_similarity=0.3, ignore_speakers=("ryan",), admins=("adam",))
+                   min_similarity=0.3, ignore_speakers=("ryan",), admins=("adam",),
+                   extract=False, helper_url="http://127.0.0.1:9")
 
 
 def turn(**kw):

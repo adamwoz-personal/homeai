@@ -211,11 +211,48 @@ bin/homeai-memory forget episode 42         # delete one (audit keeps no text)
 bin/homeai-memory export > me.json
 bin/homeai-memory add-person sue [--child]  # name must match the enrolled speaker
 bin/homeai-memory backfill --dry-run        # import past transcript turns
+bin/homeai-memory facts [--kind preference] # notes drawn from conversations
+bin/homeai-memory profile                   # the short profile built from them
+bin/homeai-memory extract [--all]           # draw notes now (admin; normally automatic)
+bin/homeai-memory reflect                   # rebuild your profile now
+bin/homeai-memory jobs                      # background queue (admin)
 ```
 
+**Notes and profile (automatic).** About 10 minutes after a conversation
+goes quiet, a small CPU model (`qwen3:4b-instruct` in Ollama, never the GPU)
+reads the new exchanges and keeps a few notes: facts, preferences, plans,
+opinions. It never keeps commands or anything Jarvis said that you didn't
+(a note using a word only Jarvis used is thrown away). Similar notes are
+merged; corrections replace the old note. Half an hour later a short profile
+is rebuilt from the notes. Children get no opinion/thought notes. Quality
+check on real and made-up conversations:
+`.venv/bin/python tools/memory/extract_eval.py [--fixture]` (writes a review
+sheet in `~/homeai-bench/`).
+
+**Say it to Jarvis** (recognised voices only):
+
+| Say | Does |
+|---|---|
+| "remember that I'm allergic to cats" / "always remember …" | keeps it (always: pinned) |
+| "what do you remember about me" / "… about the snake" | lists up to 5 |
+| "that's wrong, it's Noodle" (right after a list) | corrects the closest one |
+| "forget that" | deletes the last exchange (no question asked) |
+| "forget what I said about the snake" / "forget everything about me" | asks first, then deletes |
+| "stop remembering" / "start remembering" | pauses / resumes for you |
+
 - Off switch: `HOMEAI_LTM=0` in `.env`, then restart. Other settings:
-  `HOMEAI_LTM_DSN`, `HOMEAI_LTM_MIN_SIMILARITY` (0.60),
-  `HOMEAI_LTM_RECALL_TIMEOUT_MS` (150), `HOMEAI_LTM_BUDGET_TOKENS` (600).
+  `HOMEAI_LTM_DSN`, `HOMEAI_LTM_MIN_SIM` (0.60),
+  `HOMEAI_LTM_TIMEOUT_MS` (150), `HOMEAI_LTM_BUDGET` (600 tokens).
+  Notes: `HOMEAI_LTM_EXTRACT` (1), `HOMEAI_LTM_HELPER_URL` (Ollama),
+  `HOMEAI_LTM_HELPER_MODEL`, `HOMEAI_LTM_HELPER_THREADS` (6),
+  `HOMEAI_LTM_EXTRACT_IDLE_S` (600), `HOMEAI_LTM_EXTRACT_BATCH` (20),
+  `HOMEAI_LTM_REFLECT_DELAY_S` (1800).
+- Forgetting removes the exchange, notes drawn only from it, profile lines
+  built from them, and unused topic names (checked by
+  `tests/test_memory_forget_dump.py` against a full `pg_dump`). Deleted rows
+  stay on disk until autovacuum; ZeroClaw's own memory is separate (below).
+- Full dump (row security applies even to the owner):
+  `PGOPTIONS='-c app.scope=admin' pg_dump --enable-row-security homeai`.
 - If Postgres is down, Jarvis answers without memories, logs one warning
   every 10 minutes, and reconnects on its own.
 - Log line on start: `long-term memory ready`.

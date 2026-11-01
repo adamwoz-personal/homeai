@@ -26,12 +26,21 @@ from .policy import USERNAME_RE, redact
 log = logging.getLogger(__name__)
 
 SEARCH_TEXT_MAX = 4000
+MAX_DERIVATION_DEPTH = 8   # summaries of summaries of ... facts
 FACT_KINDS = ("fact", "preference", "event", "question", "answer", "thought", "opinion",
               "plan", "summary", "profile", "instruction")
 
 
 class StoreError(RuntimeError):
     pass
+
+
+_THREADS = uuid.UUID("6f1f9a52-3c1e-4c55-9a59-6d0f3c1a7e10")
+
+
+def thread_id(username: str, name: str) -> uuid.UUID:
+    """Same person + same thread name -> same id, across extraction runs."""
+    return uuid.uuid5(_THREADS, f"{username}:{name}")
 
 
 @dataclass(frozen=True)
@@ -173,8 +182,254 @@ class PostgresStore:
                                      " AND NOT EXISTS (SELECT 1 FROM memory.fact_sources s"
                                      " WHERE s.fact_id = f.id)")
                     self._audit(conn, oid, row[0], f"{what}.forget", actor, {})
-                    return what
-        return None
+                    break
+            else:
+                return None
+        self._prune_topics()
+        return what
+
+    # -- people settings ---------------------------------------------------------
+
+    def set_memory_enabled(self, username: str, on: bool, actor: str) -> bool:
+        with self.db.scoped(None, "admin") as conn:
+            n = conn.execute("UPDATE memory.people SET memory_enabled = %s WHERE username = %s",
+                             (on, username)).rowcount
+            if n:
+                self._audit(conn, None, username, "person.memory_" + ("on" if on else "off"),
+                            actor, {})
+        return bool(n)
+
+    # -- extraction (Phase 2) -------------------------------------------------------
+
+    def unextracted(self, username: str, limit: int = 20) -> list[dict[str, Any]]:
+        """Oldest episodes of ``username`` the extractor hasn't read."""
+        with self.db.scoped(username, "person") as conn:
+            rows = conn.execute(
+                "SELECT id, occurred_at, content, trust FROM memory.episodes"
+                " WHERE username = %s AND extracted_at IS NULL AND state = 'active'"
+                " ORDER BY occurred_at LIMIT %s", (username, limit)).fetchall()
+        return [{"id": r[0], "at": r[1], "user": r[2].get("user", ""),
+                 "assistant": r[2].get("assistant", ""), "trust": r[3]} for r in rows]
+
+    def count_unextracted(self, username: str) -> int:
+        with self.db.scoped(username, "person") as conn:
+            return conn.execute("SELECT count(*) FROM memory.episodes WHERE username = %s"
+                                " AND extracted_at IS NULL AND state = 'active'",
+                                (username,)).fetchone()[0]
+
+    def mark_extracted(self, username: str, episodes: list[dict[str, Any]]) -> None:
+        with self.db.scoped(username, "person") as conn:
+            conn.execute("UPDATE memory.episodes SET extracted_at = now()"
+                         " WHERE username = %s AND (id, occurred_at) IN"
+                         " (SELECT * FROM unnest(%s::uuid[], %s::timestamptz[]))",
+                         (username, [e["id"] for e in episodes], [e["at"] for e in episodes]))
+
+    def known_topics(self, limit: int = 40) -> list[str]:
+        with self.db.scoped(None, "admin") as conn:
+            return [r[0] for r in conn.execute("SELECT name FROM memory.topics"
+                                               " ORDER BY use_count DESC, name LIMIT %s", (limit,))]
+
+    def nearest_facts(self, username: str, vec, k: int = 5) -> list[dict[str, Any]]:
+        """The person's own active facts closest to ``vec``, with similarity."""
+        with self.db.scoped(username, "person") as conn:
+            rows = conn.execute(
+                "SELECT id, summary, 1 - (embedding <=> %s::vector), pinned, source, trust,"
+                " created_at, topics, thread_id, kind FROM memory.facts"
+                " WHERE username = %s AND state = 'active' AND embedding IS NOT NULL"
+                " ORDER BY embedding <=> %s::vector LIMIT %s", (vec, username, vec, k)).fetchall()
+        keys = ("id", "summary", "sim", "pinned", "source", "trust", "created_at", "topics",
+                "thread_id", "kind")
+        return [dict(zip(keys, r)) for r in rows]
+
+    def apply_note(self, username: str, note, decision, neighbours: list[dict[str, Any]],
+                   vec, episodes: list[dict[str, Any]], *, trust: str, actor: str) -> uuid.UUID | None:
+        """Apply one reconcile decision in one transaction, with provenance.
+
+        Returns the fact that now holds the note (None for skip).
+        """
+        if decision.action == "skip":
+            return None
+        srcs = [episodes[i] for i in note.sources]
+        thread = thread_id(username, note.thread) if note.thread else None
+        target = neighbours[decision.target] if decision.target is not None else None
+        with self.db.scoped(username, "person") as conn:
+            if decision.action == "noop":
+                fid = target["id"]
+                conn.execute("UPDATE memory.facts SET access_count = access_count + 1,"
+                             " strength = strength + 0.1 WHERE id = %s", (fid,))
+            elif decision.action == "update":
+                fid = target["id"]
+                conn.execute(
+                    "UPDATE memory.facts SET summary = %s, embedding = %s,"
+                    " topics = ARRAY(SELECT DISTINCT unnest(topics || %s::text[])),"
+                    " importance = GREATEST(importance, %s), updated_at = now(),"
+                    " thread_id = coalesce(thread_id, %s) WHERE id = %s",
+                    (decision.summary, vec, list(note.topics), note.importance, thread, fid))
+                self._audit(conn, fid, username, "fact.update", actor, {"kind": note.kind})
+            else:   # add / supersede
+                fid = conn.execute(
+                    "INSERT INTO memory.facts (username, topics, detail, kind, summary, embedding,"
+                    " embed_model, importance, trust, source, derived_by, thread_id, supersedes)"
+                    " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'extractor',%s,%s,%s) RETURNING id",
+                    (username, list(note.topics), json.dumps({"v": 1, "thread": note.thread}),
+                     note.kind, decision.summary or note.summary, vec, self.embedder.name,
+                     note.importance, trust, actor, thread,
+                     target["id"] if target else None)).fetchone()[0]
+                if decision.action == "supersede":
+                    conn.execute("UPDATE memory.facts SET state = 'superseded', valid_to = now(),"
+                                 " updated_at = now() WHERE id = %s", (target["id"],))
+                    conn.execute("INSERT INTO memory.fact_links (src, dst, rel)"
+                                 " VALUES (%s, %s, 'contradicts')", (fid, target["id"]))
+                    self._drop_derived(conn, target["id"], username)
+                self._audit(conn, fid, username, f"fact.{decision.action}", actor,
+                            {"kind": note.kind})
+            for e in srcs:
+                conn.execute("INSERT INTO memory.fact_sources (fact_id, episode_id, episode_at)"
+                             " VALUES (%s,%s,%s) ON CONFLICT DO NOTHING", (fid, e["id"], e["at"]))
+            for t in note.topics:
+                conn.execute("INSERT INTO memory.topics (name, use_count) VALUES (%s, 1)"
+                             " ON CONFLICT (name) DO UPDATE SET use_count = memory.topics.use_count + 1",
+                             (t,))
+        return fid
+
+    # -- facts: reading, profile, bulk forget ----------------------------------------
+
+    def facts(self, username: str, *, kinds: tuple[str, ...] | None = None) -> list[dict[str, Any]]:
+        """The person's own active facts, most important first."""
+        sql = ("SELECT id, kind, summary, topics, importance, pinned, trust, source, thread_id,"
+               " created_at, updated_at, detail FROM memory.facts"
+               " WHERE username = %s AND state = 'active'"
+               + (" AND kind = ANY(%s)" if kinds else "") +
+               " ORDER BY pinned DESC, importance DESC, updated_at DESC")
+        args = (username, list(kinds)) if kinds else (username,)
+        with self.db.scoped(username, "person") as conn:
+            rows = conn.execute(sql, args).fetchall()
+        keys = ("id", "kind", "summary", "topics", "importance", "pinned", "trust", "source",
+                "thread_id", "created_at", "updated_at", "detail")
+        return [dict(zip(keys, r)) for r in rows]
+
+    def replace_profile(self, username: str, lines: list[tuple[str, list]], input_hash: str,
+                        *, actor: str) -> int:
+        """Swap the person's reflection profile for ``lines`` atomically.
+
+        ``lines``: (summary, [source fact ids]). Each line is linked to its
+        sources (derived_from), so deleting a source deletes the line.
+        """
+        vecs = self.embedder.embed([s for s, _ in lines], kind="doc") if lines else []
+        with self.db.scoped(username, "person") as conn:
+            conn.execute("DELETE FROM memory.facts WHERE username = %s AND source = 'reflection'",
+                         (username,))
+            for (summary, sources), vec in zip(lines, vecs):
+                fid = conn.execute(
+                    "INSERT INTO memory.facts (username, kind, summary, embedding, embed_model,"
+                    " importance, trust, source, derived_by, detail) VALUES"
+                    " (%s,'profile',%s,%s,%s,0.7,'owner','reflection',%s,%s) RETURNING id",
+                    (username, summary, vec, self.embedder.name, actor,
+                     json.dumps({"v": 1, "input_hash": input_hash}))).fetchone()[0]
+                with conn.cursor() as cur:
+                    cur.executemany("INSERT INTO memory.fact_links (src, dst, rel)"
+                                    " VALUES (%s, %s, 'derived_from')",
+                                    [(fid, s) for s in sources])
+            self._audit(conn, None, username, "profile.rebuild", actor, {"lines": len(lines)})
+        return len(lines)
+
+    def profile_hash(self, username: str) -> str | None:
+        with self.db.scoped(username, "person") as conn:
+            row = conn.execute("SELECT detail->>'input_hash' FROM memory.facts WHERE username = %s"
+                               " AND source = 'reflection' LIMIT 1", (username,)).fetchone()
+        return row[0] if row else None
+
+    def last_episode(self, username: str) -> dict[str, Any] | None:
+        with self.db.scoped(username, "person") as conn:
+            row = conn.execute("SELECT id, occurred_at, content FROM memory.episodes"
+                               " WHERE username = %s ORDER BY occurred_at DESC LIMIT 1",
+                               (username,)).fetchone()
+        return {"id": row[0], "at": row[1], **row[2]} if row else None
+
+    def sources_of(self, username: str, fact_ids: list) -> list[uuid.UUID]:
+        """Episodes the given facts were extracted from."""
+        if not fact_ids:
+            return []
+        with self.db.scoped(username, "person") as conn:
+            return [r[0] for r in conn.execute(
+                "SELECT DISTINCT s.episode_id FROM memory.fact_sources s JOIN memory.facts f"
+                " ON f.id = s.fact_id WHERE f.username = %s AND s.fact_id = ANY(%s)",
+                (username, list(fact_ids)))]
+
+    def supersede_fact(self, username: str, old_id, summary: str, *, actor: str) -> uuid.UUID:
+        """The person corrected a fact: a new explicit fact replaces it."""
+        summary = redact(" ".join((summary or "").split()))[:300]
+        if len(summary) < 1:
+            raise StoreError("empty correction")
+        vec = self.embedder.embed([summary], kind="doc")[0]
+        with self.db.scoped(username, "person") as conn:
+            old = conn.execute("SELECT kind, topics, pinned, importance, thread_id FROM memory.facts"
+                               " WHERE id = %s AND username = %s AND state = 'active'",
+                               (old_id, username)).fetchone()
+            if old is None:
+                raise StoreError("that memory is gone")
+            kind = "fact" if old[0] in ("profile", "summary") else old[0]
+            fid = conn.execute(
+                "INSERT INTO memory.facts (username, topics, kind, summary, embedding, embed_model,"
+                " importance, pinned, trust, source, thread_id, supersedes) VALUES"
+                " (%s,%s,%s,%s,%s,%s,%s,%s,'owner','explicit',%s,%s) RETURNING id",
+                (username, old[1], kind, summary, vec, self.embedder.name, max(old[3], 0.7),
+                 old[2], old[4], old_id)).fetchone()[0]
+            if old[0] == "profile":
+                # A wrong profile line is rebuilt from facts; just drop it.
+                conn.execute("DELETE FROM memory.facts WHERE id = %s", (old_id,))
+            else:
+                conn.execute("UPDATE memory.facts SET state = 'superseded', valid_to = now(),"
+                             " updated_at = now() WHERE id = %s", (old_id,))
+                conn.execute("INSERT INTO memory.fact_links (src, dst, rel)"
+                             " VALUES (%s, %s, 'contradicts')", (fid, old_id))
+                self._drop_derived(conn, old_id, username)
+            self._audit(conn, fid, username, "fact.correct", actor, {})
+        return fid
+
+    def forget_items(self, username: str, *, facts: list = (), episodes: list = (),
+                     actor: str) -> int:
+        """Delete the person's own facts and episodes in one transaction.
+
+        Facts left without any source episode go too (they came only from
+        what was forgotten); summaries built from any of them go via the
+        ``facts_drop_derived`` trigger. Returns rows deleted (not counting
+        those cascades).
+        """
+        n = 0
+        with self.db.scoped(username, "person") as conn:
+            if episodes:
+                n += conn.execute("DELETE FROM memory.episodes WHERE username = %s AND id = ANY(%s)",
+                                  (username, list(episodes))).rowcount
+                conn.execute("DELETE FROM memory.facts f WHERE f.username = %s"
+                             " AND f.source = 'extractor' AND NOT EXISTS"
+                             " (SELECT 1 FROM memory.fact_sources s WHERE s.fact_id = f.id)",
+                             (username,))
+            if facts:
+                n += self._delete_facts(conn, "f.username = %s AND f.id = ANY(%s)",
+                                        (username, list(facts)))
+            self._audit(conn, None, username, "bulk.forget", actor,
+                        {"facts": len(facts), "episodes": len(episodes)})
+        self._prune_topics()
+        return n
+
+    def forget_person(self, username: str, actor: str) -> int:
+        """Everything the person owns. The people row (and settings) stays."""
+        with self.db.scoped(username, "person") as conn:
+            n = self._delete_facts(conn, "f.username = %s", (username,))
+            n += conn.execute("DELETE FROM memory.episodes WHERE username = %s",
+                              (username,)).rowcount
+            self._audit(conn, None, username, "person.forget_all", actor, {"rows": n})
+        self._prune_topics()
+        return n
+
+    def count_for(self, username: str) -> int:
+        """Episodes plus active facts the person owns."""
+        with self.db.scoped(username, "person") as conn:
+            return conn.execute(
+                "SELECT (SELECT count(*) FROM memory.episodes WHERE username = %s)"
+                " + (SELECT count(*) FROM memory.facts WHERE username = %s AND state = 'active')",
+                (username, username)).fetchone()[0]
 
     # -- stats -------------------------------------------------------------------
 
@@ -188,6 +443,44 @@ class PostgresStore:
         return {"episodes": ep, "facts": facts, "db_bytes": size}
 
     # -- internals -----------------------------------------------------------------
+
+    def _prune_topics(self) -> int:
+        """Drop topic names no fact uses any more: a forgotten fact's topic
+        must not outlive it. Admin scope so everyone's facts count as uses."""
+        with self.db.scoped(None, "admin") as conn:
+            return conn.execute("DELETE FROM memory.topics t WHERE NOT EXISTS"
+                                " (SELECT 1 FROM memory.facts f WHERE f.topics @> ARRAY[t.name])"
+                                ).rowcount
+
+    @staticmethod
+    def _delete_facts(conn, where: str, params: tuple) -> int:
+        """DELETE the facts matching ``where``, summaries before their sources.
+
+        The facts_drop_derived trigger deletes a fact's summaries; if the same
+        statement also targets one of them Postgres refuses ("tuple already
+        modified by an operation triggered by the current command"). Deleting
+        top-down, rows nothing else is derived from first, avoids that.
+        """
+        n = 0
+        for _ in range(MAX_DERIVATION_DEPTH):
+            step = conn.execute(
+                f"DELETE FROM memory.facts f WHERE ({where}) AND NOT EXISTS"
+                " (SELECT 1 FROM memory.fact_links l WHERE l.dst = f.id"
+                " AND l.rel = 'derived_from')", params).rowcount
+            n += step
+            if not step:
+                break
+        return n + conn.execute(f"DELETE FROM memory.facts f WHERE {where}", params).rowcount
+
+    @staticmethod
+    def _drop_derived(conn, fact_id, username: str) -> None:
+        """A superseded fact's summaries are stale: delete them and queue a
+        rebuild (deletes do this in the facts_drop_derived trigger)."""
+        n = conn.execute("DELETE FROM memory.facts WHERE id IN (SELECT src FROM memory.fact_links"
+                         " WHERE dst = %s AND rel = 'derived_from')", (fact_id,)).rowcount
+        if n:
+            from . import jobs
+            jobs.enqueue(conn, "reflect", {"username": username}, key=f"reflect:{username}")
 
     @staticmethod
     def _audit(conn, object_id, username, op: str, actor: str, detail: dict[str, Any]) -> None:

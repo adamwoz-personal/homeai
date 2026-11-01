@@ -463,6 +463,9 @@ class VoiceAssistant:
         if ident is not None:
             self.memory.switch_speaker(ident.name)
 
+        if self._handle_memory(turn, transcript.text, total):
+            return
+
         # "Stop", "quiet", "I'm not talking to you". After a barge-in the mic
         # stays open for a follow-up question, but the interruption is often
         # the whole point. Querying the agent here would answer a question
@@ -603,6 +606,22 @@ class VoiceAssistant:
         if not target or len(target.split()) > 4:
             return None
         return home_intents.HomeIntent(waiting.kind, {**waiting.args, "target": target})
+
+    def _handle_memory(self, turn: Turn, text: str, total: Stopwatch) -> bool:
+        """"Remember that...", "forget...", "what do you remember...". True if handled."""
+        if self.ltm is None:
+            return False
+        stage = Stopwatch()
+        result = self.ltm.handle_command(turn.speaker, text)
+        if result is None:
+            return False
+        reply, listen = result
+        turn.agent_ms = stage.ms()
+        turn.verdict = "memory-command"
+        log.info("memory command %r -> %s  [%.0fms]", text, reply, turn.agent_ms)
+        self._held.clear()
+        self._say_turn(turn, reply, total, listen)
+        return True
 
     def _handle_home(self, turn: Turn, text: str, source: str, total: Stopwatch) -> bool:
         """Everyday home commands, without the model. True if handled."""

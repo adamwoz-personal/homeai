@@ -92,7 +92,7 @@ def _default(o):
 
 
 def main(argv: list[str] | None = None, *, cfg: Config | None = None, embedder=None,
-         out=None) -> int:
+         out=None, helper=None) -> int:
     out = out or sys.stdout
     cfg = cfg or Config()
     ap = argparse.ArgumentParser(prog="homeai-memory", description="Long-term memory tools")
@@ -118,6 +118,13 @@ def main(argv: list[str] | None = None, *, cfg: Config | None = None, embedder=N
     p.add_argument("id")
     sub.add_parser("export")
     sub.add_parser("stats")
+    p = sub.add_parser("facts", help="your active facts (incl. profile lines)")
+    p.add_argument("--kind", action="append", help="only these kinds (repeatable)")
+    sub.add_parser("profile", help="your reflection profile")
+    sub.add_parser("jobs", help="queued, running and failed background jobs")
+    p = sub.add_parser("extract", help="extract facts from your unread exchanges now")
+    p.add_argument("--all", action="store_true", help="everyone (admins only)")
+    sub.add_parser("reflect", help="rebuild your profile now")
     p = sub.add_parser("backfill")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--include-unknown", action="store_true",
@@ -144,7 +151,7 @@ def main(argv: list[str] | None = None, *, cfg: Config | None = None, embedder=N
 
     store = _store(cfg, embedder)
     try:
-        return _run(a, cfg, store, out)
+        return _run(a, cfg, store, out, helper)
     except StoreError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -159,7 +166,7 @@ def _read(path: str) -> list[str]:
         raise SystemExit(f"cannot read transcript: {exc}") from exc
 
 
-def _run(a, cfg: Config, store, out) -> int:
+def _run(a, cfg: Config, store, out, helper=None) -> int:
     who = a.who.lower()
     if a.cmd == "people":
         for p in store.people():
@@ -221,6 +228,47 @@ def _run(a, cfg: Config, store, out) -> int:
         return 0
     if a.cmd == "stats":
         print(json.dumps(store.stats(), default=_default), file=out)
+        return 0
+    if a.cmd in ("facts", "profile"):
+        kinds = ("profile",) if a.cmd == "profile" else tuple(a.kind or ()) or None
+        for f in store.facts(who, kinds=kinds):
+            flags = "pinned " if f["pinned"] else ""
+            print(f"{f['id']}  {f['kind']:8} {f['source']:10} {flags}{f['summary'][:90]}",
+                  file=out)
+        return 0
+    if a.cmd == "jobs":
+        if scope != "admin":
+            raise StoreError("only an admin can list jobs")
+        from . import jobs
+
+        with store.db.scoped(None, "admin") as conn:
+            for j in jobs.pending(conn):
+                print(f"{j['kind']:8} {j['key']:24} {j['state']:8} tries {j['attempts']}"
+                      f"  due {j['not_before']:%Y-%m-%d %H:%M}  {j['last_error'] or ''}"[:160],
+                      file=out)
+        return 0
+    if a.cmd in ("extract", "reflect"):
+        from . import jobs
+        from .worker import Worker, extract_key, reflect_key
+
+        if a.cmd == "extract" and a.all and scope != "admin":
+            raise StoreError("only an admin can extract for everyone")
+        users = [p["username"] for p in store.people()
+                 if store.count_unextracted(p["username"])] \
+            if a.cmd == "extract" and a.all else [who]
+        if helper is None:
+            from .helper import OllamaHelper
+
+            helper = OllamaHelper(cfg.memory.helper_url, cfg.memory.helper_model,
+                                  threads=cfg.memory.helper_threads)
+        worker = Worker(store, helper, batch=cfg.memory.extract_batch, reflect_delay_s=0)
+        with store.db.scoped(None, "admin") as conn:
+            for u in users:
+                key = (extract_key if a.cmd == "extract" else reflect_key)(u)
+                jobs.enqueue(conn, a.cmd, {"username": u}, key=key)
+                jobs.run_now(conn, key)
+        n = worker.run_all()
+        print(f"ran {n} jobs", file=out)
         return 0
     if a.cmd == "backfill":
         n = 0

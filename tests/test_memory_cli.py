@@ -75,7 +75,7 @@ def test_dry_run_needs_no_database(tmp_path):
 
 # -- with a throwaway database ----------------------------------------------------------
 
-def make_cli(dsn, tmp_path):
+def make_cli(dsn, tmp_path, helper=None):
     from homeai.memory_store.embed import HashEmbedder
 
     reg = tmp_path / "s.json"
@@ -86,7 +86,7 @@ def make_cli(dsn, tmp_path):
 
     def go(*argv):
         out = io.StringIO()
-        code = cli.main(list(argv), cfg=cfg, embedder=HashEmbedder(), out=out)
+        code = cli.main(list(argv), cfg=cfg, embedder=HashEmbedder(), out=out, helper=helper)
         return code, out.getvalue()
 
     return go
@@ -152,3 +152,39 @@ def test_cli_backfill_is_idempotent_then_list_export_stats(run, tmp_path):
     assert len(data["episodes"]) == 2 and data["facts"] == []
     code, out = run("stats")
     assert json.loads(out)["episodes"] == {"adam": 2}
+
+
+# -- Phase 2: extraction, profile, jobs -------------------------------------------------
+
+def test_cli_extract_reflect_facts_profile_jobs(clean_db, tmp_path, capsys):
+    from homeai.memory_store import extract
+    from homeai.memory_store.helper import ScriptedHelper
+
+    def respond(task, schema, payload):
+        if task == extract.REFLECT_TASK:
+            return {"lines": [{"summary": "Adam is a dragon fan", "sources": [1, 2]}]}
+        if task == extract.RECONCILE_TASK:
+            return {"action": "add", "target": None, "summary": payload["new"]}
+        return {"notes": [{"kind": "preference", "summary": f"Adam likes dragons {i}",
+                           "topics": ["dragons"], "thread": None, "importance": 0.5,
+                           "sources": [i + 1]} for i in range(len(payload["exchanges"]))]}
+
+    run = make_cli(clean_db, tmp_path, helper=ScriptedHelper(respond=respond))
+    run("add-person", "adam", "Adam")
+    t = tmp_path / "t.jsonl"
+    t.write_text("\n".join(line(ts=f"2026-10-1{i}T08:00:00+00:00", heard=f"hey jarvis dragons {i}",
+                                reply="Dragons!") for i in range(3)))
+    run("backfill", "--transcript", str(t))
+    code, out = run("extract")
+    assert code == 0 and out == "ran 2 jobs\n"            # extract, then the queued reflect
+    code, out = run("facts")
+    assert out.count("preference extractor") == 3 and "Adam is a dragon fan" in out
+    assert run("profile")[1].count("\n") == 1
+    assert run("facts", "--kind", "profile") == run("profile")
+    assert run("reflect") == (0, "ran 1 jobs\n")
+    assert run("jobs") == (0, "")
+    run("add-person", "ryan", "Ryan")
+    assert run("--as", "ryan", "jobs")[0] == 2
+    assert run("--as", "ryan", "extract", "--all")[0] == 2
+    assert "only an admin" in capsys.readouterr().err
+    assert run("extract", "--all") == (0, "ran 0 jobs\n")  # nobody has unread exchanges
