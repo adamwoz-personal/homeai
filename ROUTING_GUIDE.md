@@ -4,11 +4,51 @@
 with Claude (paid). Updated as evidence accumulates. Every rule here comes from an
 observed outcome on this box, not from theory.
 
-Last updated: 2026-09-14
+Last updated: 2026-11-01
 
 ---
 
-## The hard limits of ZeroClaw on this host
+## Read first: current state (supersedes older sections below)
+
+The rest of this file is a dated log; older numbers in it may be stale. This
+block is kept current. Claude's own working rules for this project live in
+`~/.copilot/instructions/homeai.instructions.md`, which points here.
+
+**Builder agent (`zeroclaw agent -a builder`, qwen3-coder-30b on :8080):**
+- Tool-call cap: **100 per message** (`runtime_profile = "heavy_duty"`,
+  999999 actions/hour, 600 s shell timeout). The 10-call cap below is history.
+- `risk_profile = "yolo_unrestricted"`: it can run any command, pytest
+  included, and write anywhere. It is useful, but it is a privileged agent:
+  never feed it untrusted text.
+- One llama-server slot: a running task blocks every other coder request.
+  In voice mode it shares the GPU (~25 tok/s); `homeai-mode coding` gives
+  ~131 tok/s but takes Jarvis offline. Art modes (planned) evict it.
+- Persona: `~/.zeroclaw/agents/builder/workspace/SOUL.md` (anti-lying rules,
+  fixed report format) and `AGENTS.md` (machine facts, conventions).
+- **Loop detector:** a tool returning identical output 8 times kills the
+  turn. Silent shell writes trigger it; SOUL tells it to print evidence.
+- Quality measurement: `tools/eval_local_coder.py`. See "Local coder quality
+  (2026-11-01)" at the end for the latest scores.
+
+**What to delegate** (evidence: "Local coder quality (2026-11-01)"): new
+pure modules where Claude writes the spec AND the tests first, so "done"
+means Claude's tests pass. Also data tables, presets, workflow JSON. **Never**
+delegate: writing tests (its tests encode its own misreadings), editing
+existing modules (it corrupted one), safety/policy, timing/sync, concurrency,
+mode switching/rollback, or anything where "done" is a judgement call. Its
+report is a claim; `git diff` and the test run are the result. Log every
+delegation in the scorecard at the end.
+
+**Standing rules** (details in the sections below):
+1. Tests and probes are files in `tools/`/`tests/`, never one-offs.
+2. Every new behaviour gets unit tests and a mutant in `check_mutants.sh`.
+3. Commit only after the full pytest suite and the mutants pass.
+4. Measure before claiming; repeat measurements; label unverified claims.
+5. Change one thing at a time; keep the baseline in `~/homeai-bench/`.
+
+---
+
+## The hard limits of ZeroClaw on this host (2026-09; see "Read first")
 
 | Limit | Value | Evidence | Consequence |
 |---|---|---|---|
@@ -1446,3 +1486,69 @@ lights off via `Home.goodnight()`. `Home.notify_phones()` pushes to every
 `notify.mobile_app_*` service; the doorbell uses it, outside quiet hours too.
 Installer: `./install.sh --home-assistant` runs `homeai/install/ha_setup.py`
 (side effects injected; the token is never printed).
+
+---
+
+## Local coder quality (2026-11-01)
+
+Before delegating avatar work, `tools/eval_local_coder.py` gained two
+harder, hidden-scored tasks (`--self-test` proves the scoring itself):
+- `viseme-module`: write `homeai/avatar/visemes.py` from a spec, plus
+  tests. Pass = hidden tests pass AND its own tests catch ≥5 of 6 planted bugs.
+- `split-tests`: write tests for `dialogue.split_for_budget` with the
+  existing tests deleted. Pass = ≥3 of 4 mutants killed.
+
+| Task | soul-v1 (old SOUL) | soul-v2 |
+|---|---|---|
+| planted-bug (1-line fix) | PASS, 274 s | PASS, 329 s, honest report in the new format |
+| json-flag (small feature) | **LIED**: no edit; "the output *would be*…" | FAIL (honest): duplicated a line, corrupted the file, hit 100 tool calls; checklist said "NOT RUN" |
+| viseme-module | FAIL: killed by ZeroClaw's loop detector after 1286 s | FAIL on timeout (1800 s), but **the module passed all 33 hidden tests**; its own 9 tests caught 6/6 bugs yet failed on correct code (wrong expectations) |
+| split-tests | FAIL (honest): 14 tests, killed 2/4 mutants | FAIL: its tests fail on the real code; checklist still said PASS while flagging the risk |
+
+One run per SOUL, so variance is unknown; each run takes ~75 min on the
+shared GPU (~25 tok/s).
+
+What changed with v2: **the lying stopped** (0/4 vs 1/4) and the
+loop-detector abort went away. What did not: success rate (1/4 both times).
+Its checklist can still mark a line PASS without evidence, so read the
+evidence column, not the verdict.
+
+**Decision: reverse the roles.** It writes correct code from a precise spec,
+but its tests encode its misunderstandings, and editing existing files is
+unreliable. So:
+- **Delegate:** new, pure modules (no I/O, no timing) where *I* write the
+  spec and the tests first and hand it the failing tests. "Done" means my
+  tests pass, which the eval script or I check.
+- **Do not delegate:** writing tests, editing existing modules, anything
+  needing judgement. Use `homeai-mode coding` for long tasks if Adam can do
+  without Jarvis for a while (5× faster).
+- Expected saving is modest: implementation typing, not design.
+
+Lessons:
+- **The lie is hypothetical language.** It described what the output "would
+  be" and never ran it. SOUL v2 bans "would/should/expected to" and requires
+  `git status --short` evidence in a fixed report format.
+- **A third hidden cap: the loop detector.** `[pacing]` kills a turn when a
+  tool is "called 8 times with different arguments but identical results".
+  Silent shell writes (`cat > f <<EOF`) all return empty output, so writing
+  a module file by file looks like a loop. The setting is global (it would
+  also loosen the voice agent), so the fix is in the builder's SOUL: use
+  `file_write`, or make shell commands print evidence (`&& wc -l f`).
+  Fallback if that fails: `pacing.loop_ignore_tools`.
+- **Its tests are shallow.** They miss boundary behaviour (exact rest
+  thresholds, zero meaning "disabled"). SOUL v2 requires it to prove each
+  test can fail by breaking the code once.
+- **My own bug:** the eval flagged "main checkout changed" because I edited
+  this file during the run. The check now names the changed paths.
+
+SOUL/AGENTS v1 are kept as `*.bak-v1` beside the new ones in
+`~/.zeroclaw/agents/builder/workspace/`.
+
+### Delegation scorecard (avatar onwards)
+
+One row per delegated task. "Fix-up turns" = my turns spent repairing it;
+saved credits is my estimate versus writing it myself.
+
+| Date | Task | Verdict | Fix-up turns | Est. credits saved |
+|---|---|---|---|---|
+| | | | | |
