@@ -29,7 +29,7 @@ MAX_TOPICS = 4
 MAX_PROFILE_LINES = 6
 NOOP_SIM = 0.92            # this close to an existing fact: it's the same fact
 ASK_SIM = 0.65             # below this nothing is related enough to merge: add
-PROTECTED_SOURCES = frozenset({"explicit", "import", "reflection"})
+PROTECTED_SOURCES = frozenset({"explicit", "import", "reflection", "mcp"})
 
 EXTRACT_TASK = """\
 You keep long-term notes about one person for Jarvis, a home voice assistant.

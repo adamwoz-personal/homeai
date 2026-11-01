@@ -1,0 +1,21 @@
+# Template rendered by install.sh: @REPO@ is substituted.
+# Hourly memory health sample, plus whatever maintenance it says is due
+# (VACUUM, purge of long-archived facts; the rest is only reported).
+# `journalctl --user -u homeai-memory-maintain` shows "healthy, no work"
+# or what ran and what is needed.
+[Unit]
+Description=Home AI memory health sample and maintenance
+Documentation=file://@REPO@/docs/RUNBOOK.md
+After=postgresql.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=@REPO@
+EnvironmentFile=-@REPO@/.env
+ExecStart=@REPO@/bin/homeai-memory maintain --time-limit 600
+TimeoutStartSec=900
+Nice=15
+IOSchedulingClass=idle
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only

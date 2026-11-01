@@ -188,3 +188,56 @@ def test_cli_extract_reflect_facts_profile_jobs(clean_db, tmp_path, capsys):
     assert run("--as", "ryan", "extract", "--all")[0] == 2
     assert "only an admin" in capsys.readouterr().err
     assert run("extract", "--all") == (0, "ran 0 jobs\n")  # nobody has unread exchanges
+
+
+# -- Phase 4 lite: health, maintain, rederive ------------------------------------------
+
+def test_cli_loads_the_embedding_model_only_when_used():
+    made = []
+    lazy = cli._LazyEmbedder(lambda: made.append(1) or type("E", (), {"name": "x"})())
+    assert made == []
+    assert lazy.name == "x" and lazy.name == "x" and made == [1]
+
+def test_cli_health_and_maintain(run, capsys):
+    run("note", "Adam keeps a corn snake called Noodle")
+    code, out = run("health")
+    assert code == 0 and out.startswith("db ") and "adam" in out
+    data = json.loads(run("health", "--json")[1])
+    assert data["metrics"]["people"]["adam"]["facts"] == 1
+    code, out = run("maintain", "--dry-run", "--json")
+    assert code == 0 and json.loads(out)["done"] == []
+    code, out = run("maintain")
+    assert code == 0 and ("healthy, no work" in out or "done " in out)
+    run("add-person", "ryan", "Ryan")
+    for cmd in ("health", "maintain"):
+        assert run("--as", "ryan", cmd)[0] == 2
+    assert "only an admin" in capsys.readouterr().err
+
+
+def test_cli_rederive(clean_db, tmp_path, capsys):
+    from homeai.memory_store.helper import ScriptedHelper
+
+    def respond(task, schema, payload):
+        return {"notes": [{"kind": "fact", "summary": "Adam likes dragons", "topics": [],
+                           "thread": None, "importance": 0.5, "sources": [1]}]}
+
+    run = make_cli(clean_db, tmp_path, helper=ScriptedHelper(respond=respond))
+    run("add-person", "adam", "Adam")
+    t = tmp_path / "t.jsonl"
+    t.write_text(line(ts="2026-10-10T08:00:00+00:00", heard="hey jarvis I like dragons",
+                      reply="Dragons!"))
+    run("backfill", "--transcript", str(t))
+    code, out = run("rederive")
+    assert code == 0 and "new   Adam likes dragons" in out and "nothing changed" in out
+    assert run("facts") == (0, "")
+    assert run("rederive", "--since", "2026-10-11")[1].startswith("adam: 0 episodes")
+    code, out = run("rederive", "--apply")
+    assert code == 0 and "applied: {'add': 1}" in out
+    assert "Adam likes dragons" in run("facts")[1]
+    run("add-person", "ryan", "Ryan")
+    assert run("--as", "ryan", "rederive", "--person", "adam")[0] == 2
+    assert "only an admin" in capsys.readouterr().err
+    with pytest.raises(SystemExit):
+        run("rederive", "--dry-run", "--apply")
+    with pytest.raises(SystemExit):
+        run("rederive", "--since", "last week")

@@ -88,6 +88,13 @@ in `daemon._handle_memory` before the dismissal check. Lessons:
 - RLS on household rows is visible in person scope, so ownership checks live
   in the store too, not just in the MCP layer (mutants prove both).
 
+**Memory Phase 4 lite (built 2026-11-01):** `memory_store/maintain.py` (pure
+policy + sampler; runs only VACUUM and the 365-day purge, everything else is
+advice), `rederive.py`, CLI `health`/`maintain`/`rederive`, hourly
+`homeai-memory-maintain.timer`. Live: recall p95 ~13 ms (`recall_live.py`),
+`pg_smoke.py` 11/11. Phase 5 waits for an email/SMS channel. Next: avatar.
+See the "Memory Phase 4 lessons" section at the end.
+
 ---
 
 ## The hard limits of ZeroClaw on this host (2026-09; see "Read first")
@@ -1594,3 +1601,22 @@ saved credits is my estimate versus writing it myself.
 | Date | Task | Verdict | Fix-up turns | Est. credits saved |
 |---|---|---|---|---|
 | | | | | |
+
+## Memory Phase 4 lessons (2026-11-01)
+
+- **Autovacuum never touches small tables.** Its trigger is 50 rows + 20%,
+  so `memory.facts` sat at 9 dead of 10 rows: forgotten text was still in
+  the data files. Deleting a row is not forgetting it until VACUUM runs.
+  The hourly maintain timer vacuums (as the owner, autocommit;
+  `homeai_app` can't).
+- **Check every protected-source list when adding a source.** Phase 3 added
+  `source=mcp` but `extract.PROTECTED_SOURCES` didn't include it, so the
+  extractor could rewrite agent-saved facts. Found while writing rederive;
+  mutant `ltm-p4-mcp-unprotected` now guards it.
+- **Load heavy models lazily in CLIs.** `_store()` loaded the ONNX embedder
+  for every subcommand: 890 MB peak for an hourly job that never embeds.
+  Lazy: 36 MB.
+- **Know which path a request takes before testing it.** My live recall
+  check "failed" on a home command; the daemon's fast path
+  (`home_intents.parse`) takes it before recall is ever asked. The bug was
+  my expectation. Test the gate the code actually has.

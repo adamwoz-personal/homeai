@@ -210,3 +210,28 @@ def test_time_phrases_use_the_local_clock(mem_store):
         assert "corn" in block and "python" not in block
     finally:
         svc.close()
+
+
+def test_recall_timings_reach_health_samples_about_hourly(mem_store):
+    mem_store.add_fact("adam", "Adam keeps a corn snake called Noodle", kind="profile")
+    clock = [0.0]
+    svc = MemoryService(CFG, store_factory=lambda: mem_store, monotonic=lambda: clock[0]).start()
+    assert svc.wait_ready(5)
+    try:
+        assert "Noodle" in svc.recall("Adam", "tell me about my snake")
+        assert svc.recall("Adam", "thank you") == ""          # gated: no query, no timing
+        assert svc.flush()
+
+        def samples():
+            with mem_store.db.scoped(None, "admin") as conn:
+                return [r[0] for r in conn.execute("SELECT metrics FROM memory.health_samples")]
+
+        assert samples() == []                                 # buffered until the hour is up
+        clock[0] = 3600.0
+        empty = svc.recall("Adam", "what is the capital of mongolia") == ""
+        assert svc.flush()
+        [s] = samples()
+        assert s["source"] == "daemon" and len(s["recall_ms"]) == 2 and s["empty"] == int(empty)
+        assert all(m > 0 for m in s["recall_ms"])
+    finally:
+        svc.close()

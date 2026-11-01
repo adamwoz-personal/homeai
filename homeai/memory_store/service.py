@@ -34,6 +34,8 @@ QUEUE_MAX = 200
 WARN_EVERY_S = 600.0
 WORKER_POLL_S = 30.0
 QUIET_S = 60.0          # background jobs wait for this long a pause in talk
+TIMINGS_EVERY_S = 3600.0  # recall timings go to health_samples about hourly
+TIMINGS_MAX = 2000
 
 
 class MemoryService:
@@ -58,6 +60,10 @@ class MemoryService:
         self._worker_thread: threading.Thread | None = None
         self._last_turn = -QUIET_S
         self.last_recall_ms = 0.0
+        # Recall timings for the health sampler; touched only by the voice thread.
+        self._timings: list[float] = []
+        self._empty = 0
+        self._timings_since = monotonic()
 
     # -- lifecycle ---------------------------------------------------------------
 
@@ -194,6 +200,12 @@ class MemoryService:
             with self.store.db.scoped(username, "person") as conn:
                 conn.execute("UPDATE memory.facts SET last_accessed = now(),"
                              " access_count = access_count + 1 WHERE id = ANY(%s)", (ids,))
+        elif kind == "timings":
+            from . import maintain
+
+            _, ms, empty = item
+            with self.store.db.scoped(None, "admin") as conn:
+                maintain.record(conn, maintain.recall_sample(ms, empty))
 
     # -- background jobs -------------------------------------------------------------
 
@@ -259,6 +271,7 @@ class MemoryService:
     def recall(self, speaker: str | None, utterance: str) -> str:
         """A prompt block of relevant memories, or "". Never raises."""
         start = time.perf_counter()
+        queried, block = False, ""
         try:
             if not self._ready.is_set() or not policy.should_recall(utterance, speaker):
                 return ""
@@ -273,6 +286,7 @@ class MemoryService:
                 return ""
             with self.store.db.scoped(username, "person", timeout_ms=int(left_ms),
                                       connect_timeout_s=left_ms / 1000) as conn:
+                queried = True
                 rows = recall.fetch(conn, username, vec, utterance,
                                     recall.time_window(utterance, now))
             cands = recall.keep(recall.fuse(rows, now), self.cfg.min_similarity)
@@ -289,6 +303,22 @@ class MemoryService:
             return ""
         finally:
             self.last_recall_ms = (time.perf_counter() - start) * 1000
+            if queried:
+                self._note_timing(self.last_recall_ms, not block)
+
+    def _note_timing(self, ms: float, empty: bool) -> None:
+        """Buffer one recall's time; about hourly hand the batch to the writer."""
+        if len(self._timings) < TIMINGS_MAX:
+            self._timings.append(ms)
+            self._empty += int(empty)
+        if self._mono() - self._timings_since < TIMINGS_EVERY_S:
+            return
+        batch, empty_n = self._timings, self._empty
+        self._timings, self._empty, self._timings_since = [], 0, self._mono()
+        try:
+            self._q.put_nowait(("timings", batch, empty_n))
+        except queue.Full:
+            pass
 
     # -- internals -----------------------------------------------------------------------
 

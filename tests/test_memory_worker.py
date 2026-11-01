@@ -352,3 +352,94 @@ def test_recover(mem_store):
         conn.execute("UPDATE memory.jobs SET state = 'running',"
                      " updated_at = now() - interval '2 hours'")
     assert w.recover() == 1
+
+
+def test_mcp_facts_are_protected_like_explicit_ones():
+    assert extract.protected({"source": "mcp"}, "owner")
+    assert extract.protected({"source": "explicit"}, "owner")
+    assert not extract.protected({"source": "extractor", "trust": "owner"}, "owner")
+
+
+# -- rederive ------------------------------------------------------------------------------
+
+
+def db_state(store):
+    with store.db.scoped(None, "admin") as conn:
+        return [conn.execute(q).fetchall() for q in (
+            "SELECT id, summary, state, updated_at, access_count FROM memory.facts ORDER BY id",
+            "SELECT count(*) FROM memory.events", "SELECT count(*) FROM memory.jobs",
+            "SELECT id, extracted_at FROM memory.episodes ORDER BY id")]
+
+
+def seeded(store):
+    """Three read exchanges, two extractor facts and one pinned explicit fact."""
+    add_eps(store, ("I got a corn snake called Noodle", "Lovely!"),
+            ("I bought a red kayak and I am learning Rust", "Nice"), ("I like tea", "ok"))
+    w, _ = worker(store, Router(notes=[[note("Adam has a corn snake called Noodle"),
+                                        note("Adam bought a red kayak", sources=(2,))]]))
+    run_extract(store, w)
+    store.add_fact("adam", "Adam likes tea", pinned=True)
+    with store.db.scoped(None, "admin") as conn:
+        conn.execute("DELETE FROM memory.jobs")
+
+
+RENOTES = [note("Adam has a corn snake called Noodle"),
+           note("Adam is learning Rust", sources=(2,)),
+           note("Adam likes green tea", sources=(3,))]
+
+
+def test_rederive_dry_run_diffs_and_changes_nothing(mem_store):
+    from homeai.memory_store.rederive import rederive
+
+    seeded(mem_store)
+    before = db_state(mem_store)
+    r = rederive(mem_store, ScriptedHelper(respond=Router(notes=[list(RENOTES)])), "adam")
+    assert db_state(mem_store) == before
+    by = {f["note"]: f for f in r["findings"]}
+    assert by["Adam has a corn snake called Noodle"]["status"] == "known"
+    assert by["Adam is learning Rust"]["status"] == "new"
+    tea = by["Adam likes green tea"]
+    assert tea["status"] == "near" and tea["closest"] == "Adam likes tea" and tea["protected"]
+    assert [g["summary"] for g in r["gone"]] == ["Adam bought a red kayak"]
+    assert r["counts"] == {"new": 1, "known": 1, "near": 1, "gone": 1}
+    assert r["episodes"] == 3 and r["notes"] == 3 and not r["applied"]
+
+
+def test_rederive_apply_never_rewrites_protected_facts(mem_store):
+    from homeai.memory_store.rederive import rederive
+
+    seeded(mem_store)
+    pinned = next(f for f in mem_store.facts("adam") if f["summary"] == "Adam likes tea")
+    # The helper asks to supersede the pinned fact: refused, kept alongside.
+    router = Router(notes=[list(RENOTES)],
+                    decisions=[{"action": "supersede", "target": 0,
+                                "summary": "Adam likes green tea"}])
+    r = rederive(mem_store, ScriptedHelper(respond=router), "adam", apply=True)
+    assert r["actions"] == {"noop": 1, "add": 2}
+    after = {f["summary"]: f for f in mem_store.facts("adam")}
+    assert after["Adam likes tea"]["id"] == pinned["id"]
+    assert {"Adam is learning Rust", "Adam likes green tea",
+            "Adam bought a red kayak"} <= set(after)       # nothing deleted
+    assert "reflect:adam" in queued(mem_store)
+
+
+def test_rederive_since_skips_older_episodes_and_survives_invalid_batches(mem_store):
+    from homeai.memory_store.rederive import rederive
+
+    seeded(mem_store)
+    h = ScriptedHelper(respond=Router(notes=[HelperInvalid("garbage twice")]))
+    r = rederive(mem_store, h, "adam", since=T0 + timedelta(minutes=3))   # episodes at 0, 2, 4
+    assert r["episodes"] == 1 and r["invalid_batches"] == 1 and r["notes"] == 0
+    h = ScriptedHelper(respond=Router(notes=[[note("Adam likes tea")], [note("Adam has a"
+                                                                           " corn snake")]]))
+    r = rederive(mem_store, h, "adam", batch=2)
+    assert r["episodes"] == 3 and len(h.calls) == 2 and r["notes"] == 2
+
+
+def test_rederive_respects_memory_off(mem_store):
+    from homeai.memory_store.rederive import rederive
+
+    with mem_store.db.scoped(None, "admin") as conn:
+        conn.execute("UPDATE memory.people SET memory_enabled = false WHERE username = 'ryan'")
+    h = ScriptedHelper(respond=Router())
+    assert rederive(mem_store, h, "ryan") == {"skipped": "memory off"} and h.calls == []

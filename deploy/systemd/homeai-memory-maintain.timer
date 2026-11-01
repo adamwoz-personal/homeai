@@ -1,0 +1,10 @@
+[Unit]
+Description=Hourly Home AI memory health sample and maintenance
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -102,21 +102,16 @@ class Worker:
         episodes = self.store.unextracted(username, self.batch)
         if not episodes:
             return {"episodes": 0}
-        payload = extract.extract_payload(person["display_name"], episodes, today=self._now(),
-                                          known_topics=self.store.known_topics())
         try:
-            raw = self.helper.structured(extract.extract_task(person["is_child"]),
-                                         extract.extract_schema(), payload)
+            notes = self.notes_for(person, episodes)
         except HelperInvalid as exc:
             log.warning("extraction for %s: helper output invalid twice (%s); skipping %d"
                         " exchanges", username, exc, len(episodes))
             self.store.mark_extracted(username, episodes)
             return {"episodes": len(episodes), "invalid": True}
-        notes = extract.parse_notes(raw, len(episodes), is_child=person["is_child"],
-                                    exchanges=episodes, person=person["display_name"])
         counts: dict[str, int] = {}
         for note in notes:
-            action = self._apply(username, note, episodes)
+            action = self.apply_note(username, note, episodes)
             counts[action] = counts.get(action, 0) + 1
         self.store.mark_extracted(username, episodes)
         changed = sum(v for k, v in counts.items() if k in ("add", "update", "supersede"))
@@ -126,7 +121,19 @@ class Worker:
                              delay_s=self.reflect_delay_s)
         return {"episodes": len(episodes), "notes": len(notes), **counts}
 
-    def _apply(self, username: str, note: extract.Note, episodes: list[dict[str, Any]]) -> str:
+    def notes_for(self, person: dict[str, Any], episodes: list[dict[str, Any]]) -> list[extract.Note]:
+        """The helper's notes about ``episodes``. Raises HelperInvalid."""
+        payload = extract.extract_payload(person["display_name"], episodes, today=self._now(),
+                                          known_topics=self.store.known_topics())
+        raw = self.helper.structured(extract.extract_task(person["is_child"]),
+                                     extract.extract_schema(), payload)
+        return extract.parse_notes(raw, len(episodes), is_child=person["is_child"],
+                                   exchanges=episodes, person=person["display_name"])
+
+    def apply_note(self, username: str, note: extract.Note,
+                   episodes: list[dict[str, Any]]) -> str:
+        """Reconcile one note with the person's facts and store it; returns the action.
+        Pinned, explicit and mcp facts are never rewritten (extract.protected)."""
         trust = weakest_trust(episodes[i]["trust"] for i in note.sources)
         vec = self.store.embedder.embed([note.summary], kind="doc")[0]
         neighbours = self.store.nearest_facts(username, vec, 5)

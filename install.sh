@@ -297,8 +297,9 @@ else
     fi
     run systemctl --user enable homeai.service
 
-    # Nightly memory backup, only where the memory database exists.
-    for f in homeai-memory-backup.service homeai-memory-backup.timer; do
+    # Nightly memory backup and hourly health/maintenance, only where the memory database exists.
+    for f in homeai-memory-backup.service homeai-memory-backup.timer \
+             homeai-memory-maintain.service homeai-memory-maintain.timer; do
         src="deploy/systemd/$f"; [[ -f "$src" ]] || src="$src.in"
         sed -e "s#@REPO@#${REPO}#g" "$src" > "$RENDERED"
         dst="$HOME/.config/systemd/user/$f"
@@ -308,9 +309,9 @@ else
         fi
     done
     if [[ -x .venv/bin/python ]] && bin/homeai-memory stats >/dev/null 2>&1; then
-        run systemctl --user enable --now homeai-memory-backup.timer
+        run systemctl --user enable --now homeai-memory-backup.timer homeai-memory-maintain.timer
     else
-        info "memory database not reachable; nightly backup timer not enabled"
+        info "memory database not reachable; backup and maintenance timers not enabled"
     fi
 fi
 

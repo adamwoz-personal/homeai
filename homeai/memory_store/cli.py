@@ -76,17 +76,113 @@ def enrolled_speakers(path: str) -> set[str]:
     return {u for u in (policy.username_for(str(n)) for n in speakers) if u}
 
 
+class _LazyEmbedder:
+    """Loads the ONNX model (~1 s, ~900 MB peak) only when something embeds:
+    most commands, and the hourly ``maintain``, never do."""
+
+    def __init__(self, make) -> None:
+        self._make, self._e = make, None
+
+    def __getattr__(self, name):
+        if self._e is None:
+            self._e = self._make()
+        return getattr(self._e, name)
+
+
 def _store(cfg: Config, embedder=None):
     from .db import Db
     from .embed import DEFAULT_MODEL, OnnxEmbedder
     from .store import PostgresStore
 
     db = Db(cfg.memory.dsn, role="homeai_app").open()
-    return PostgresStore(db, embedder or OnnxEmbedder(cfg.memory.embed_model or DEFAULT_MODEL))
+    return PostgresStore(db, embedder or _LazyEmbedder(
+        lambda: OnnxEmbedder(cfg.memory.embed_model or DEFAULT_MODEL)))
 
 
 def _scope(store, who: str) -> str:
     return "admin" if store.is_admin(who) else "person"
+
+
+def _date(s: str) -> datetime:
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").astimezone()
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"not a YYYY-MM-DD date: {s!r}") from exc
+
+
+def _health(a, cfg: Config, store, out) -> int:
+    from . import maintain
+
+    if a.cmd == "health":
+        with store.db.scoped(None, "admin") as conn:
+            metrics = maintain.sample(conn)
+        report = {"metrics": metrics, "actions": [
+            {"kind": x.kind, "target": x.target, "reason": x.reason, "runs": x.runs}
+            for x in maintain.decide(metrics)]}
+    else:
+        report = maintain.maintain(store, cfg.memory.dsn, dry_run=a.dry_run,
+                                   time_limit_s=a.time_limit)
+    if a.json:
+        print(json.dumps(report, default=_default), file=out)
+        return 1 if report.get("errors") else 0
+    m = report["metrics"]
+    r = m["recall"]
+    p95 = f"{r['p95']:.1f} ms" if r["p95"] is not None else "n/a"
+    print(f"db {m['db_bytes'] / 1e6:.1f} MB, recall p95 {p95} over {r['n']} recalls,"
+          f" jobs {m['jobs'] or 'none'}, purgeable {m['purgeable']}", file=out)
+    for user, p in sorted(m["people"].items()):
+        red = f"{p['redundancy']:.0%} of {p['redundancy_n']}" \
+            if p["redundancy"] is not None else "n/a"
+        print(f"  {user:10} facts {p['facts']:5} (stale {p['stale']}, near-dup {red})"
+              f"  episodes {p['episodes']:6} (>90d {p['old_episodes']})", file=out)
+    if not report["actions"]:
+        print("healthy, no work", file=out)
+    for x in report["actions"]:
+        verb = "run" if x["runs"] else "needs"
+        print(f"{verb} {x['kind']}{' ' + x['target'] if x['target'] else ''}: {x['reason']}",
+              file=out)
+    for d in report.get("done", []):
+        print(f"done {d['kind']}: {d['result']}", file=out)
+    for d in report.get("deferred", []):
+        print(f"deferred {d}: time limit", file=out)
+    for e in report.get("errors", []):
+        print(f"error {e['kind']}: {e['error']}", file=sys.stderr)
+    return 1 if report.get("errors") else 0
+
+
+def _rederive(a, cfg: Config, store, who: str, scope: str, out, helper=None) -> int:
+    from .rederive import rederive
+
+    person = (a.person or who).lower()
+    if person != who and scope != "admin":
+        raise StoreError("only an admin can rederive someone else's memories")
+    if helper is None:
+        from .helper import OllamaHelper
+
+        helper = OllamaHelper(cfg.memory.helper_url, a.model or cfg.memory.helper_model,
+                              threads=cfg.memory.helper_threads)
+    r = rederive(store, helper, person, since=a.since, apply=a.apply,
+                 batch=cfg.memory.extract_batch)
+    if a.json:
+        print(json.dumps(r, default=_default), file=out)
+        return 0
+    if "skipped" in r:
+        print(f"skipped: {r['skipped']}", file=out)
+        return 0
+    print(f"{r['person']}: {r['episodes']} episodes -> {r['notes']} notes with {r['model']}"
+          f"{', ' + str(r['invalid_batches']) + ' invalid batches' if r['invalid_batches'] else ''}",
+          file=out)
+    if r["applied"]:
+        print(f"applied: {r['actions'] or 'nothing'}", file=out)
+        return 0
+    for f in r["findings"]:
+        tail = f"  ~ {f['closest']} ({f['sim']:.2f})" if f["closest"] else ""
+        lock = " [protected]" if f["protected"] else ""
+        print(f"{f['status']:5} {f['note']}{tail}{lock}", file=out)
+    for f in r["gone"]:
+        print(f"gone  {f['summary']}  ({f['id']})", file=out)
+    print(f"{r['counts']}; nothing changed (use --apply to store)", file=out)
+    return 0
 
 
 def _default(o):
@@ -139,6 +235,20 @@ def main(argv: list[str] | None = None, *, cfg: Config | None = None, embedder=N
     p = sub.add_parser("restore-check", help="restore a dump into a scratch database and compare")
     p.add_argument("file", nargs="?", help="default: the newest dump")
     p.add_argument("--dir", default=cfg.memory.backup_dir)
+    p = sub.add_parser("health", help="measure and say what maintenance is due (changes nothing)")
+    p.add_argument("--json", action="store_true")
+    p = sub.add_parser("maintain", help="record a health sample and run the due maintenance")
+    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--time-limit", type=float, default=600.0, help="seconds (default 600)")
+    p = sub.add_parser("rederive", help="re-extract facts from kept episodes (default: diff only)")
+    p.add_argument("--person", help="whose episodes (admins only; default: --as)")
+    p.add_argument("--since", type=_date, help="YYYY-MM-DD; default: all")
+    p.add_argument("--model", help=f"helper model (default {cfg.memory.helper_model})")
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument("--dry-run", action="store_true", help="show the diff (the default)")
+    mode.add_argument("--apply", action="store_true", help="store the notes")
+    p.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
 
     if a.cmd in ("backup", "restore-check"):
@@ -229,6 +339,12 @@ def _run(a, cfg: Config, store, out, helper=None) -> int:
     if store.person(who) is None:
         raise StoreError(f"no such person {who!r}")
     scope = _scope(store, who)
+    if a.cmd in ("health", "maintain"):
+        if scope != "admin":
+            raise StoreError(f"only an admin can run {a.cmd}")
+        return _health(a, cfg, store, out)
+    if a.cmd == "rederive":
+        return _rederive(a, cfg, store, who, scope, out, helper)
     if a.cmd == "list":
         for e in store.list_episodes(who, scope, owner=a.owner, limit=a.n):
             print(f"{e['id']}  {e['at']:%Y-%m-%d %H:%M}  {e['username']:8} {e['user'][:70]}",

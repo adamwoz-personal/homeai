@@ -213,8 +213,33 @@ class PostgresStore:
                 "SELECT id, occurred_at, content, trust FROM memory.episodes"
                 " WHERE username = %s AND extracted_at IS NULL AND state = 'active'"
                 " ORDER BY occurred_at LIMIT %s", (username, limit)).fetchall()
-        return [{"id": r[0], "at": r[1], "user": r[2].get("user", ""),
-                 "assistant": r[2].get("assistant", ""), "trust": r[3]} for r in rows]
+        return [self._exchange(r) for r in rows]
+
+    def episodes_for(self, username: str, since: datetime | None = None,
+                     limit: int = 100_000) -> list[dict[str, Any]]:
+        """``username``'s own active episodes (read or not), oldest first."""
+        with self.db.scoped(username, "person") as conn:
+            rows = conn.execute(
+                "SELECT id, occurred_at, content, trust FROM memory.episodes"
+                " WHERE username = %s AND state = 'active'"
+                " AND (%s::timestamptz IS NULL OR occurred_at >= %s)"
+                " ORDER BY occurred_at LIMIT %s", (username, since, since, limit)).fetchall()
+        return [self._exchange(r) for r in rows]
+
+    def facts_from_episodes(self, username: str, episode_ids: list) -> list[dict[str, Any]]:
+        """Active extractor facts of ``username`` with a source among ``episode_ids``."""
+        with self.db.scoped(username, "person") as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT f.id, f.summary FROM memory.facts f"
+                " JOIN memory.fact_sources s ON s.fact_id = f.id"
+                " WHERE f.username = %s AND f.state = 'active' AND f.source = 'extractor'"
+                " AND s.episode_id = ANY(%s)", (username, list(episode_ids))).fetchall()
+        return [{"id": r[0], "summary": r[1]} for r in rows]
+
+    @staticmethod
+    def _exchange(r) -> dict[str, Any]:
+        return {"id": r[0], "at": r[1], "user": r[2].get("user", ""),
+                "assistant": r[2].get("assistant", ""), "trust": r[3]}
 
     def count_unextracted(self, username: str) -> int:
         with self.db.scoped(username, "person") as conn:

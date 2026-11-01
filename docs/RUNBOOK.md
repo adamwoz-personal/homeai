@@ -250,7 +250,9 @@ sheet in `~/homeai-bench/`).
 - Forgetting removes the exchange, notes drawn only from it, profile lines
   built from them, and unused topic names (checked by
   `tests/test_memory_forget_dump.py` against a full `pg_dump`). Deleted rows
-  stay on disk until autovacuum; ZeroClaw's own memory is separate (below).
+  stay on disk until VACUUM. Autovacuum skips tables this small, so the
+  hourly maintenance timer (below) vacuums them. Backups never contain deleted
+  rows. ZeroClaw's own memory is separate (below).
 - Full dump (row security applies even to the owner):
   `PGOPTIONS='-c app.scope=admin' pg_dump --enable-row-security homeai`.
 - If Postgres is down, Jarvis answers without memories, logs one warning
@@ -283,6 +285,38 @@ PGOPTIONS='-c app.scope=admin' pg_restore --no-comments -d homeai \
     ~/.local/share/homeai/backups/memory-<stamp>.dump
 bin/homeai-memory migrate     # applies anything newer than the dump
 ```
+
+**Health and maintenance.** A user timer (`homeai-memory-maintain.timer`,
+hourly, low CPU/IO priority, 10 min limit) records a health sample, then
+does only two things: `VACUUM (ANALYZE)` on tables with more than 20% dead
+rows (this is what really removes forgotten text), and purges archived,
+unpinned notes unused for a year (the audit keeps no text). It also trims
+health samples older than 90 days and finished jobs older than 30 days.
+Decay, merging, summarising and REINDEX are **advice only**: they show up
+as warnings in `health` and the journal, and nothing runs them yet. "Healthy,
+no work" is the normal result.
+
+```bash
+bin/homeai-memory health [--json]            # metrics + what the policy would do (admin)
+bin/homeai-memory maintain --dry-run         # same, without recording or acting
+bin/homeai-memory maintain                   # run now (the timer does this hourly)
+bin/homeai-memory rederive --dry-run [--person P] [--since 2026-10-01] [--model M]
+bin/homeai-memory rederive --apply ...       # re-draw notes from kept exchanges
+systemctl --user list-timers homeai-memory-maintain.timer
+journalctl --user -u homeai-memory-maintain -n 20
+```
+
+- `rederive` re-reads stored exchanges with the helper (or a better
+  `--model`) and lists new, known and near notes, plus old notes it didn't
+  find again (`gone`). `--apply` adds and merges but never deletes; pinned,
+  explicit and agent (`mcp`) notes are never rewritten. Someone else's
+  memory needs admin. ~2 s per exchange on CPU.
+- Recall speed: the daemon writes its recall timings to the health table
+  hourly; the policy judges p95 only after 20 recalls in 7 days.
+- Live checks: `.venv/bin/python tools/memory/pg_smoke.py` (real database,
+  always rolled back) and `.venv/bin/python tools/memory/recall_live.py`
+  (scratch database, real embedder, the daemon's recall path; writes
+  `~/homeai-bench/recall_live-*.json`).
 
 **Memory tools for coding agents (MCP).** `bin/homeai-memory-mcp --scope
 admin|person --user NAME --client NAME` serves `memory_search`, `memory_get`,
