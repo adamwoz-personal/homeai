@@ -61,6 +61,13 @@ named `jarvis`; on the original box it is `local` (`HOMEAI_AGENT_NAME` in
 | `HOMEAI_WAKE_THRESHOLD` | 0.5 | Raise it if Jarvis wakes by mistake |
 | `HOMEAI_AGENT_NAME` | local | ZeroClaw agent used for voice |
 | `HOMEAI_AGENT_TIMEOUT` | 45 | Seconds before giving up on the agent |
+| `HOMEAI_AVATAR` | 1 | Publish state/captions/visemes for the avatar window on `$XDG_RUNTIME_DIR/homeai/events.sock`; 0 = no socket |
+| `HOMEAI_TTS_ENGINE` | subprocess | `inprocess` loads Piper once: first audio ~25 ms instead of ~0.5 s, and lip-sync timings |
+| `HOMEAI_AVATAR_LAG_MS` | 70 | Output latency added to viseme times (in-process engine) |
+
+Try the avatar feed without the daemon: `.venv/bin/python
+tools/avatar/avatar_demo.py --engine inprocess --text "Hello Adam."` (report in
+`~/homeai-bench/avatar_demo-*.json`).
 
 The persona lives in `~/.zeroclaw/agents/<agent>/workspace/SOUL.md`. The
 shipped copy is `deploy/zeroclaw/SOUL.md`. After editing it, measure with

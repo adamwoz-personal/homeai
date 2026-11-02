@@ -208,3 +208,19 @@ def test_stat_path_targets():
     for bad in ("x", "12/y", ""):
         with pytest.raises(ValueError):
             stalls.stat_path(bad)
+
+
+demo = _load("avatar_demo")
+
+
+def test_demo_summary_chains_only_within_a_call():
+    def utt(uid, start, dur):
+        return ("utterance", {"id": uid, "start_mono": start, "duration_ms": dur, "visemes": [1]})
+
+    events = [utt("aa-0", 10.0, 500), utt("aa-1", 10.5, 300),     # abut
+              utt("bb-0", 20.0, 100),                              # new call: not compared
+              ("speech_stop", {})]
+    s = demo.summarise(events)
+    assert s["chain_gaps_ms"] == [0.0] and s["chained"] and s["stops"] == 1
+    events.append(utt("bb-1", 20.2, 100))                          # 100 ms hole in one call
+    assert not demo.summarise(events)["chained"]

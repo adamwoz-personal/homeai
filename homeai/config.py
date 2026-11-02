@@ -133,6 +133,13 @@ class TtsConfig:
     spoken_budget_words: int = field(
         default_factory=lambda: _env_int("HOMEAI_SPOKEN_BUDGET_WORDS", 110)
     )
+    # "subprocess" runs the piper CLI per utterance (reloads the voice, ~0.5 s);
+    # "inprocess" keeps the voice loaded and publishes lip-sync timelines.
+    # See homeai/tts_engine.py.
+    engine: str = field(default_factory=lambda: _env_str("HOMEAI_TTS_ENGINE", "subprocess"))
+    # First PCM write -> sound from the speaker, measured by
+    # tools/avatar/measure_output_latency.py (65.5 or 74.6 ms per run).
+    avatar_lag_ms: float = field(default_factory=lambda: _env_float("HOMEAI_AVATAR_LAG_MS", 70.0))
 
     @property
     def model_path(self) -> Path:
@@ -373,6 +380,16 @@ class MemoryConfig:
 
 
 @dataclass(frozen=True)
+class AvatarConfig:
+    """The avatar window's event feed (plans/AVATAR_PLAN.md). The daemon only
+    publishes on a local socket; it never imports the renderer."""
+
+    enabled: bool = field(default_factory=lambda: _env_bool("HOMEAI_AVATAR", True))
+    # Empty: $XDG_RUNTIME_DIR/homeai/events.sock
+    socket: str = field(default_factory=lambda: _env_str("HOMEAI_AVATAR_SOCKET", ""))
+
+
+@dataclass(frozen=True)
 class Config:
     audio: AudioConfig = field(default_factory=AudioConfig)
     stt: SttConfig = field(default_factory=SttConfig)
@@ -383,6 +400,7 @@ class Config:
     speaker: SpeakerConfig = field(default_factory=SpeakerConfig)
     home: HomeConfig = field(default_factory=HomeConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
+    avatar: AvatarConfig = field(default_factory=AvatarConfig)
 
     def validation_errors(self) -> list[str]:
         """Return human-readable problems. Empty list means good to start.

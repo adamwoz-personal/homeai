@@ -185,6 +185,37 @@ MUTANTS=(
   "av0-stalls-gap-no-tolerance|tools/avatar/probe_stalls.py|s/cur - prev > expected_s + gap_s/cur - prev > expected_s/|tests/test_avatar_spikes.py -k find_gaps"
   "av0-stalls-burst-any-cpu|tools/avatar/probe_stalls.py|s/if used > min_share \* (stamps\[j\] - stamps\[i\]):/if used > 0:/|tests/test_avatar_spikes.py -k find_bursts"
   "av0-stalls-bad-target-ok|tools/avatar/probe_stalls.py|s/if not pid.isdigit() or (tid and not tid.isdigit()):/if False:/|tests/test_avatar_spikes.py -k stat_path"
+  "av1-bus-no-coalesce|homeai/avatar/bus.py|s/if event\[\"type\"\] in COALESCED:/if False:/|tests/test_avatar_bus.py -k queue"
+  "av1-bus-drops-state|homeai/avatar/bus.py|s/victim = next((e for e in self.items if e\[\"type\"\] not in COALESCED), None)/victim = None/|tests/test_avatar_bus.py -k queue"
+  "av1-bus-never-slow|homeai/avatar/bus.py|s/now - client.blocked_since > self.slow_s or //|tests/test_avatar_bus.py -k slow"
+  "av1-bus-world-readable|homeai/avatar/bus.py|s/os.chmod(self.path, 0o600)/os.chmod(self.path, 0o666)/|tests/test_avatar_bus.py -k mode_600"
+  "av1-bus-stale-kept|homeai/avatar/bus.py|s/            self.path.unlink()          # stale/            pass  # stale/|tests/test_avatar_bus.py -k stale"
+  "av1-bus-no-snapshot|homeai/avatar/bus.py|s/            if etype in COALESCED:/            if False:/|tests/test_avatar_bus.py -k snapshot"
+  "av1-client-version-unchecked|homeai/avatar/client.py|s/    if proto != PROTOCOL_VERSION:/    if False:/|tests/test_avatar_bus.py -k version"
+  "av1-tl-stress-time-lost|homeai/avatar/timeline.py|s/at = cursor if lead_in is None else lead_in/at = cursor/|tests/test_avatar_timeline.py"
+  "av1-tl-stress-weight-ignored|homeai/avatar/timeline.py|s/STRESSED_WEIGHT if stressed else VOWEL_WEIGHT/VOWEL_WEIGHT/|tests/test_avatar_timeline.py"
+  "av1-tl-stress-never-cleared|homeai/avatar/timeline.py|s/                stressed = False/                pass/|tests/test_avatar_timeline.py"
+  "av1-tl-every-gap-rests|homeai/avatar/timeline.py|s/if n \* 1000 >= PAUSE_MIN_MS \* sample_rate:/if True:/|tests/test_avatar_timeline.py"
+  "av1-tl-no-final-rest|homeai/avatar/timeline.py|s/if not frames or frames\[-1\]\[1\] != REST:/if False:/|tests/test_avatar_timeline.py"
+  "av1-tl-level-negative|homeai/avatar/timeline.py|s/min(1.0, max(0.0, frac))/min(1.0, frac)/|tests/test_avatar_timeline.py -k level"
+  "av1-tl-chain-wallclock|homeai/avatar/timeline.py|s/        elapsed += n/        elapsed += 0/|tests/test_avatar_timeline.py -k chain"
+  "av1-tts-no-plain-fallback|homeai/tts_engine.py|s/                self._voice = self._loader(model, False)/                raise/|tests/test_tts_engine.py -k engine"
+  "av1-tts-lag-ignored|homeai/tts.py|s/first_audio\[0\] + lag_s + written \/ rate/first_audio[0] + written \/ rate/|tests/test_tts_engine.py -k inprocess"
+  "av1-tts-chain-wallclock|homeai/tts.py|s/                    written += chunk.num_samples/                    written += 0/|tests/test_tts_engine.py -k inprocess"
+  "av1-tts-no-stop-inprocess|homeai/tts.py|s/^            self._emit(\"speech_stop\", {\"reason\": \"interrupted\"})$/            pass/|tests/test_tts_engine.py -k barge"
+  "av1-tts-no-stop-subprocess|homeai/tts.py|s/^                self._emit(\"speech_stop\", {\"reason\": \"interrupted\"})$/                pass/|tests/test_tts_engine.py -k barge"
+  "av1-tts-rate-unchecked|homeai/tts.py|s/if chunk.sample_rate != rate:/if False:/|tests/test_tts_engine.py -k rate"
+  "av1-tts-synth-errors-ignored|homeai/tts.py|s/^        if errors:$/        if False:/|tests/test_tts_engine.py -k error"
+  "av1-pres-no-dedupe|homeai/avatar/presence.py|s/if name == self.current and not extra:/if False:/|tests/test_avatar_presence.py -k repeated"
+  "av1-pres-unknown-sent|homeai/avatar/presence.py|s/if name not in STATES:/if False:/|tests/test_avatar_presence.py -k unknown"
+  "av1-pres-start-raises|homeai/avatar/presence.py|s/except (RuntimeError, OSError) as exc:/except ValueError as exc:/|tests/test_avatar_presence.py -k start_failure"
+  "av1-pres-publish-raises|homeai/avatar/presence.py|s/except Exception:  # noqa: BLE001 - the avatar/except ValueError:  # the avatar/|tests/test_avatar_presence.py -k publish_failure"
+  "av1-pres-disabled-binds|homeai/avatar/presence.py|s/) if enabled else None/)/|tests/test_avatar_presence.py -k disabled"
+  "av1-daemon-no-wire|homeai/daemon.py|s/^            self.tts.publish = self.presence.publish/            pass/|tests/test_avatar_presence.py -k wires"
+  "av1-daemon-no-idle|homeai/daemon.py|s/^            self.presence.state(\"idle\")$/            pass/|tests/test_avatar_presence.py -k turn_ends"
+  "av1-daemon-no-turn-end|homeai/daemon.py|s/^                self._end_turn_state()$/                pass/|tests/test_avatar_presence.py -k worker"
+  "av1-daemon-speak-silent|homeai/daemon.py|s/^        self.presence.state(\"speaking\")$/        pass/|tests/test_avatar_presence.py -k speak"
+  "av1-daemon-enqueue-silent|homeai/daemon.py|s/^        self.presence.state(\"thinking\")$/        pass/|tests/test_avatar_presence.py -k enqueue"
   "wake-numpy-score|homeai/wake.py|s/self.last_score = float(max(scores.values(), default=0.0))/self.last_score = max(scores.values(), default=0.0)/|tests/test_wake.py -k last_score"
   "verify-skipped|homeai/daemon.py|s/            if not mentions_wake_word(transcript.text, self.cfg.wake.model):/            if False:/|tests/test_daemon.py -k wake"
   "verify-no-strip|homeai/daemon.py|s/text=strip_wake_phrase(transcript.text, self.cfg.wake.model))/text=transcript.text)/|tests/test_daemon.py -k verified_wake"
@@ -253,7 +284,9 @@ for entry in "${MUTANTS[@]}"; do
     echo "STALE    $name  (sed matched nothing; update the mutant)"
     fail=1
   else
-    $PY -m pytest $selector -q -p no:warnings -x >/dev/null 2>&1
+    # bash -c so quoted selectors (-k 'a or b') stay one argument; unquoted,
+    # pytest got a broken -k expression and the error counted as a kill.
+    bash -c "$PY -m pytest $selector -q -p no:warnings -x" >/dev/null 2>&1
     rc=$?
     # Exit 5 is "no tests collected": a selector typo would otherwise count
     # as a kill and the mutant would prove nothing.

@@ -27,4 +27,6 @@ def _isolated_home(tmp_path, monkeypatch):
     monkeypatch.setenv("HOMEAI_LTM_DSN", "dbname=homeai_tests_must_not_use_this")
     # Nor the real helper model: tests use ScriptedHelper. Port 9 refuses fast.
     monkeypatch.setenv("HOMEAI_LTM_HELPER_URL", "http://127.0.0.1:9")
+    # No avatar event bus unless a test opts in (tests/test_avatar_presence.py).
+    monkeypatch.setenv("HOMEAI_AVATAR", "0")
     (tmp_path / "run").mkdir(exist_ok=True)

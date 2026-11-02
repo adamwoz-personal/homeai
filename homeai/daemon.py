@@ -34,6 +34,7 @@ import numpy as np
 from .agent_cli import build_agent_client
 from .memory import ConversationMemory
 from .audio import Microphone
+from .avatar.presence import Presence
 from .config import Config, load
 from .safety import Verdict, check_utterance, sanitise_for_speech
 from .speech import flatten_markdown, normalise_for_speech
@@ -106,6 +107,10 @@ class VoiceAssistant:
         self.mic = Microphone(self.cfg.audio)
         self.stt = Transcriber(self.cfg.stt)
         self.tts = Speaker(self.cfg.tts, self.cfg.audio.output_device)
+        # Avatar event feed; a no-op (no socket) when HOMEAI_AVATAR=0.
+        self.presence = Presence(self.cfg.avatar.enabled, self.cfg.avatar.socket)
+        if self.presence.enabled:
+            self.tts.publish = self.presence.publish
         # Long-term memory (plans/MEMORY_PLAN.md). Optional: if Postgres or the
         # extra packages are missing, Jarvis works exactly as before.
         self.ltm = self._build_ltm()
@@ -209,6 +214,7 @@ class VoiceAssistant:
                 cursor = self.mic.buffer.total_written
                 self.machine.on_wake(time.monotonic())
                 source = "bargein"
+                self.presence.state("listening")
                 log.info("barge-in: capturing follow-up")
             elif self._followup_armed.is_set():
                 # The reply ended with a question. Listen for the answer
@@ -220,6 +226,7 @@ class VoiceAssistant:
                     time.monotonic(), lead_in_s=self.cfg.wake.followup_lead_in_s
                 )
                 source = "followup"
+                self.presence.state("followup")
                 log.info(
                     "listening for a reply (%.1fs, no wake word needed)",
                     self.cfg.wake.followup_lead_in_s,
@@ -256,6 +263,7 @@ class VoiceAssistant:
                             else:
                                 log.info("wake word detected (score %.3f)", wake_score)
                             self.machine.on_wake(now)
+                            self.presence.state("listening")
                             utterance = []
                             source = "wake"
                             self._last_wake_score = wake_score
@@ -279,6 +287,7 @@ class VoiceAssistant:
                             # a Whisper run that could hallucinate words out
                             # of room noise and send them to the agent.
                             log.info("no reply to follow-up; back to wake word")
+                            self.presence.state("idle")
                         else:
                             self._enqueue(audio, source,
                                           preroll if source == "wake" else None)
@@ -298,6 +307,8 @@ class VoiceAssistant:
             self._queue.put_nowait((audio, source, preroll))
         except queue.Full:
             log.warning("worker busy; dropping utterance")
+            return
+        self.presence.state("thinking")
 
     def _worker_loop(self) -> None:
         while not self._stop.is_set():
@@ -316,6 +327,17 @@ class VoiceAssistant:
                     self._speak(MSG_AGENT_ERROR)
                 except Exception:  # noqa: BLE001
                     log.exception("could not speak the error message either")
+            finally:
+                self._end_turn_state()
+
+    def _end_turn_state(self) -> None:
+        """Say what happens next: listen again (follow-up or barge-in) or idle."""
+        if self._bargein_armed.is_set():
+            self.presence.state("listening")
+        elif self._followup_armed.is_set():
+            self.presence.state("followup")
+        else:
+            self.presence.state("idle")
 
     # -- one turn ----------------------------------------------------------
 
@@ -355,6 +377,8 @@ class VoiceAssistant:
         the sentence being spoken and is not a delay.
         """
         listener = self._start_interrupt_listener(text) if chunked else None
+        self.presence.state("speaking")
+        self.presence.caption("jarvis", text)
 
         # With a listener running the mic must stay open, or there is nothing
         # to interrupt with. Without one, keep the mic muted as before.
@@ -394,6 +418,8 @@ class VoiceAssistant:
             # without requiring a second wake word.
             if interrupted:
                 self._bargein_armed.set()
+            # Still mid-turn until the worker says otherwise (_end_turn_state).
+            self.presence.state("thinking")
 
     def _start_interrupt_listener(self, text: str):
         """Return a running InterruptListener, or None if barge-in is unsafe.
@@ -456,6 +482,7 @@ class VoiceAssistant:
                 self.transcript.write(turn)
                 return
         log.info("heard: %s  [stt %.0fms]", transcript.text, turn.stt_ms)
+        self.presence.caption("user", transcript.text)
 
         ident, emb = self._identify(audio, turn)
         if self._handle_voice_id(turn, transcript.text, source, audio, ident, emb, total):
@@ -871,6 +898,9 @@ class VoiceAssistant:
         log.info("wake detector: %s", description)
         self._start_voice_id()
         self._start_home()
+        self.presence.start()
+        # Load the in-process voice now, not on the first reply (~0.5 s).
+        threading.Thread(target=self.tts.warm, name="tts-warm", daemon=True).start()
 
         # Warm the agent loop. The first request against a cold session was
         # measured at ~29s versus ~4s steady state; without this the user's
@@ -928,6 +958,7 @@ class VoiceAssistant:
         for thread in self._threads:
             thread.join(timeout=3)
         self.mic.stop()
+        self.presence.stop()
         if self.ltm is not None:
             self.ltm.close()
 

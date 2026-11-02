@@ -20,10 +20,13 @@ import shutil
 import subprocess
 import time
 import threading
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from .config import TtsConfig
+from .tts_engine import PcmChunk, PiperEngine, normalise_engine
 
 log = logging.getLogger(__name__)
 
@@ -45,11 +48,36 @@ class SpeechResult:
 
 
 class Speaker:
-    def __init__(self, cfg: TtsConfig, output_device: str) -> None:
+    def __init__(self, cfg: TtsConfig, output_device: str, engine: PiperEngine | None = None,
+                 publish: Callable[[str, dict], object] | None = None) -> None:
         self._cfg = cfg
         self._output_device = output_device
         self._lock = threading.Lock()
         self._speaking = threading.Event()
+        self.engine_name = normalise_engine(cfg.engine)
+        self._engine = engine or (PiperEngine(cfg) if self.engine_name == "inprocess" else None)
+        # Event-bus publisher (EventBus.publish); None when the avatar is off.
+        self.publish = publish
+
+    def warm(self) -> None:
+        """Load the in-process voice now so the first reply isn't slower. No-op for subprocess."""
+        if self._engine is not None:
+            try:
+                self._engine.load()
+            except Exception:  # noqa: BLE001 - say() reports the failure properly
+                log.exception("in-process piper failed to load")
+
+    def _emit(self, etype: str, data: dict) -> None:
+        if self.publish is None:
+            return
+        try:
+            self.publish(etype, data)
+        except Exception:  # noqa: BLE001 - the avatar must never break speech
+            log.warning("event publish failed", exc_info=True)
+
+    def _aplay_cmd(self, rate: int) -> list[str]:
+        return ["aplay", "-q", "-D", self._output_device, "-f", "S16_LE",
+                "-r", str(rate), "-c", "1"]
 
     @property
     def speaking(self) -> bool:
@@ -63,6 +91,10 @@ class Speaker:
         return shutil.which("piper")
 
     def available(self) -> tuple[bool, str]:
+        if self._engine is not None:
+            if shutil.which("aplay") is None:
+                return False, "aplay not found (install alsa-utils)"
+            return self._engine.available()
         if not self._piper_path():
             return False, f"piper executable not found: {self._cfg.binary}"
         if shutil.which("aplay") is None:
@@ -90,6 +122,8 @@ class Speaker:
         with self._lock:
             self._speaking.set()
             try:
+                if self._engine is not None:
+                    return self._run_inprocess(text, should_stop)
                 return self._run_pipeline(text, should_stop)
             finally:
                 self._speaking.clear()
@@ -104,13 +138,7 @@ class Speaker:
             "--model", str(self._cfg.model_path),
             "--output-raw",
         ]
-        aplay_cmd = [
-            "aplay", "-q",
-            "-D", self._output_device,
-            "-f", "S16_LE",
-            "-r", str(self._cfg.sample_rate()),
-            "-c", "1",
-        ]
+        aplay_cmd = self._aplay_cmd(self._cfg.sample_rate())
 
         piper = None
         aplay = None
@@ -166,6 +194,7 @@ class Speaker:
                 for proc in (aplay, piper):
                     if proc and proc.poll() is None:
                         proc.kill()
+                self._emit("speech_stop", {"reason": "interrupted"})
                 pump.join(timeout=2)
                 return SpeechResult(
                     ok=True,
@@ -202,6 +231,101 @@ class Speaker:
             first_audio_ms=first_audio_ms,
             total_ms=(time.monotonic() - started) * 1000.0,
         )
+
+    def _publish_utterance(self, chunk: PcmChunk, start_mono: float, index: int, uid: str) -> None:
+        if self.publish is None:
+            return
+        try:
+            from .avatar import timeline
+            visemes = (timeline.visemes_from_alignments(chunk.alignments, chunk.sample_rate)
+                       if chunk.alignments else None)
+            data = timeline.utterance_data(f"{uid}-{index}", start_mono, chunk.sample_rate,
+                                           chunk.num_samples,
+                                           timeline.level_envelope(chunk.pcm, chunk.sample_rate),
+                                           visemes)
+        except Exception:  # noqa: BLE001 - lip sync is optional, speech is not
+            log.warning("utterance timeline failed", exc_info=True)
+            return
+        self._emit("utterance", data)
+
+    def _run_inprocess(self, text: str, should_stop=None) -> SpeechResult:
+        """Synthesise with the loaded voice and feed aplay; publish a timeline per chunk.
+
+        Each chunk's playback start is the first PCM write + the measured output
+        lag + the samples already written: chained by sample count, because the
+        producer writes far faster than real time and aplay plays back to back.
+        """
+        started = time.monotonic()
+        rate = self._cfg.sample_rate()
+        lag_s = self._cfg.avatar_lag_ms / 1000.0
+        uid = uuid.uuid4().hex[:8]
+        try:
+            aplay = subprocess.Popen(self._aplay_cmd(rate), stdin=subprocess.PIPE,
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        except OSError as exc:
+            return SpeechResult(ok=False, error=f"tts pipeline failed: {exc}")
+
+        first_audio: list[float] = []
+        errors: list[str] = []
+        cancel = threading.Event()
+
+        def produce() -> None:
+            written = 0
+            try:
+                for index, chunk in enumerate(self._engine.synthesize(text)):
+                    if cancel.is_set():
+                        break
+                    if chunk.sample_rate != rate:
+                        raise RuntimeError(f"voice rate {chunk.sample_rate} != aplay rate {rate}")
+                    if not first_audio:
+                        first_audio.append(time.monotonic())
+                    self._publish_utterance(chunk, first_audio[0] + lag_s + written / rate,
+                                            index, uid)
+                    aplay.stdin.write(chunk.pcm)
+                    aplay.stdin.flush()
+                    written += chunk.num_samples
+            except (BrokenPipeError, ValueError):
+                pass                                # aplay killed on barge-in
+            except Exception as exc:  # noqa: BLE001 - reported as a failed SpeechResult
+                if not cancel.is_set():
+                    log.exception("in-process synthesis failed")
+                    errors.append(f"{type(exc).__name__}: {exc}")
+            finally:
+                try:
+                    aplay.stdin.close()
+                except (OSError, ValueError):
+                    pass
+
+        pump = threading.Thread(target=produce, name="tts-inprocess", daemon=True)
+        pump.start()
+
+        def first_ms() -> float:
+            return (first_audio[0] - started) * 1000.0 if first_audio else 0.0
+
+        try:
+            interrupted = self._await_playback(aplay, should_stop)
+        except subprocess.TimeoutExpired:
+            cancel.set()
+            aplay.kill()
+            pump.join(timeout=2)
+            return SpeechResult(ok=False, error="tts pipeline timed out")
+        if interrupted:
+            cancel.set()
+            if aplay.poll() is None:
+                aplay.kill()
+            self._emit("speech_stop", {"reason": "interrupted"})
+            pump.join(timeout=2)
+            return SpeechResult(ok=True, interrupted=True, first_audio_ms=first_ms(),
+                                total_ms=(time.monotonic() - started) * 1000.0)
+        pump.join(timeout=5)
+        if errors:
+            return SpeechResult(ok=False, error=f"tts synthesis failed: {errors[0]}",
+                                first_audio_ms=first_ms())
+        if aplay.returncode != 0:
+            detail = aplay.stderr.read().decode(errors="replace").strip() if aplay.stderr else ""
+            return SpeechResult(ok=False, error=f"aplay exited {aplay.returncode}: {detail}")
+        return SpeechResult(ok=True, first_audio_ms=first_ms(),
+                            total_ms=(time.monotonic() - started) * 1000.0)
 
     def _await_playback(self, aplay, should_stop) -> bool:
         """Wait for playback, returning True if it should be cut short.

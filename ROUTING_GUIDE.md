@@ -4,7 +4,7 @@
 with Claude (paid). Updated as evidence accumulates. Every rule here comes from an
 observed outcome on this box, not from theory.
 
-Last updated: 2026-11-02
+Last updated: 2026-11-03
 
 ---
 
@@ -1656,3 +1656,20 @@ Results in `plans/AVATAR_PLAN.md` §10; tools in `tools/avatar/`, tested in
   `tools/avatar/window_probe.py --driver x11 --prime --seconds 30`. Tools:
   `probe_stalls.py` (`--pid PID/TID` CPU bursts), `bisect_shell_hitch.sh`,
   `probe_dbus_periodic.sh`. Not a blocker for Phase 1.
+
+## Avatar Phase 1: bus, timeline, in-process TTS (2026-11-03)
+
+- **Piper stress marks (ˈ ˌ) and ː are separate phonemes with their own
+  duration**, placed before the syllable onset. Give a stress mark's time to
+  the next phoneme, or the mouth opens early. The final rest lands at the
+  punctuation, before the trailing silence.
+- **In-process Piper: first audio 20-27 ms vs ~525 ms by subprocess**
+  (`tools/avatar/avatar_demo.py`, repeated). Voice load ~0.5 s, done once at
+  start (`tts.warm`). Still behind `HOMEAI_TTS_ENGINE=inprocess` until a week live.
+- **The mutation gate counted pytest errors as kills.** Selectors were
+  word-split, so `-k 'a or b'` became a broken expression → exit 4 →
+  "killed". Fixed (`bash -c`); all such mutants re-verified killed. A
+  mutant only counts if its tests *fail*, not error; check new selectors.
+- The daemon only publishes (`homeai/avatar/presence.py`); it never imports
+  pygame/moderngl (tested in a subprocess). Tests run with `HOMEAI_AVATAR=0`
+  from conftest.
