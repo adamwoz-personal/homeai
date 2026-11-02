@@ -4,7 +4,7 @@
 with Claude (paid). Updated as evidence accumulates. Every rule here comes from an
 observed outcome on this box, not from theory.
 
-Last updated: 2026-11-01
+Last updated: 2026-11-02
 
 ---
 
@@ -1620,3 +1620,39 @@ saved credits is my estimate versus writing it myself.
   check "failed" on a home command; the daemon's fast path
   (`home_intents.parse`) takes it before recall is ever asked. The bug was
   my expectation. Test the gate the code actually has.
+
+## Avatar Phase 0 spikes (2026-11-01)
+
+Results in `plans/AVATAR_PLAN.md` §10; tools in `tools/avatar/`, tested in
+`tests/test_avatar_spikes.py` (pure verdict logic + `av0-*` mutants).
+- **In-process Piper is the cheapest latency win left:** the `piper`
+  subprocess reloads the voice every utterance; first PCM ~520 ms vs ~20 ms
+  in-process. That's ~0.5 s off every reply, independent of the avatar.
+- **The daemon owns the mic exclusively** (`hw:3,0`): no other program,
+  not even the PipeWire source, gets audio while `homeai` runs. Any mic
+  measurement must stop the daemon (and restart it in the same command).
+- **Speaker output lag is ~70 ms and bimodal** (65.5 or 74.6 ms per run,
+  +/-0.3 ms within a run). One run would have given a "precise" wrong
+  number; five showed the 9 ms step.
+- **MediaPipe misses pointillist faces raw** but finds all 478 landmarks
+  after a 9 px blur, on all 3 candidates. This box's MediaPipe has only the
+  Tasks API (needs a downloaded `.task` model).
+- **GNOME hides the title bar of SDL windows**, so the labels I put there
+  were invisible; Adam couldn't tell runs apart. Draw labels in the frame.
+- The iGPU (DRI_PRIME=1) renders 20k points at full refresh: the avatar
+  needs 0 VRAM on the 7900 XT.
+- **"Dropped <= 1%" hid jerks Adam could see.** Measure max frame time and
+  flag single frames > 50 ms ("hitches"); one 110 ms frame is visible.
+- **Known issue (parked, 2026-11-02): GNOME Shell stalls ~110 ms every 10 s.**
+  The avatar's `flip()` blocks while gnome-shell's main thread burns
+  ~100 ms CPU; period exactly 10.0 s, phase random per run. Ruled out:
+  homeai daemon, extensions (all disabled: still there), Firefox, GPU
+  (dGPU and iGPU), SDL screensaver inhibit, mutter `check-alive-timeout`,
+  system-wide stalls (plain timer loop: 0 gaps). x11: one ~110 ms frame;
+  native Wayland: two 50-67 ms frames (Adam found run 3, wayland/iGPU,
+  smoothest). `perf` profile is mostly `libmozjs` (GJS JavaScript), no
+  symbols. Unverified hypothesis: periodic JS GC in a shell up 40 days
+  (RSS 372 MB). Cheap next test: log out/in and re-run
+  `tools/avatar/window_probe.py --driver x11 --prime --seconds 30`. Tools:
+  `probe_stalls.py` (`--pid PID/TID` CPU bursts), `bisect_shell_hitch.sh`,
+  `probe_dbus_periodic.sh`. Not a blocker for Phase 1.
