@@ -89,6 +89,8 @@ shipped copy is `deploy/zeroclaw/SOUL.md`. After editing it, measure with
 Ollama has no authentication: anyone on the network can use the GPU, and a big
 model they load evicts the voice model (`OLLAMA_MAX_LOADED_MODELS=1`). Check with
 `ss -ltn | grep 11434`. Undo: `sudo rm` the file, `daemon-reload`, restart ollama.
+Any Ollama restart unloads the voice model; warm it with
+`curl -s localhost:11434/api/generate -d '{"model":"llama31-voice","keep_alive":-1}'`.
 
 ## Coding mode (the coder gets the whole GPU)
 
