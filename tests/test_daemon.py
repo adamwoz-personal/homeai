@@ -212,6 +212,39 @@ def test_statement_does_not_open_a_window(quick) -> None:
     assert not quick._followup_armed.is_set()
 
 
+def _spoken(assistant) -> str:
+    return assistant.tts.say_chunked.call_args[0][0]
+
+
+def test_sentence_repeating_an_earlier_reply_is_not_spoken(quick) -> None:
+    quick.memory.add("what made the moon", "A Mars-sized body called Theia collided "
+                     "with early Earth and the debris formed the moon.")
+    _answer(quick, "any other theories", "Capture and fission are the rivals. Theia, a "
+            "Mars-sized body, collided with early Earth and debris formed the moon.")
+    assert _spoken(quick) == "Capture and fission are the rivals."
+
+
+def test_asking_to_repeat_skips_the_filter(quick) -> None:
+    earlier = "A Mars-sized body called Theia collided with early Earth and formed the moon."
+    quick.memory.add("what made the moon", earlier)
+    _answer(quick, "say that again", f"Sure. {earlier}")
+    assert "Theia" in _spoken(quick)
+
+
+def test_reply_is_not_compared_with_itself(quick) -> None:
+    # The real agent client adds the reply to memory during ask().
+    text = "A Mars-sized body called Theia collided with early Earth. Debris formed it."
+    quick.agent.ask.side_effect = lambda *a, **k: (
+        quick.memory.add("moon?", text), quick.agent.ask.return_value)[1]
+    _answer(quick, "what made the moon", text)
+    assert "Theia" in _spoken(quick)
+
+
+def test_wrapping_quotes_are_not_spoken(quick) -> None:
+    _answer(quick, "capital of france", '"The capital of France is Paris."')
+    assert _spoken(quick) == "The capital of France is Paris."
+
+
 def test_interrupted_reply_does_not_open_a_window(quick) -> None:
     # Barge-in already captures the follow-up; a second arm would race it.
     _heard(quick, "is free will real")

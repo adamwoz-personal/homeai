@@ -46,12 +46,15 @@ from .dialogue import (
     CONTINUE_PROMPT,
     FollowupChain,
     HeldRemainder,
+    asks_to_repeat,
+    drop_repeated_sentences,
     invites_reply,
     is_continue_request,
     is_decline,
     is_trailing_fragment,
     one_sentence,
     split_for_budget,
+    unwrap_quotes,
 )
 from .wake import CaptureMachine, State, build_detector
 from . import home_intents
@@ -596,6 +599,9 @@ class VoiceAssistant:
 
         turn.verdict = Verdict.ALLOW.value
         stage.reset()
+        # Snapshot before asking: the agent client adds this reply to memory.
+        earlier = [] if asks_to_repeat(transcript.text) else \
+            [e.assistant for e in self.memory.recent()]
         reply = self._ask_with_progress(transcript.text)
         turn.agent_ms = stage.ms()
         turn.attempts = reply.attempts
@@ -614,8 +620,11 @@ class VoiceAssistant:
         # sanitise_for_speech collapses; normalise_for_speech needs the
         # security/runaway guard to have already run.
         spoken = normalise_for_speech(
-            sanitise_for_speech(flatten_markdown(reply.text))
+            sanitise_for_speech(flatten_markdown(unwrap_quotes(reply.text)))
         )
+        spoken, dropped = drop_repeated_sentences(spoken, earlier)
+        if dropped:
+            log.info("dropped %d sentence(s) repeating an earlier reply", dropped)
         self._deliver(turn, spoken, total)
 
     # -- home control ----------------------------------------------------------

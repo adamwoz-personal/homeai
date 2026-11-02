@@ -1685,3 +1685,17 @@ Results in `plans/AVATAR_PLAN.md` §10; tools in `tools/avatar/`, tested in
   `tools/avatar/probe_geometry_restart.sh` checks it.
 - Adam (live, 2026-11-02): in sync, size right; hard consonants ("ts") pulse
   a bit strong. Revisit with the mouth rig (Phase 4).
+- **Went live 2026-11-02** (`HOMEAI_TTS_ENGINE=inprocess` in .env, avatar unit
+  enabled). Bus: every utterance announced ~68 ms ahead of audio. Adam liked
+  the thinking colour shift: it covers web-search lag well.
+
+## When the prompt already forbids it, filter the output (2026-11-02)
+
+Live, asked for *other* moon theories, qwen3-coder-30b re-explained the
+giant-impact theory in two follow-ups. SOUL.md, AGENTS.md and the memory
+context prompt *all* already said "do not repeat". A fourth rule would not
+help. `dialogue.drop_repeated_sentences` drops any sentence whose content
+words are ≥60 % from one earlier reply (keeps short ones; never empties a
+reply; skipped for "say that again"). `tools/eval_repeat_followup.py`
+reproduced it in 3/6 follow-ups and the filter removed every one. Also
+seen: a reply wrapped in quotes, now `unwrap_quotes`.

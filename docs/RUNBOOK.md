@@ -80,7 +80,7 @@ shipped copy is `deploy/zeroclaw/SOUL.md`. After editing it, measure with
 | Never wakes | Logs show `wake detector`? The right mic? | `HOMEAI_INPUT_DEVICE`, or lower the wake threshold |
 | Wakes, then "Something went wrong" | `journalctl --user -u homeai -n 50` | `ollama ps`: the model isn't loaded. `ollama run llama31-voice ""` |
 | Slow replies (over 5 s) | `ollama ps` shows a CPU % | Something else is using the VRAM (the coder's llama-server); see below |
-| Repeats itself or recites lists | `tools/inspect_zc_memory.py`, `tools/probe_agent_prompt.py` | Make sure `memory_recall` is not in the voice profile's `allowed_tools` |
+| Repeats itself or recites lists | `tools/inspect_zc_memory.py`, `tools/probe_agent_prompt.py`, `tools/eval_repeat_followup.py`; journal "dropped N sentence(s) repeating" | Make sure `memory_recall` is not in the voice profile's `allowed_tools`. Restated sentences are filtered (`dialogue.drop_repeated_sentences`, `REPEAT_OVERLAP` 0.6); "say that again" bypasses it |
 | Box froze, out of memory | `systemctl show ollama -p Environment` | Install `deploy/ollama-vram-guard.conf` (`OLLAMA_MAX_LOADED_MODELS=1`) |
 | Service won't start: preflight | `.venv/bin/python -m homeai.daemon --check` | Fix each listed problem |
 

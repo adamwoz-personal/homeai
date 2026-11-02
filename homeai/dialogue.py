@@ -224,3 +224,74 @@ class HeldRemainder:
 
     def clear(self) -> None:
         self.text, self.at = "", 0.0
+
+
+# -- repetition ------------------------------------------------------------------
+#
+# Live 2026-11-02: asked for *other* theories of the moon's origin, the model
+# re-explained the giant-impact theory in two consecutive replies, although
+# SOUL.md, AGENTS.md and the context prompt all forbid restating. Prompting
+# had already failed, so repeated sentences are removed after the fact.
+
+REPEAT_OVERLAP = 0.6
+_REPEAT_MIN_WORDS = 5
+_WORD = re.compile(r"[a-z0-9][a-z0-9'-]*")
+_STOPWORDS = frozenset(
+    "the a an and or but of to in on at by for with from as is are was were be been "
+    "it its this that these those which who whom what there their they them then "
+    "than so such also however about into over after before very more most some "
+    "any all can could would should will may might has have had do does did not "
+    "no yes you your i we our he she his her one".split()
+)
+_WRAPPING_QUOTES = {'"': '"', "\u201c": "\u201d", "'": "'"}
+_ASKS_REPEAT = re.compile(
+    r"\b(repeat|again|recap|summari[sz]e|remind me|what did you (just )?say)\b", re.IGNORECASE
+)
+
+
+def _content_words(text: str) -> set[str]:
+    return {w for w in _WORD.findall(text.lower()) if w not in _STOPWORDS}
+
+
+def asks_to_repeat(utterance: str) -> bool:
+    """True when the listener wants earlier content again ("say that again")."""
+    return bool(_ASKS_REPEAT.search(utterance or ""))
+
+
+
+def unwrap_quotes(text: str) -> str:
+    """Strip one pair of quotes wrapping the whole reply (seen live 2026-11-02)."""
+    stripped = text.strip()
+    if len(stripped) >= 2 and _WRAPPING_QUOTES.get(stripped[0]) == stripped[-1]:
+        inner = stripped[1:-1].strip()
+        if stripped[0] not in inner:  # '"a" and "b"' is not one wrapped reply
+            return inner
+    return text
+
+
+def drop_repeated_sentences(
+    reply: str, earlier: list[str], threshold: float = REPEAT_OVERLAP
+) -> tuple[str, int]:
+    """Remove sentences that mostly restate an earlier reply.
+
+    A sentence with at least ``_REPEAT_MIN_WORDS`` content words is dropped
+    when ``threshold`` or more of them already appeared in one earlier reply.
+    Short sentences ("Yes.", "Not quite.") always stay. If every sentence
+    would go, the reply is returned unchanged: a repetitive answer is better
+    than silence. Returns ``(text, dropped_count)``.
+    """
+    pools = [_content_words(e) for e in earlier if e and e.strip()]
+    sentences = split_sentences(reply)
+    if not pools or not sentences:
+        return reply, 0
+    kept = []
+    for sentence in sentences:
+        words = _content_words(sentence)
+        repeated = len(words) >= _REPEAT_MIN_WORDS and any(
+            len(words & pool) / len(words) >= threshold for pool in pools
+        )
+        if not repeated:
+            kept.append(sentence)
+    if not kept:
+        return reply, 0
+    return " ".join(kept), len(sentences) - len(kept)

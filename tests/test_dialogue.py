@@ -11,11 +11,79 @@ import pytest
 from homeai.dialogue import (
     FollowupChain,
     HeldRemainder,
+    asks_to_repeat,
+    drop_repeated_sentences,
     invites_reply,
     is_continue_request,
     is_decline,
     split_for_budget,
+    unwrap_quotes,
 )
+
+# Live 2026-11-02, turn 1 and turn 3 of the moon conversation.
+MOON_1 = ("The moon is believed to have formed about 4.5 billion years ago, after a "
+          "Mars-sized protoplanet called Theia collided with Earth. This collision is "
+          "thought to have created a debris ring that eventually collected and formed "
+          "the moon. This is the most widely accepted theory, known as the giant-impact "
+          "hypothesis.")
+MOON_3 = ("There are several secondary theories of moon formation, including the capture "
+          "theory, the fission theory, and the co-formation theory. However, the most "
+          "widely accepted theory is the giant-impact hypothesis, which suggests that a "
+          "Mars-sized body called Theia collided with early Earth, sending debris into "
+          "orbit that eventually formed the moon.")
+
+
+class TestDropRepeatedSentences:
+    def test_live_case_keeps_the_new_answer_and_drops_the_restatement(self) -> None:
+        text, dropped = drop_repeated_sentences(MOON_3, [MOON_1])
+        assert dropped == 1
+        assert text.startswith("There are several secondary theories")
+        assert "Theia" not in text
+
+    def test_nothing_earlier_changes_nothing(self) -> None:
+        assert drop_repeated_sentences(MOON_3, []) == (MOON_3, 0)
+
+    def test_short_sentences_always_stay(self) -> None:
+        text, dropped = drop_repeated_sentences(
+            "Yes, the giant impact. Capture is the main rival idea.",
+            ["The giant impact made the moon."])
+        assert dropped == 0 and text.startswith("Yes, the giant impact.")
+
+    def test_all_repeated_returns_the_reply_rather_than_silence(self) -> None:
+        assert drop_repeated_sentences(MOON_1, [MOON_1]) == (MOON_1, 0)
+
+    def test_overlap_is_measured_against_one_reply_not_the_pool(self) -> None:
+        # Each earlier reply shares only half the words; together they cover all.
+        earlier = ["Theia collided with early Earth long ago.",
+                   "Debris orbit formed moon slowly."]
+        sentence = "Theia collided with Earth; debris orbit formed moon."
+        assert drop_repeated_sentences(f"New point here today. {sentence}", earlier)[1] == 0
+
+    def test_threshold_is_inclusive(self) -> None:
+        # 3 of 5 content words seen = exactly 0.6.
+        text = "Alpha bravo charlie delta echo."
+        assert drop_repeated_sentences(f"Fresh idea entirely different now. {text}",
+                                       ["alpha bravo charlie"])[1] == 1
+
+
+class TestAsksToRepeat:
+    @pytest.mark.parametrize("text", ["say that again", "can you repeat that",
+                                      "recap please", "what did you just say"])
+    def test_repeat_requests(self, text: str) -> None:
+        assert asks_to_repeat(text)
+
+    def test_ordinary_follow_up(self) -> None:
+        assert not asks_to_repeat("is there a secondary hypothesis?")
+
+
+class TestUnwrapQuotes:
+    def test_wrapped_reply_is_unwrapped(self) -> None:
+        assert unwrap_quotes('"There are several theories."') == "There are several theories."
+
+    def test_inner_quotes_are_left_alone(self) -> None:
+        text = '"Yes" and "no" are both answers.'
+        assert unwrap_quotes(text) == text
+        assert unwrap_quotes('"a" or "b"') == '"a" or "b"'
 
 
 class TestInvitesReply:
