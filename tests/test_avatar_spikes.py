@@ -3,6 +3,7 @@
 import importlib.util
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 _TOOLS = Path(__file__).resolve().parents[1] / "tools" / "avatar"
@@ -224,3 +225,35 @@ def test_demo_summary_chains_only_within_a_call():
     assert s["chain_gaps_ms"] == [0.0] and s["chained"] and s["stops"] == 1
     events.append(utt("bb-1", 20.2, 100))                          # 100 ms hole in one call
     assert not demo.summarise(events)["chained"]
+
+
+# ---- sync_check (Phase 1 functionality test) ----------------------------------------
+
+def test_sync_best_lag_finds_shift_and_sign():
+    sync = _load("sync_check")
+    rng = np.random.default_rng(3)
+    audio = np.convolve(rng.random(600), np.ones(12) / 12, mode="same")
+    late = np.roll(audio, 12)                                      # 12 frames at 240 Hz = 50 ms late
+    lag, corr = sync.best_lag(audio, late, 240.0)
+    assert lag == pytest.approx(0.050) and corr > 0.9
+    assert sync.best_lag(audio, np.roll(audio, -12), 240.0)[0] == pytest.approx(-0.050)
+    with pytest.raises(ValueError):
+        sync.best_lag(audio, audio[:-1], 240.0)
+
+
+def test_sync_audio_track_places_chunks_in_time():
+    sync = _load("sync_check")
+    loud = (np.full(1000, 16000, dtype=np.int16)).tobytes()       # 0.1 s at 10 kHz
+    times = np.array([0.0, 0.95, 1.05, 1.2])
+    track = sync.audio_track([(1.0, loud, 10000)], times, 0.01)
+    assert track[0] == -60.0 and track[3] == -60.0
+    assert track[2] > -10.0 and track[1] == -60.0
+
+
+def test_inspect_bus_reports_how_early_an_utterance_arrived():
+    ib = _load("inspect_bus")
+    row = ib.describe({"type": "utterance", "t_mono": 9.99,
+                       "data": {"id": "u-0", "start_mono": 10.068, "duration_ms": 685,
+                                "visemes": [[0, "rest", 0.0]] * 10}}, 10.0)
+    assert row["early_ms"] == 68.0 and row["visemes"] == 10 and row["sent_to_arrival_ms"] == 10.0
+    assert ib.describe({"type": "state", "data": {"state": "idle"}}, 1.0)["state"] == "idle"

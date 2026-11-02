@@ -15,6 +15,8 @@ unit tests.
 - `bargein.py` - Interrupting a reply by speaking the wake word during playback
 - `stt.py` - Speech-to-text using whisper.cpp
 - `tts.py` - Text-to-speech using Piper, including chunked interruptible speech
+- `tts_engine.py` - Piper loaded in-process (fast first audio, phoneme timings)
+- `avatar/` - Event bus, speech timeline and the sphere window (`python -m homeai.avatar.app`)
 - `speech.py` - Makes text speakable: units, symbols, markdown, sentence splitting
 - `safety.py` - Validates utterances and sanitises responses before they are spoken
 - `memory.py` - Bounded, self-expiring conversation context between turns

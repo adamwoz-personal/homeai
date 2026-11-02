@@ -373,6 +373,21 @@ homeai-mode memory purge            # delete saved conversations (asks first; --
 - Test without touching live data: `tools/test_memory_privacy_sandbox.sh`
   (runs against a copy of `~/.zeroclaw`).
 
+## Avatar window (the Jarvis sphere)
+
+`homeai-avatar.service` starts with the desktop session (XWayland, iGPU via
+`DRI_PRIME=1`) and reads the daemon's event bus. Without the daemon it shows a
+grey "offline" sphere and reconnects within 5 s. F11 toggles fullscreen; size
+and position persist in `~/.config/homeai/avatar.json`.
+
+- Status / logs: `systemctl --user status homeai-avatar`, `journalctl --user -u homeai-avatar -f`
+- Run by hand: `.venv/bin/python -m homeai.avatar.app` (`--check` tests the extra only)
+- Lip sync needs `HOMEAI_TTS_ENGINE=inprocess`; the subprocess engine sends states only.
+- Sphere early/late: adjust `HOMEAI_AVATAR_LAG_MS` (lower = sphere earlier). Offline check:
+  `tools/avatar/sync_check.py` (headless render vs audio, pass ±40 ms).
+- Events not arriving: `tools/avatar/inspect_bus.py --seconds 30` prints each event and
+  how early each utterance arrived.
+
 ## Tests
 
 ```bash

@@ -157,3 +157,11 @@ def utterance_data(uid: str, start_mono: float, sample_rate: int, num_samples: i
     if visemes:
         data["visemes"] = visemes
     return data
+
+
+def chunk_utterance(uid: str, start_mono: float, pcm: bytes, sample_rate: int,
+                    alignments: list[tuple[str, int]] | None) -> dict:
+    """``utterance`` payload for one synthesised chunk (Speaker and sync_check share this)."""
+    visemes = visemes_from_alignments(alignments, sample_rate) if alignments else None
+    return utterance_data(uid, start_mono, sample_rate, len(pcm) // 2,
+                          level_envelope(pcm, sample_rate), visemes)

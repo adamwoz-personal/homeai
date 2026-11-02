@@ -12,7 +12,7 @@
 #
 #   1. Assess the machine (homeai/install/assess.py) and choose the model tier.
 #      ABORTS with every reason listed if the machine cannot run a home AI.
-#   2. Python environment (.venv) with the voice extras.
+#   2. Python environment (.venv) with the voice and avatar extras.
 #   3. whisper.cpp built from source, plus the speech-recognition model.
 #   4. The Piper voice, and the speaker-recognition model (off until
 #      `homeai-mode speaker on`; see homeai/speaker_admin.py).
@@ -154,9 +154,9 @@ else
     run python3 -m venv .venv
 fi
 if command -v uv >/dev/null; then
-    run uv pip install --python .venv/bin/python -q -e '.[voice,dev]'
+    run uv pip install --python .venv/bin/python -q -e '.[voice,dev,avatar]'
 else
-    run .venv/bin/python -m pip install -q -e '.[voice,dev]'
+    run .venv/bin/python -m pip install -q -e '.[voice,dev,avatar]'
 fi
 
 # -- 3. speech recognition ------------------------------------------------------
@@ -312,6 +312,19 @@ else
         run systemctl --user enable --now homeai-memory-backup.timer homeai-memory-maintain.timer
     else
         info "memory database not reachable; backup and maintenance timers not enabled"
+    fi
+
+    # Avatar window: starts with the desktop session, only where its extra imports.
+    sed -e "s#@REPO@#${REPO}#g" deploy/systemd/homeai-avatar.service.in > "$RENDERED"
+    dst="$HOME/.config/systemd/user/homeai-avatar.service"
+    if [[ ! -f "$dst" ]] || ! cmp -s "$RENDERED" "$dst"; then
+        run install -D -m 644 "$RENDERED" "$dst"
+        run systemctl --user daemon-reload
+    fi
+    if [[ -x .venv/bin/python ]] && .venv/bin/python -m homeai.avatar.app --check >/dev/null 2>&1; then
+        run systemctl --user enable homeai-avatar.service
+    else
+        info "avatar extra not importable; homeai-avatar.service not enabled"
     fi
 fi
 

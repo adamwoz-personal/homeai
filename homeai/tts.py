@@ -237,12 +237,8 @@ class Speaker:
             return
         try:
             from .avatar import timeline
-            visemes = (timeline.visemes_from_alignments(chunk.alignments, chunk.sample_rate)
-                       if chunk.alignments else None)
-            data = timeline.utterance_data(f"{uid}-{index}", start_mono, chunk.sample_rate,
-                                           chunk.num_samples,
-                                           timeline.level_envelope(chunk.pcm, chunk.sample_rate),
-                                           visemes)
+            data = timeline.chunk_utterance(f"{uid}-{index}", start_mono, chunk.pcm,
+                                            chunk.sample_rate, chunk.alignments)
         except Exception:  # noqa: BLE001 - lip sync is optional, speech is not
             log.warning("utterance timeline failed", exc_info=True)
             return

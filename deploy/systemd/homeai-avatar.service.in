@@ -1,0 +1,29 @@
+# Template rendered by install.sh: @REPO@ is substituted.
+# The Jarvis avatar window (plans/AVATAR_PLAN.md). Starts with the desktop
+# session, independent of the voice daemon: without it the window shows
+# "offline" and reconnects when the daemon comes back.
+[Unit]
+Description=Home AI avatar window
+Documentation=file://@REPO@/docs/RUNBOOK.md
+PartOf=graphical-session.target
+After=graphical-session.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=@REPO@
+EnvironmentFile=-@REPO@/.env
+Environment=PYTHONUNBUFFERED=1
+# Phase 0 spike: XWayland restores the window position; the iGPU renders it
+# and leaves all of the 7900 XT's VRAM for the models.
+Environment=SDL_VIDEODRIVER=x11
+Environment=DRI_PRIME=1
+ExecStart=@REPO@/.venv/bin/python -m homeai.avatar.app
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+LockPersonality=true
+
+[Install]
+WantedBy=graphical-session.target

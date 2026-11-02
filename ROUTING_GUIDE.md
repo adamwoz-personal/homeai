@@ -4,7 +4,7 @@
 with Claude (paid). Updated as evidence accumulates. Every rule here comes from an
 observed outcome on this box, not from theory.
 
-Last updated: 2026-11-03
+Last updated: 2026-11-02
 
 ---
 
@@ -1657,7 +1657,7 @@ Results in `plans/AVATAR_PLAN.md` §10; tools in `tools/avatar/`, tested in
   `probe_stalls.py` (`--pid PID/TID` CPU bursts), `bisect_shell_hitch.sh`,
   `probe_dbus_periodic.sh`. Not a blocker for Phase 1.
 
-## Avatar Phase 1: bus, timeline, in-process TTS (2026-11-03)
+## Avatar Phase 1: bus, timeline, in-process TTS (2026-11-02)
 
 - **Piper stress marks (ˈ ˌ) and ː are separate phonemes with their own
   duration**, placed before the syllable onset. Give a stress mark's time to
@@ -1673,3 +1673,15 @@ Results in `plans/AVATAR_PLAN.md` §10; tools in `tools/avatar/`, tested in
 - The daemon only publishes (`homeai/avatar/presence.py`); it never imports
   pygame/moderngl (tested in a subprocess). Tests run with `HOMEAI_AVATAR=0`
   from conftest.
+- **Headless EGL works on this box**, so the real shaders are tested without a
+  display: `sync_check.py` renders every frame and measures the drawn sphere.
+  Real voice: lag 0-4 ms, corr ~0.77; lookahead 0 → +46 ms (it can fail).
+- **My demo tool lied: it reported "renderer connected" without checking.**
+  The window retries every ≤5 s, the demo waited 3 s, so Adam saw a grey
+  sphere until the third sentence. Measure the condition you report
+  (`clients_at_start`); `inspect_bus.py` showed events arriving on time.
+- **x11 window creeps 37 px down per restart** (title bar offset between the
+  requested and actual position). Save position minus the measured offset;
+  `tools/avatar/probe_geometry_restart.sh` checks it.
+- Adam (live, 2026-11-02): in sync, size right; hard consonants ("ts") pulse
+  a bit strong. Revisit with the mouth rig (Phase 4).

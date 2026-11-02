@@ -58,7 +58,8 @@ def main() -> int:
     parser.add_argument("--engine", choices=("inprocess", "subprocess"), default="inprocess")
     parser.add_argument("--socket", type=Path, default=default_socket_path().with_name("demo.sock"))
     parser.add_argument("--wait-client", type=float, default=0.0,
-                        help="seconds to wait for a renderer to connect before speaking")
+                        help="seconds to wait for a renderer to connect before speaking "
+                             "(a waiting renderer retries every <= 5 s, so use >= 6)")
     parser.add_argument("--repeat", type=int, default=1)
     args = parser.parse_args()
 
@@ -88,6 +89,9 @@ def main() -> int:
         end = time.monotonic() + args.wait_client
         while bus.client_count == 0 and time.monotonic() < end:
             time.sleep(0.1)
+        clients_at_start = bus.client_count
+        if args.wait_client and not clients_at_start:
+            print(f"warning: no renderer connected within {args.wait_client:.0f} s; speaking anyway")
         runs = []
         for _ in range(max(1, args.repeat)):
             bus.publish("state", {"state": "speaking"})
@@ -101,7 +105,7 @@ def main() -> int:
         bus.stop()
     report = {"when": datetime.now().isoformat(timespec="seconds"), "engine": args.engine,
               "load_ms": round(load_ms), "runs": runs, **summary,
-              "clients": "renderer connected" if args.wait_client else "none awaited"}
+              "clients_at_start": clients_at_start}
     BENCH_DIR.mkdir(exist_ok=True)
     out = BENCH_DIR / f"avatar_demo-{datetime.now():%Y%m%d-%H%M%S}.json"
     out.write_text(json.dumps({**report, "events": events}, indent=1))

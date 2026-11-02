@@ -114,3 +114,10 @@ def test_utterance_data_fallback_omits_visemes():
     d = tl.utterance_data("u1", 5.0, 22050, 22050, [1, 2], None, "hi")
     assert "visemes" not in d and d["duration_ms"] == 1000 and d["level_hz"] == 60
     assert tl.utterance_data("u1", 5.0, 22050, 22050, [], [[0, "rest", 0.0]])["visemes"]
+
+
+def test_chunk_utterance_with_and_without_alignments():
+    pcm = (np.full(2205, 8000, dtype=np.int16)).tobytes()          # 0.1 s
+    d = tl.chunk_utterance("c-0", 2.0, pcm, 22050, [("h", 1000), ("a", 1205)])
+    assert d["duration_ms"] == 100 and len(d["level"]) == 6 and d["visemes"][-1][1] == "rest"
+    assert "visemes" not in tl.chunk_utterance("c-1", 2.0, pcm, 22050, None)
