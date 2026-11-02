@@ -84,6 +84,12 @@ shipped copy is `deploy/zeroclaw/SOUL.md`. After editing it, measure with
 | Box froze, out of memory | `systemctl show ollama -p Environment` | Install `deploy/ollama-vram-guard.conf` (`OLLAMA_MAX_LOADED_MODELS=1`) |
 | Service won't start: preflight | `.venv/bin/python -m homeai.daemon --check` | Fix each listed problem |
 
+**Ollama on the LAN (2026-11-02, for app development).** Drop-in
+`/etc/systemd/system/ollama.service.d/lan.conf` sets `OLLAMA_HOST=0.0.0.0:11434`.
+Ollama has no authentication: anyone on the network can use the GPU, and a big
+model they load evicts the voice model (`OLLAMA_MAX_LOADED_MODELS=1`). Check with
+`ss -ltn | grep 11434`. Undo: `sudo rm` the file, `daemon-reload`, restart ollama.
+
 ## Coding mode (the coder gets the whole GPU)
 
 The voice model (7.0 GB) and qwen3-coder-30b (about 19.7 GB) together exceed
