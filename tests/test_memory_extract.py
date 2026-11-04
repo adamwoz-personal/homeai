@@ -83,6 +83,26 @@ def grounded(summary, sources=(1,), exchanges=MOON):
                          len(exchanges), is_child=False, exchanges=exchanges, person="Adam")
 
 
+HELLO = [{"user": "say hello", "assistant": "Hello!"},
+         {"user": "I'll probably visit Boston in March", "assistant": "Sounds fun."}]
+
+
+def test_a_guess_about_the_person_is_dropped():
+    assert grounded("Adam says hello a lot, suggesting a pattern of seeking reassurance",
+                    exchanges=HELLO) == []
+
+
+def test_a_hedge_the_person_used_is_kept():
+    assert len(grounded("Adam will probably visit Boston in March", sources=[2],
+                        exchanges=HELLO)) == 1
+
+
+def test_profile_line_guessing_beyond_the_notes_is_dropped():
+    raw = {"lines": [{"summary": "Adam seems insecure", "sources": [1]},
+                     {"summary": "Adam keeps snakes", "sources": [1]}]}
+    assert x.parse_reflection(raw, 1, ["Adam keeps snakes"]) == [("Adam keeps snakes", (0,))]
+
+
 def test_note_built_from_jarvis_reply_is_dropped():
     assert grounded("Adam remembers camping in the mountains to see the moon") == []
 

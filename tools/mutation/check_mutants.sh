@@ -306,6 +306,7 @@ MUTANTS=(
   "av4-hair-wave-wrap-jumps|homeai/avatar/facegl.py|s/step = (hair_phase - self._last) % HAIR_PHASE_WRAP/step = hair_phase - self._last/|tests/test_avatar_facegl.py -k hair_wave"
   "av4-hair-wave-one-way|homeai/avatar/facegl.py|s/step \* (1.0 - 2.0 \* ripple)/step/|tests/test_avatar_facegl.py -k hair_wave"
   "model-cannot-announce|homeai/mcp_server.py|s/    \"music\": _tool_music,/    \"music\": _tool_music, \"announce\": lambda a: \"Announced.\",/|tests/test_mcp_server.py -k announce"
+  "memory-keeps-guesses|homeai/memory_store/extract.py|s/    return {m.lower() for m in _GUESS.findall(summary or \"\")} - own/    return set()/|tests/test_memory_extract.py"
   "probe-forwards-by-default|tools/probe_agent_prompt.py|s/if not self.real_reply:/if self.real_reply:/|tests/test_probe_agent_prompt.py"
   "probe-keeps-native-tool-call|tools/probe_agent_prompt.py|s/msg.pop(\"tool_calls\", None)/msg.get(\"tool_calls\")/|tests/test_probe_agent_prompt.py"
   "probe-keeps-text-tool-call|tools/probe_agent_prompt.py|s/named = any(n and n in content for n in tool_names)/named = False/|tests/test_probe_agent_prompt.py"

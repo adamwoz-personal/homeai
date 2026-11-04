@@ -43,6 +43,11 @@ Rules:
   context and are often wrong: never note something only Jarvis said.
 - Skip small talk, one-off commands (lights, timers, weather, music) and
   anything about Jarvis mishearing or malfunctioning.
+- How the person talks to Jarvis (greetings, repeating a request, testing
+  it, asking it to say something) is not a note.
+- Never guess at motives, feelings, personality or state of mind
+  ("suggesting", "seems to", "a pattern of"). Note what was said, not what
+  it might mean.
 - One idea per note, under 200 characters, third person with their name
   ("Adam keeps a corn snake called Noodle").
 - topics: 1-4 short lowercase topics. Reuse one from known_topics if it fits.
@@ -75,7 +80,8 @@ REFLECT_TASK = """\
 Write a short profile of a person for Jarvis, a home voice assistant, from
 their notes. At most 6 lines. Each line is one sentence, third person, under
 200 characters: who they are, what they care about, what they are working on,
-how they like to be helped. Use only what the notes say; never guess. Each
+how they like to be helped. Use only what the notes say; never guess, and
+never read motives or personality into them. Each
 line lists the n of the notes it is based on. Fewer lines are better than
 padding."""
 
@@ -191,6 +197,24 @@ def borrowed(summary: str, exchanges: Sequence[dict[str, Any]], person: str = ""
     return (_words(summary) & replied) - said
 
 
+# Words that turn a note into a guess about the person. 2026-11-04: test
+# traffic produced "Adam repeatedly asks Jarvis to say hello, suggesting a
+# pattern of seeking reassurance", which would colour every later reply.
+_GUESS = re.compile(r"\b(suggest\w*|seem\w*|appear\w*|apparent\w*|likely|probabl\w*|"
+                    r"perhaps|possibl\w*|maybe|might|impl(?:y|ies|ying|ied)|indicat\w*|"
+                    r"patterns?|tendenc\w*|reassurance|insecur\w*|personality)\b")
+
+
+def guesses(summary: str, said: Sequence[str]) -> set[str]:
+    """Guess words in ``summary`` that the source text never used.
+
+    "Adam will probably visit Boston" survives if Adam said "probably"; a
+    helper's own "suggesting" or "pattern of" does not.
+    """
+    own = {m.lower() for text in said for m in _GUESS.findall(text or "")}
+    return {m.lower() for m in _GUESS.findall(summary or "")} - own
+
+
 def parse_notes(raw: dict[str, Any], n_exchanges: int, *, is_child: bool,
                 exchanges: Sequence[dict[str, Any]] | None = None,
                 person: str = "") -> list[Note]:
@@ -211,6 +235,8 @@ def parse_notes(raw: dict[str, Any], n_exchanges: int, *, is_child: bool,
             continue          # a fact must be traceable to what was said
         if exchanges is not None and borrowed(summary, exchanges, person):
             continue          # it leans on what Jarvis said, not the person
+        if exchanges is not None and guesses(summary, [e.get("user", "") for e in exchanges]):
+            continue          # a guess about the person, not something they said
         topics = tuple(dict.fromkeys(t for t in map(slug, item.get("topics", [])) if t))
         try:
             importance = min(1.0, max(0.0, float(item.get("importance", 0.5))))
@@ -286,12 +312,15 @@ def reflection_inputs(facts: Sequence[dict[str, Any]], limit: int = 60) -> list[
     return sorted(ok, key=lambda f: (-f["importance"], -f["updated_at"].timestamp()))[:limit]
 
 
-def parse_reflection(raw: dict[str, Any], n_facts: int) -> list[tuple[str, tuple[int, ...]]]:
+def parse_reflection(raw: dict[str, Any], n_facts: int,
+                     notes: Sequence[str] = ()) -> list[tuple[str, tuple[int, ...]]]:
+    """Profile lines to keep. ``notes``: the fact summaries sent; a line with
+    guess words none of them used is dropped."""
     out = []
     for line in raw.get("lines", [])[:MAX_PROFILE_LINES]:
         summary = clean_summary(line.get("summary", ""))
         sources = tuple(sorted({s - 1 for s in line.get("sources", [])
                                 if isinstance(s, int) and 1 <= s <= n_facts}))
-        if summary and sources:
+        if summary and sources and not guesses(summary, notes):
             out.append((summary, sources))
     return out

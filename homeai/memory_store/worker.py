@@ -170,7 +170,8 @@ class Worker:
         raw = self.helper.structured(extract.REFLECT_TASK, extract.reflect_schema(),
                                      extract.reflect_payload(person["display_name"], facts))
         lines = [(s, [facts[i]["id"] for i in src])
-                 for s, src in extract.parse_reflection(raw, len(facts))]
+                 for s, src in extract.parse_reflection(raw, len(facts),
+                                                        [f["summary"] for f in facts])]
         n = self.store.replace_profile(username, lines, digest,
                                        actor=f"reflection:{self.helper.name}")
         return {"lines": n, "facts": len(facts)}
