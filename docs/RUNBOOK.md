@@ -439,9 +439,15 @@ sphere; `--look face` refuses to start without a usable face.
   so P/B/M close before the sound). Teeth show faintly as the lips part. It also
   blinks every 3-6 s, makes saccades, breathes and sways the head. Listening widens
   the eyes, thinking looks up and away, sleep closes the eyes slowly, and waking opens
-  them in ~0.3 s. The aura "hair" around the skull takes the state's colour and motion.
-- Look at every pose without the daemon: `tools/avatar/inspect_face.py [--pose AA ...]`
-  -> `~/homeai-bench/face-render-<stamp>/contact.png`.
+  them in ~0.3 s; while the lids are shut the eye dots are hidden, so a closed eye
+  reads as shut rather than as a glowing slit. The irises take the state's colour
+  (cyan listening, lavender thinking, none asleep; `StateFace.eye_tint`).
+- The aura "hair" hangs from just outside the head's silhouette on both sides, from
+  brow height (above the ears) to the jaw: short at the top, long below, falling with
+  gravity, never on the crown. It takes the state's colour and motion. Where roots
+  land: `tools/avatar/probe_hair_roots.py`.
+- Look at every pose without the daemon: `tools/avatar/inspect_face.py [--pose AA ...]
+  [--crop 0.3,0.38,0.7,0.52]` -> `~/homeai-bench/face-render-<stamp>/contact.png`.
 - Lip sync offline: `tools/avatar/sync_check.py --look face --size 480` (2026-11-04:
   lag 0 / -4 ms, corr 0.67 / 0.72).
 - Budget: `tools/avatar/avatar_profile.py --look face` (2026-11-04 on the iGPU, 3 runs:

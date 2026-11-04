@@ -82,3 +82,35 @@ def test_face_poses_are_distinguishable(face_renders, a, b):
 def test_staged_face_rejects_unknown_pose():
     with pytest.raises(ValueError):
         tour.staged_face("yawn")
+
+
+def _eye_box(rgb):
+    """Mean RGB inside both eyes' boxes (synthetic face, rest geometry) and of the whole frame."""
+    import json
+
+    from homeai.avatar import facegl, rig
+
+    data = json.loads((Path(__file__).parents[1] / tour.FACE_FIXTURE).read_text())
+    v = np.array(data["landmarks"], dtype=np.float64)
+    side = float(data["image_size"][0])
+    box = []
+    for region in ("eye_r", "eye_l"):
+        px = facegl.to_pixels(v[list(rig.REGIONS[region])], side, tour.FACE_GOLDEN_SIZE, facegl.ZOOM)
+        (x0, y0), (x1, y1) = px.min(axis=0).astype(int), px.max(axis=0).astype(int) + 1
+        box.append(rgb[y0:y1, x0:x1].reshape(-1, 3))
+    return np.vstack(box).astype(float).mean(axis=0), rgb.reshape(-1, 3).astype(float).mean(axis=0)
+
+
+def test_sleeping_eyes_are_shut_not_slits(face_renders):
+    out, _ = face_renders
+    rest_eye, rest_all = _eye_box(out["rest"])
+    sleep_eye, sleep_all = _eye_box(out["sleep"])
+    # Dimming the whole face isn't enough: the eyes must go dark relative to the rest of it.
+    assert sleep_eye.sum() / sleep_all.sum() < 0.6 * rest_eye.sum() / rest_all.sum()
+
+
+def test_eyes_take_the_states_colour(face_renders):
+    out, _ = face_renders
+    rest, _ = _eye_box(out["rest"])                                       # staged speaking: cyan
+    thinking, _ = _eye_box(out["thinking"])
+    assert thinking[0] / thinking[1] > rest[0] / rest[1] + 0.05           # thinking's lavender

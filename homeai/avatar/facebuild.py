@@ -264,15 +264,23 @@ def synthetic_face(landmarks: np.ndarray, side: int, out_dir: Path, points: int 
     rng = np.random.default_rng(seed)
     cand = rng.uniform(0, side, (points * 6, 2))
     dens = np.where(rig._inside(cand, lm[list(_OVAL)]), 0.55, 0.0)
+    irises = np.zeros(len(cand), bool)
     for eye in _EYES:
-        dens[rig._inside(cand, lm[list(eye)])] = 0.08
+        inside = rig._inside(cand, lm[list(eye)])
+        dens[inside] = 0.08
+        ring = lm[list(eye)]
+        r = 0.5 * float(np.ptp(ring[:, 1]))
+        irises |= inside & (np.linalg.norm(cand - ring.mean(axis=0), axis=1) < r)
+    dens[irises] = 1.0                                      # a bright iris, so lids and eye tint show
     for brow in _BROWS:
         dens[rig._inside(cand, lm[list(brow)])] = 1.0
     lips = rig._inside(cand, lm[list(rig._LIPS_UPPER_OUTER + rig._LIPS_LOWER_OUTER[::-1])])
     slit = rig._inside(cand, lm[list(rig._LIPS_UPPER_INNER + rig._LIPS_LOWER_INNER[::-1])])
     dens[lips] = 0.95
     dens[slit] = 0.0
-    keep = cand[rng.random(len(cand)) < dens][:points]
+    sel = rng.random(len(cand)) < dens
+    keep = cand[sel][:points]
+    iris = irises[sel][:points]
     if len(keep) < points // 2:
         raise BuildError(f"synthetic face kept only {len(keep)} points")
     d = np.zeros(len(keep))
@@ -281,6 +289,8 @@ def synthetic_face(landmarks: np.ndarray, side: int, out_dir: Path, points: int 
         d[mask] = value
     y = keep[:, 1] / side
     colour = np.column_stack([0.25 + 0.5 * y, 0.95 - 0.3 * y, 0.45 + 0.4 * (1 - y)]).astype(np.float32)
+    colour[iris] = 0.9
+    d[iris] = 0.9
     tri, bary = bind(keep, verts, tris)
     return write_asset(out_dir, side=side, verts=verts, tris=tris, fields=rig.default_fields(verts), xy=keep,
                        size=stipple.sizes(d).astype(np.float32), colour=colour, tri=tri, bary=bary,

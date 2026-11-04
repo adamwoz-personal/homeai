@@ -28,6 +28,8 @@ DOT_SPRITE = 1.5            # sprite diameter / typical point spacing (core is 0
 SHIMMER_PX = 0.25           # image px
 HAIR_STRANDS = 140
 HAIR_POINTS = 28            # per strand
+HAIR_LIT = 0.12             # colour above this is part of the head's silhouette
+HAIR_GAP = 0.25             # lit dots further than this (x face height) beyond the head are strays
 HEAD_DEPTH = 0.25           # head pose shift, share of the face height
 ZOOM = 0.86                 # the image's height as a share of the window: room for the aura
 LUMA = (0.299, 0.587, 0.114)
@@ -56,6 +58,8 @@ uniform float teeth;
 uniform float low;
 uniform float high;
 uniform float shimmer;
+uniform vec2 lids;          // blink_r, blink_l: 1 = shut
+uniform vec4 eye_tint;      // rgb, amount: the irises glow the state's colour
 in ivec3 idx;
 in vec3 w;
 in vec3 col;
@@ -71,15 +75,19 @@ void main() {
     float small = 1.0 - step(1.0, size);
     vec3 g = vec3(dot(col, vec3(0.299, 0.587, 0.114)));
     float k = bright * (0.85 + 0.25 * glow) * (1.0 + 0.6 * high * small);
-    if (layer > 0.5) k *= 0.55 * teeth * (layer > 1.5 ? 0.45 : 1.0);
-    c = mix(col, g, grey) * k;
+    vec3 base = col;
+    if (layer > 0.5 && layer < 3.5) k *= 0.55 * teeth * (layer > 1.5 ? 0.45 : 1.0);
+    if (layer > 3.5) {                                      // eye interior: hidden by the lid, tinted by state
+        float shut = layer > 4.5 ? lids.y : lids.x;
+        k *= 1.0 - smoothstep(0.25, 0.8, shut);
+        base = mix(col, eye_tint.rgb * (0.6 + 0.8 * g.r), eye_tint.a);
+        k *= 1.0 + 0.8 * eye_tint.a;
+    }
+    c = mix(base, g, grey) * k;
     gl_PointSize = point_px * size * (1.0 + 0.25 * low * (1.0 - small));
 }
 """
 HAIR_VERTEX = "#version 330\n" + _POSE + """
-uniform vec2 hc;
-uniform vec2 radii;
-uniform float hlen;
 uniform float point_px;
 uniform float hair_phase;
 uniform float hair_amp;
@@ -91,26 +99,23 @@ uniform float low;
 uniform float high;
 uniform float glow;
 uniform vec3 colour;
-in float theta;
-in float s;
+in vec2 root;       // image px, just outside the head's silhouette
+in float side;      // -1 left, +1 right
+in float len;       // strand length, image px (short above the ears, long below)
+in float s;         // 0 root .. 1 tip
 in float phase;
 in float size;
-in float kink;
 out vec3 c;
 void main() {
-    float th = theta + 0.12 * sin(swirl + theta * 2.0);
-    vec2 root = hc + vec2(cos(th) * radii.x, -sin(th) * radii.y);
-    vec2 n = normalize(vec2(cos(th) / radii.x, -sin(th) / radii.y));
-    vec2 perp = vec2(-n.y, n.x);
-    float L = hlen * (0.7 + 0.6 * kink);
-    float dir = 1.0 - 2.0 * ripple;                     // listening: waves run in toward the head
-    float wv = (sin(9.0 * s - hair_phase * dir + phase) * 0.08
-              + sin(4.0 * s - 0.6 * hair_phase + phase * 1.7) * 0.05) * hair_amp * L * s;
-    vec2 p = root + n * L * s + vec2(0.0, 1.0) * L * 0.5 * s * s + perp * wv;
-    vec2 e = (p - hc) / radii;
-    float outside = smoothstep(0.98, 1.04, dot(e, e));   // never over the face
+    float dir = 1.0 - 2.0 * ripple;                     // listening: waves run up toward the head
+    float sway = 0.05 * sin(swirl + phase);             // thinking: strands swing as a whole
+    float wv = (sin(7.0 * s - hair_phase * dir + phase) * 0.06
+              + sin(3.0 * s - 0.6 * hair_phase + phase * 1.7) * 0.04) * hair_amp * s;
+    // Out from the head a little, then falling: gravity wins along the strand.
+    float out_ = 0.10 * (1.0 - (1.0 - s) * (1.0 - s));
+    vec2 p = root + len * vec2(side * (out_ + wv + sway * s), s);
     gl_Position = to_clip(pose(p));
-    float fade = pow(1.0 - s, 1.3) * smoothstep(0.0, 0.06, s) * outside;
+    float fade = pow(1.0 - s, 1.1) * smoothstep(0.0, 0.05, s);
     float hit = ring < 0.0 ? 0.0 : 1.0 - smoothstep(0.0, 0.08, abs(s - ring));
     float small = 1.0 - step(1.0, size);
     c = colour * (0.35 + 0.65 * glow) * fade * (1.0 + 2.0 * ring_amp * hit + 1.5 * high * small) * 1.2;
@@ -149,14 +154,76 @@ def point_spacing(xy: np.ndarray, sample: int = 400, seed: int = 0) -> float:
 
 
 def head_geometry(verts: np.ndarray) -> dict:
-    """Pivot, size and the aura's root ellipse, from the face oval (image px)."""
+    """Pivot and size for head pose, from the face oval (image px)."""
     v = np.asarray(verts, dtype=np.float64)
     oval = v[list(rig.REGIONS["jaw"] + rig.REGIONS["forehead"])]
+    return {"pivot": oval.mean(axis=0), "face_h": rig.face_height(v)}
+
+
+def silhouette_edge(xy: np.ndarray, y: float, side: int, band: float, centre: float | None = None,
+                    gap: float | None = None) -> float | None:
+    """x where the art ends on ``side`` (-1 left, +1 right) within ``band`` px of row ``y``.
+
+    Walks out from ``centre`` (default: the row's median) and stops at the first
+    gap wider than ``gap`` px (default 3 bands), so stray dots and shoulders
+    further out don't count as the head.
+    """
+    row = xy[np.abs(xy[:, 1] - y) <= band, 0]
+    if not len(row):
+        return None
+    c = float(np.median(row)) if centre is None else float(centre)
+    gap = 3.0 * band if gap is None else gap
+    xs = np.sort(row[row >= c] if side > 0 else -row[row <= c])
+    if not len(xs):
+        return None
+    cut = np.flatnonzero(np.diff(xs) > gap)                 # walk starts at the first lit point
+    return float((xs[cut[0]] if len(cut) else xs[-1]) * side)
+
+
+def lit_points(xy: np.ndarray, colour: np.ndarray) -> np.ndarray:
+    """The art's points bright enough to count as the head (its black surround is stippled too)."""
+    lit = np.asarray(xy)[np.asarray(colour).max(axis=1) > HAIR_LIT]
+    return lit if len(lit) else np.asarray(xy)
+
+
+def hair_layout(xy: np.ndarray, verts: np.ndarray, spacing: float, strands: int = HAIR_STRANDS,
+                points: int = HAIR_STRANDS * HAIR_POINTS, seed: int = 5) -> np.ndarray:
+    """(M, 7) float32 per hair point: root x, root y, side, length, s, phase, size.
+
+    Strands hang from just outside the head's silhouette on both sides, from
+    brow height (just above the ears) down to the jaw's angle: none on the
+    crown. Short at the top, longer lower down; points shared by length.
+    """
+    if strands < 2 or points < strands * 4:
+        raise ValueError("need at least two strands of four points")
+    rng = np.random.default_rng(seed)
+    v = np.asarray(verts, dtype=np.float64)
+    pts = np.asarray(xy, dtype=np.float64)
     h = rig.face_height(v)
-    width = float(np.ptp(oval[:, 0]))
-    top = float(v[10, 1])
-    return {"pivot": oval.mean(axis=0), "face_h": h, "hc": np.array([oval[:, 0].mean(), top + 0.58 * h]),
-            "radii": np.array([0.68 * width, 0.86 * h]), "hlen": 0.36 * h}
+    top = float(min(v[105, 1], v[334, 1]))                  # brows: about the top of the ears
+    bottom = float(max(v[172, 1], v[397, 1]))               # jaw angle
+    centre = float(v[list(rig.REGIONS["jaw"] + rig.REGIONS["forehead"]), 0].mean())
+    roots = []
+    for k in range(strands):
+        side = -1 if k % 2 == 0 else 1
+        t = float(np.clip((k // 2 + rng.uniform(-0.4, 0.4)) / max(strands // 2 - 1, 1), 0.0, 1.0))
+        y = top + t * (bottom - top)
+        edge = silhouette_edge(pts, y, side, 2.0 * spacing, centre=centre, gap=HAIR_GAP * h)
+        if edge is None:
+            continue
+        length = h * (0.08 + 0.95 * t ** 1.3) * rng.uniform(0.85, 1.15)
+        roots.append((edge + side * 1.2 * spacing, y, side, length, rng.uniform(0, 2 * np.pi)))
+    if not roots:
+        raise ValueError("no silhouette found for the hair")
+    total = sum(r[3] for r in roots)
+    out = []
+    for x, y, side, length, phase in roots:
+        n = max(4, int(round(points * length / total)))
+        s = (np.arange(n) + rng.random(n) * 0.6) / n
+        size = np.where(rng.random(n) < 0.3, rng.uniform(1.0, 1.5, n), rng.uniform(0.6, 0.99, n))
+        out.append(np.column_stack([np.full(n, x), np.full(n, y), np.full(n, side), np.full(n, length),
+                                    s, np.full(n, phase), size]))
+    return np.vstack(out).astype(np.float32)
 
 
 def mouth_points(verts: np.ndarray, per_gap: int = 6, seed: int = 3) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -187,6 +254,23 @@ def mouth_points(verts: np.ndarray, per_gap: int = 6, seed: int = 3) -> tuple[np
     return np.array(idx, np.int32), np.array(w, np.float32), np.array(layer, np.float32)
 
 
+EYE_LAYERS = {"r": 4.0, "l": 5.0}               # face_buffers layer for points inside each eye
+EYE_GROW = (1.1, 1.3)                           # eye outline scaled about its centre: painted eyes overhang the lids
+
+
+def eye_layers(points: np.ndarray, verts: np.ndarray) -> np.ndarray:
+    """Layer per point (rest position, image px): 4 / 5 inside the right / left eye's outline, else 0."""
+    v = np.asarray(verts, dtype=np.float64)
+    pts = np.asarray(points, dtype=np.float64)
+    out = np.zeros(len(pts), np.float32)
+    for (upper, lower), layer in zip(((rig.EYE_R_UPPER, rig.EYE_R_LOWER), (rig.EYE_L_UPPER, rig.EYE_L_LOWER)),
+                                     EYE_LAYERS.values()):
+        poly = v[list(lower) + list(upper)[::-1]]
+        c = poly.mean(axis=0)
+        out[rig._inside(pts, c + (poly - c) * EYE_GROW)] = layer
+    return out
+
+
 def face_buffers(asset, seed: int = 11) -> tuple[np.ndarray, np.ndarray]:
     """(idx (N, 3) int32, attrs (N, 9) float32: w3, colour3, size, phase, layer) for face + teeth."""
     rng = np.random.default_rng(seed)
@@ -197,7 +281,7 @@ def face_buffers(asset, seed: int = 11) -> tuple[np.ndarray, np.ndarray]:
     attrs[:, 3:6] = asset.colour
     attrs[:, 6] = asset.size
     attrs[:, 7] = rng.uniform(0, 2 * np.pi, n)
-    attrs[:, 8] = 0.0
+    attrs[:, 8] = eye_layers(asset.xy, asset.verts)
     t_idx, t_w, t_layer = mouth_points(asset.verts)
     m = len(t_idx)
     teeth = np.empty((m, 9), np.float32)
@@ -209,21 +293,6 @@ def face_buffers(asset, seed: int = 11) -> tuple[np.ndarray, np.ndarray]:
     teeth[:, 7] = rng.uniform(0, 2 * np.pi, m)
     teeth[:, 8] = t_layer
     return np.vstack([idx, t_idx]), np.vstack([attrs, teeth])
-
-
-def hair_attributes(strands: int = HAIR_STRANDS, per: int = HAIR_POINTS, seed: int = 5) -> np.ndarray:
-    """(strands * per, 5) float32: root angle, position along the strand, phase, size, kink."""
-    if strands < 1 or per < 2:
-        raise ValueError("need at least one strand of two points")
-    rng = np.random.default_rng(seed)
-    theta = np.linspace(-0.3, np.pi + 0.3, strands) + rng.uniform(-0.01, 0.01, strands)
-    kink = rng.random(strands)
-    sphase = rng.uniform(0, 2 * np.pi, strands)
-    s = (np.arange(per) + rng.random((strands, per)) * 0.6) / per
-    size = np.where(rng.random((strands, per)) < 0.3, rng.uniform(1.0, 1.5, (strands, per)),
-                    rng.uniform(0.6, 0.99, (strands, per)))
-    return np.stack([np.repeat(theta, per), s.ravel(), np.repeat(sphase, per), size.ravel(),
-                     np.repeat(kink, per)], axis=1).astype(np.float32)
 
 
 def view(side: float, size: tuple[int, int], zoom: float = 1.0) -> tuple[float, float, float, float]:
@@ -273,11 +342,13 @@ class FaceRenderer:
         self.hair_prog = self.hair_vbo = self.hair_vao = None
         if hair:
             self.hair_prog = ctx.program(vertex_shader=HAIR_VERTEX, fragment_shader=DOT_FRAGMENT)
-            self.hair_vbo = ctx.buffer(hair_attributes().tobytes())
+            layout = hair_layout(lit_points(asset.xy, asset.colour), asset.verts, self.spacing)
+            self.hair_vbo = ctx.buffer(layout.tobytes())
             self.hair_vao = ctx.vertex_array(self.hair_prog, [
-                (self.hair_vbo, "1f 1f 1f 1f 1f", "theta", "s", "phase", "size", "kink")])
+                (self.hair_vbo, "2f 1f 1f 1f 1f 1f", "root", "side", "len", "s", "phase", "size")])
+            self.hair_points = len(layout)
         self.overlay = Overlay(ctx)
-        self.points = len(idx) + (HAIR_STRANDS * HAIR_POINTS if hair else 0)
+        self.points = len(idx) + (self.hair_points if hair else 0)
 
     @staticmethod
     def _set(prog, name: str, value) -> None:
@@ -298,8 +369,7 @@ class FaceRenderer:
                   "head": (p.get("head_yaw", 0.0), p.get("head_pitch", 0.0), p.get("head_roll", 0.0)),
                   "view": view(self.side, size, self.zoom), "low": frame.low, "high": frame.high}
         if self.hair_vao is not None:
-            for name, value in {**common, "hc": tuple(self.geo["hc"]), "radii": tuple(self.geo["radii"]),
-                                "hlen": self.geo["hlen"], "point_px": max(1.5, 1.6 * px_per_img * self.spacing),
+            for name, value in {**common, "point_px": max(1.5, 1.6 * px_per_img * self.spacing),
                                 "hair_phase": p.get("hair_phase", 0.0), "hair_amp": p.get("hair_amp", 1.0),
                                 "swirl": frame.swirl, "ripple": frame.ripple, "ring": frame.ring,
                                 "ring_amp": frame.ring_amp, "glow": frame.glow,
@@ -309,7 +379,9 @@ class FaceRenderer:
         teeth = teeth_visibility(verts, p.get("teeth_show", 0.0), self.geo["face_h"])
         for name, value in {**common, "t": t, "point_px": max(1.5, DOT_SPRITE * px_per_img * self.spacing),
                             "bright": p.get("bright", 1.0), "grey": p.get("grey", 0.0),
-                            "glow": p.get("glow", 0.0), "teeth": teeth, "shimmer": SHIMMER_PX}.items():
+                            "glow": p.get("glow", 0.0), "teeth": teeth, "shimmer": SHIMMER_PX,
+                            "lids": (p.get("blink_r", 0.0), p.get("blink_l", 0.0)),
+                            "eye_tint": (*frame.colour, p.get("eye_tint", 0.0))}.items():
             self._set(self.face_prog, name, value)
         self.verts_tex.use(0)
         self._set(self.face_prog, "verts", 0)

@@ -62,7 +62,7 @@ LEVEL_ONLY_JAW = 0.7        # no visemes (subprocess TTS): jaw follows loudness 
 OMEGA = {"jaw_open": 50.0, "lips_close": 60.0, "lips_round": 45.0, "lips_wide": 45.0, "lip_bite": 60.0,
          "teeth_show": 30.0, "gaze_x": 45.0, "gaze_y": 45.0, "brow_raise": 14.0, "brow_frown": 14.0,
          "head_yaw": 3.0, "head_pitch": 3.0, "head_roll": 3.0, "bright": 5.0, "grey": 5.0,
-         "hair_amp": 4.0, "hair_speed": 3.0}
+         "hair_amp": 4.0, "hair_speed": 3.0, "eye_tint": 5.0}
 EYES_CLOSE_OMEGA = 5.0      # falling asleep: slow
 EYES_OPEN_OMEGA = 16.0      # waking: open in ~0.3 s (§4.4)
 
@@ -89,23 +89,25 @@ class StateFace:
     bright: float = 1.0
     grey: float = 0.0
     hair: tuple[float, float] = (0.6, 1.0)           # speed (rad/s), amplitude
+    eye_tint: float = 0.25                           # irises glow the state's colour (hair's too)
 
 
 FACE_STATES: dict[str, StateFace] = {
     "idle": StateFace(),
     "listening": StateFace(eyes=-0.18, gaze=(0.0, 0.0, 0.04, 0.03, 0.8, 2.0), brows=(0.35, 0.0),
-                           hair=(1.6, 1.25)),
+                           hair=(1.6, 1.25), eye_tint=0.55),
     "thinking": StateFace(gaze=(0.5, 0.55, 0.08, 0.06, 1.2, 2.8), brows=(0.15, 0.35),
-                          head=(0.0, -0.03, -0.03), hair=(1.0, 0.9)),
-    "speaking": StateFace(gaze=(0.0, 0.0, 0.12, 0.08, 1.0, 3.0), drift=0.6, hair=(1.2, 1.0)),
+                          head=(0.0, -0.03, -0.03), hair=(1.0, 0.9), eye_tint=0.9),
+    "speaking": StateFace(gaze=(0.0, 0.0, 0.12, 0.08, 1.0, 3.0), drift=0.6, hair=(1.2, 1.0), eye_tint=0.35),
     "followup": StateFace(eyes=-0.08, gaze=(0.0, 0.0, 0.05, 0.03, 1.0, 2.5), brows=(0.2, 0.0),
-                          head=(0.0, 0.0, 0.07), hair=(1.0, 1.1)),
-    "sleep": StateFace(eyes=1.0, drift=0.2, breathe=(0.02, 7.0), bright=0.35, hair=(0.15, 0.5)),
-    "offline": StateFace(eyes=1.0, drift=0.0, breathe=(0.0, 1.0), bright=0.35, grey=1.0, hair=(0.0, 0.3)),
+                          head=(0.0, 0.0, 0.07), hair=(1.0, 1.1), eye_tint=0.5),
+    "sleep": StateFace(eyes=1.0, drift=0.2, breathe=(0.02, 7.0), bright=0.35, hair=(0.15, 0.5), eye_tint=0.0),
+    "offline": StateFace(eyes=1.0, drift=0.0, breathe=(0.0, 1.0), bright=0.35, grey=1.0, hair=(0.0, 0.3),
+                         eye_tint=0.0),
     "busy": StateFace(eyes=0.6, drift=0.2, bright=0.35, grey=0.6, hair=(0.1, 0.4)),
-    "mode_switching": StateFace(gaze=(0.0, 0.3, 0.1, 0.05, 1.0, 2.0), bright=0.7, hair=(0.8, 1.0)),
-    "muted": StateFace(bright=0.8),
-    "generating": StateFace(gaze=(0.4, 0.2, 0.1, 0.1, 1.0, 2.0), hair=(1.0, 1.0)),
+    "mode_switching": StateFace(gaze=(0.0, 0.3, 0.1, 0.05, 1.0, 2.0), bright=0.7, hair=(0.8, 1.0), eye_tint=0.7),
+    "muted": StateFace(bright=0.8, eye_tint=0.6),
+    "generating": StateFace(gaze=(0.4, 0.2, 0.1, 0.1, 1.0, 2.0), hair=(1.0, 1.0), eye_tint=0.8),
 }
 
 
@@ -278,6 +280,7 @@ class FaceMotion:
 
         out["bright"] = self._step("bright", sf.bright, dt)
         out["grey"] = self._step("grey", sf.grey, dt)
+        out["eye_tint"] = self._step("eye_tint", sf.eye_tint, dt)
         speed, hamp = sf.hair
         out["hair_amp"] = self._step("hair_amp", hamp + 0.8 * low, dt)
         self._hair_phase = (self._hair_phase + self._step("hair_speed", speed, dt) * dt) % (2 * math.pi * 1000)

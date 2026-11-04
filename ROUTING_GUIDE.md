@@ -1710,6 +1710,21 @@ Results in `plans/AVATAR_PLAN.md` §10; tools in `tools/avatar/`, tested in
   profile's CPU/GPU: a one-off 400x14000 numpy distance matrix at start-up
   took the window from 60 MB to 311 MB peak (chunked: 81 MB).
 - Delegation: none (motion timing, shaders, rig code: not delegable).
+- **A point cloud has no occlusion: closing the lids isn't closing the eye.**
+  The rig moved the lids, but the iris dots were squeezed into a bright slit
+  that read as squinting, in both blink and sleep. Hide points inside the
+  eye outline (scaled 1.1 x 1.3: the painted eye overhangs the landmarks) as
+  each lid shuts. Mesh triangles fully inside the lid contour held only 3-4
+  points: select by position, not triangle membership. See it with
+  `inspect_face.py --crop`; at 480 px the eye is 10 px and lies.
+- **The art's black surround is stippled too.** "Outermost point on the row"
+  put the hair at the image edge; walking out only through lit dots
+  (colour > 0.12) found the head, but a small gap limit then stopped inside
+  dark cheek shadows. Lit filter plus a 0.25 face-height gap limit gives
+  symmetric roots. Probe the numbers (`probe_hair_roots.py`) instead of
+  re-rendering guesses: two renders looked identical before the probe showed why.
+- The synthetic golden face had near-empty eyes, so eye tests measured skin.
+  It now has bright irises; check a fixture can show the feature under test.
 
 ## Avatar Phase 3: face asset pipeline (2026-11-04)
 

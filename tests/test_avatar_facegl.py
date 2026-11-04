@@ -44,13 +44,50 @@ def test_teeth_hidden_until_the_lips_part(verts):
     assert facegl.teeth_visibility(wide, 0.0, h) == 0.0
 
 
-def test_hair_layout():
-    a = facegl.hair_attributes(10, 5, seed=2)
-    assert a.shape == (50, 5)
-    assert ((a[:, 1] >= 0) & (a[:, 1] < 1)).all()
-    np.testing.assert_array_equal(a, facegl.hair_attributes(10, 5, seed=2))
+def test_hair_hangs_from_the_sides_not_the_crown(verts):
+    xy = verts.astype(np.float64)
+    spacing = facegl.point_spacing(xy)
+    a = facegl.hair_layout(xy, verts, spacing, strands=20, points=400, seed=2)
+    assert a.shape[1] == 7 and len(a) >= 400 * 0.9
+    np.testing.assert_array_equal(a, facegl.hair_layout(xy, verts, spacing, strands=20, points=400, seed=2))
+    top, bottom = min(verts[105, 1], verts[334, 1]), max(verts[172, 1], verts[397, 1])
+    assert (a[:, 1] >= top - 1e-3).all() and (a[:, 1] <= bottom + 1e-3).all()   # no crown roots
+    assert set(np.unique(a[:, 2])) == {-1.0, 1.0}
+    for side in (-1, 1):                                   # roots sit just outside the art, never on it
+        r = a[a[:, 2] == side]
+        edge = np.array([facegl.silhouette_edge(xy, y, side, 2 * spacing,
+                                                centre=verts[list(rig.REGIONS["jaw"] + rig.REGIONS["forehead"]), 0].mean(),
+                                                gap=facegl.HAIR_GAP * rig.face_height(verts))
+                         for y in r[:, 1]])
+        gap = (r[:, 0] - edge) * side
+        assert (gap > 0).all() and (gap < 2 * spacing).all()
+    lo, hi = a[a[:, 1] < np.median(a[:, 1])], a[a[:, 1] >= np.median(a[:, 1])]
+    assert hi[:, 3].mean() > 2 * lo[:, 3].mean()           # short above the ears, long below
+    assert ((a[:, 4] >= 0) & (a[:, 4] < 1)).all()
+
+
+def test_hair_layout_rejects_bad_input(verts):
     with pytest.raises(ValueError):
-        facegl.hair_attributes(0, 5)
+        facegl.hair_layout(verts, verts, 1.0, strands=1)
+    with pytest.raises(ValueError):
+        facegl.hair_layout(np.zeros((0, 2)), verts, 1.0, strands=10, points=100)
+
+
+def test_lit_points_drop_the_dark_surround_unless_nothing_is_lit():
+    xy = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    colour = np.array([[0.5, 0.2, 0.1], [0.05, 0.05, 0.05], [0.0, 0.3, 0.0]])
+    np.testing.assert_array_equal(facegl.lit_points(xy, colour), xy[[0, 2]])
+    np.testing.assert_array_equal(facegl.lit_points(xy, colour * 0), xy)
+
+
+def test_silhouette_edge():
+    xy = np.array([[10.0, 5.0], [50.0, 5.0], [30.0, 40.0]])
+    assert facegl.silhouette_edge(xy, 6.0, -1, 2.0, gap=100) == 10.0
+    assert facegl.silhouette_edge(xy, 6.0, 1, 2.0, gap=100) == 50.0
+    assert facegl.silhouette_edge(xy, 20.0, 1, 2.0) is None
+    row = np.column_stack([np.r_[np.arange(40, 61, 2.0), 90.0], np.zeros(12)])   # head 40..60, stray dot at 90
+    assert facegl.silhouette_edge(row, 0.0, 1, 1.0, centre=50.0, gap=5.0) == 60.0
+    assert facegl.silhouette_edge(row, 0.0, -1, 1.0, centre=50.0, gap=5.0) == 40.0
 
 
 def test_view_fills_height_and_keeps_aspect():
@@ -64,10 +101,3 @@ def test_view_fills_height_and_keeps_aspect():
 def test_point_spacing_of_a_grid():
     g = np.stack(np.meshgrid(np.arange(30) * 4.0, np.arange(30) * 4.0), -1).reshape(-1, 2)
     assert facegl.point_spacing(g) == pytest.approx(4.0)
-
-
-def test_aura_roots_surround_the_face(verts):
-    geo = facegl.head_geometry(verts)
-    oval = verts[list(rig.REGIONS["jaw"] + rig.REGIONS["forehead"])]
-    e = ((oval - geo["hc"]) / geo["radii"]) ** 2
-    assert (e.sum(axis=1) < 1.0).mean() > 0.8               # face mostly inside the hairline

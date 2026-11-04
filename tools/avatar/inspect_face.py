@@ -46,8 +46,18 @@ def main() -> int:
     ap.add_argument("--pose", action="append", choices=FACE_TOUR)
     ap.add_argument("--no-hair", action="store_true")
     ap.add_argument("--captions", action="store_true")
+    ap.add_argument("--crop", help="x0,y0,x1,y1 as fractions of the render, e.g. 0.3,0.35,0.7,0.5 for the eyes")
     ap.add_argument("--out", type=Path)
     args = ap.parse_args()
+    crop = None
+    if args.crop:
+        try:
+            crop = tuple(int(float(f) * args.size) for f in args.crop.split(","))
+            if len(crop) != 4 or crop[0] >= crop[2] or crop[1] >= crop[3]:
+                raise ValueError
+        except ValueError:
+            print("--crop needs x0,y0,x1,y1 fractions with x0<x1, y0<y1", file=sys.stderr)
+            return 2
     try:
         asset = assets.load(assets.asset_root() / args.version) if args.version else assets.load_current()
     except (OSError, ValueError) as e:
@@ -60,6 +70,8 @@ def main() -> int:
     out.mkdir(parents=True, exist_ok=True)
     images = list(render_face(asset, args.pose or FACE_TOUR, (args.size, args.size),
                               hair=not args.no_hair, captions=args.captions))
+    if crop:
+        images = [(name, np.asarray(Image.fromarray(rgb).crop(crop))) for name, rgb in images]
     for name, rgb in images:
         Image.fromarray(rgb).save(out / f"{name}.png")
     contact(images).save(out / "contact.png")

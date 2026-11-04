@@ -172,6 +172,16 @@ def test_offline_greys_and_dims():
     assert p["grey"] > 0.9 and p["bright"] < 0.5
 
 
+def test_eye_tint_eases_to_each_states_amount():
+    m = face.FaceMotion()
+    idle = run(m, 0.0, 2.0, state="idle")[-1][1]["eye_tint"]
+    first = run(m, 2.0, 2.05, state="thinking")[-1][1]["eye_tint"]
+    thinking = run(m, 2.05, 4.0, state="thinking")[-1][1]["eye_tint"]
+    asleep = run(m, 4.0, 6.0, state="sleep")[-1][1]["eye_tint"]
+    assert thinking > 0.8 > 0.3 > idle > 0.1 > asleep
+    assert idle < first < thinking                        # eased, not snapped
+
+
 def test_unknown_state_moves_like_idle():
     a = run(face.FaceMotion(seed=1), 0.0, 2.0, state="idle")[-1][1]
     b = run(face.FaceMotion(seed=1), 0.0, 2.0, state="who-knows")[-1][1]
