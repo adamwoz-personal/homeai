@@ -139,9 +139,13 @@ def point_spacing(xy: np.ndarray, sample: int = 400, seed: int = 0) -> float:
     if len(xy) < 2:
         return 4.0
     pick = np.random.default_rng(seed).choice(len(xy), min(sample, len(xy)), replace=False)
-    d = np.linalg.norm(xy[pick, None, :] - xy[None, :, :], axis=-1)
-    d[np.arange(len(pick)), pick] = np.inf
-    return float(np.median(d.min(axis=1)))
+    nearest = np.empty(len(pick))
+    for a in range(0, len(pick), 32):                       # chunked: a few MB, not ~200 MB
+        rows = pick[a:a + 32]
+        d = np.linalg.norm(xy[rows, None, :] - xy[None, :, :], axis=-1)
+        d[np.arange(len(rows)), rows] = np.inf
+        nearest[a:a + 32] = d.min(axis=1)
+    return float(np.median(nearest))
 
 
 def head_geometry(verts: np.ndarray) -> dict:
