@@ -200,7 +200,10 @@ Conventions:
 - When a delegated agent writes a test or probe, the same rule applies: it
   goes in a file, and the report names the file.
 - A new behaviour gets unit tests and a mutant in `check_mutants.sh`. If
-  the mutant survives, the tests are decorative.
+  the mutant survives, the tests are decorative. Gate on SURVIVED, STALE and
+  NOTESTS (`grep -c 'SURVIVED\|STALE\|NOTESTS'` must be 0): a STALE mutant
+  (sed no longer matches) guards nothing, and two hid behind a SURVIVED-only
+  grep from c764001 until 2026-11-04.
 
 ---
 
@@ -1732,6 +1735,16 @@ Results in `plans/AVATAR_PLAN.md` §10; tools in `tools/avatar/`, tested in
   re-rendering guesses: two renders looked identical before the probe showed why.
 - The synthetic golden face had near-empty eyes, so eye tests measured skin.
   It now has bright irises; check a fixture can show the feature under test.
+- Hair on the neck and crown (Adam): crown roots come from a ray walk
+  (`ray_edge`) out of the brow-line centre, fanned all the way to
+  horizontal. Stopping at +-80 deg left a visible ~1 cm gap above the ears,
+  and a 2x outward reach there widened it; the reach now tapers to the
+  side strands' at brow level. Neck strands taper (0.3x at the bottom) because
+  the rest is off screen: 30.7k -> 24.9k points. Budget unchanged (3 runs:
+  1.4 % / 2.9-3.1 % CPU, 57.6 MB): extra points cost the GPU only.
+- The view centred the art, leaving a black strip under the shoulders; it
+  now sits on the window's bottom edge and all the zoom room is above, where
+  the crown hair goes.
 
 ## Avatar Phase 3: face asset pipeline (2026-11-04)
 

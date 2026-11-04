@@ -443,15 +443,16 @@ sphere; `--look face` refuses to start without a usable face.
   reads as shut rather than as a glowing slit. The irises take the state's colour
   (cyan listening, lavender thinking, none asleep; `StateFace.eye_tint`).
 - The aura "hair" hangs from just outside the head's silhouette on both sides, from
-  brow height (above the ears) to the jaw: short at the top, long below, falling with
-  gravity, never on the crown. It takes the state's colour and motion. Where roots
-  land: `tools/avatar/probe_hair_roots.py`.
+  brow height (above the ears) past the jaw to the bottom of the neck (shortening
+  low on the neck), plus short strands sprouting from the skull's outline, parted
+  in the middle. It takes the state's colour and motion. Where roots land:
+  `tools/avatar/probe_hair_roots.py`. The art sits on the window's bottom edge.
 - Look at every pose without the daemon: `tools/avatar/inspect_face.py [--pose AA ...]
   [--crop 0.3,0.38,0.7,0.52]` -> `~/homeai-bench/face-render-<stamp>/contact.png`.
 - Lip sync offline: `tools/avatar/sync_check.py --look face --size 480` (2026-11-04:
   lag 0 / -4 ms, corr 0.67 / 0.72).
-- Budget: `tools/avatar/avatar_profile.py --look face` (2026-11-04 on the iGPU, 3 runs:
-  1.3 % idle / 3.7 % speaking CPU, 60 MB GPU).
+- Budget: `tools/avatar/avatar_profile.py --look face` (2026-11-04 on the iGPU, 3 runs,
+  ~25k hair points: 1.4 % idle / 2.9-3.1 % speaking CPU, 57.6 MB GPU).
 - Face goldens (`tests/golden/avatar/face/*.png`) use a synthetic face built from the
   landmark fixture, not the chosen art; update with `tools/avatar/update_golden.py --only face`.
 - Tuning lives in `homeai/avatar/face.py` (viseme shapes, timing, per-state motion)
