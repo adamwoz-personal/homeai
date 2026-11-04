@@ -67,7 +67,7 @@ def test_hair_hangs_from_the_sides_and_down_the_neck(verts):
     np.testing.assert_array_equal(a[:, 7], a[:, 2])         # side strands aim straight out
     assert (a[:, 8] == 0).all()
     order = np.argsort(a[:, 1])                            # less gravity up high: frames the face
-    assert (np.diff(a[order, 9]) >= -1e-6).all() and a[order[0], 9] < 0.85
+    assert (np.diff(a[order, 9]) >= -1e-6).all() and a[order[0], 9] < 0.7
     assert (a[a[:, 1] > jaw, 9] == 1.0).all()
     for side in (-1, 1):                                   # roots sit just outside the art, never on it
         r = a[a[:, 2] == side]
@@ -98,7 +98,7 @@ def test_crown_hair_is_long_falls_beside_the_face_and_meets_the_sides(verts):
     is_crown = a[:, 1] < top - 1e-3
     crown = np.unique(a[is_crown][:, [0, 1, 3]], axis=0)
     assert len(crown) > 30
-    assert crown[:, 2].mean() > h                          # as long as the side hair, not tufts
+    assert crown[:, 2].mean() > 1.5 * h                    # longer than the side hair, not tufts
     out = crown[:, :2] - origin
     for row in out:                                        # roots just outside the skull's outline
         d = np.linalg.norm(row)
@@ -110,6 +110,8 @@ def test_crown_hair_is_long_falls_beside_the_face_and_meets_the_sides(verts):
         assert s[:, 1].max() > top - 0.05 * h
     rest = facegl.hair_rest(a[is_crown])
     assert facegl.inside_outline(xy, verts, spacing, rest).mean() < 0.01   # beside the face, not over it
+    middle = np.abs(rest[:, 0] - origin[0]) < 0.1 * h       # a dome over the part, not a V (Adam)
+    assert rest[middle, 1].min() - rest[:, 1].min() < 0.05 * h
 
 
 def test_inside_outline():

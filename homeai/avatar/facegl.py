@@ -27,12 +27,12 @@ from .gl import Overlay
 DOT_SPRITE = 1.5            # sprite diameter / typical point spacing (core is 0.3x spacing in radius)
 SHIMMER_PX = 0.25           # image px
 HAIR_STRANDS = 320          # side strands from the brows to the jaw angle; the neck gets more at that density
-HAIR_CROWN = 240            # long strands from the skull's outline, parted in the middle (Adam 2026-11-04: more)
+HAIR_CROWN = 720            # long strands from the skull's outline, parted in the middle (Adam 2026-11-04: more, twice)
 HAIR_DENSITY = 48           # points per face-height of strand length (was 40 per strand at ~0.84 h)
-HAIR_CROWN_LEN = (1.0, 1.6)  # x face height: as long as the side hair (Adam: "longer, like the sides")
-HAIR_CROWN_CLEAR = 0.12     # crown strands reach this far (x face height) past the head's edge before falling
-HAIR_CROWN_RISE = 1.0       # upward start at the top of the head (1.5 clears more but grows horns)
-HAIR_HIGH_DROOP = 0.8       # gravity on hair rooted up high (crown, brows), rising to 1 at the jaw: frames the face
+HAIR_CROWN_LEN = (1.6, 2.6)  # x face height: longer than the side hair (Adam: "longer", three times)
+HAIR_CROWN_CLEAR = 0.22     # crown strands reach this far (x face height) past the head's edge before falling
+HAIR_CROWN_RISE = 0.5       # upward start at the top: low hugs the skull in a dome (1.0 left a V at the part, 1.5 horns)
+HAIR_HIGH_DROOP = 0.6       # (Adam: lower, twice) gravity on hair rooted up high (crown, brows), rising to 1 at the jaw: frames the face
 HAIR_LIT = 0.12             # colour above this is part of the head's silhouette
 HAIR_GAP = 0.25             # lit dots further than this (x face height) beyond the head are strays
 HAIR_SPREAD = 0.38          # Adam 2026-11-04: drift wider, less gravity (was 0.10 out, 1.0 down)

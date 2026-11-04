@@ -1755,6 +1755,15 @@ Results in `plans/AVATAR_PLAN.md` §10; tools in `tools/avatar/`, tested in
 - 240 crown strands and less gravity up high (HAIR_HIGH_DROOP 0.8 rising to 1
   at the jaw) to frame the face: 38k hair points, still 1.3 % / 3.1-3.3 % CPU,
   57.1 MB (3 runs). Adam: the hair budget may grow if it looks better.
+- Pushing the hair (Adam: "push the limits"): hair points barely move CPU or
+  GPU memory (38k -> 96k points: CPU flat at 1.3 % / 3.2 %, 57 -> 59 MB), so
+  avatar_profile can't see the hair's cost. `tools/avatar/bench_hair_gpu.py`
+  times it on the GPU: 0.2 ms with no hair, 0.8 ms at 96k, 1.5 ms at 3x. The real
+  limit is the look (additive blending whitens the dense arc). The V at the
+  part came from a strong upward start (rise 1.0): every strand leaves
+  the part diagonally, so nothing is above it. An extra lift at the part made it
+  worse (taller horns); a *lower* rise (0.5) hugs the skull in a dome, with a
+  wider sideways clearance (0.22 h) so it still falls beside the face (0.3 %).
 - The view centred the art, leaving a black strip under the shoulders; it
   now sits on the window's bottom edge and all the zoom room is above, where
   the crown hair goes.
