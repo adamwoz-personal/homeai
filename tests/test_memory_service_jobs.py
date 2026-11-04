@@ -122,6 +122,8 @@ def test_worker_only_runs_when_quiet(mem_store, monkeypatch):
     monkeypatch.setattr(svc_mod, "WORKER_POLL_S", 3600)      # drive it by hand
     mono = Mono()
     helper = ScriptedHelper(respond=lambda *a: {"notes": []})
+    released = []
+    helper.release = lambda restore=None: released.append(restore) or True
     s = start(mem_store, helper=helper, mono=mono)
     try:
         s.on_turn(turn())
@@ -129,9 +131,29 @@ def test_worker_only_runs_when_quiet(mem_store, monkeypatch):
         with mem_store.db.scoped(None, "admin") as conn:
             jobs.run_now(conn, "extract:adam")
         assert not s.quiet() and s.work_once() == 0           # someone is talking
+        assert released == []                                  # nothing ran: the voice model is untouched
         mono.t += svc_mod.QUIET_S
         assert s.quiet() and s.work_once() == 1
         assert mem_store.count_unextracted("adam") == 0 and len(helper.calls) == 1
+        assert released == [XCFG.restore_model]                # the voice model comes back after jobs
+    finally:
+        s.close()
+
+
+def test_a_failing_release_never_breaks_the_worker(mem_store, monkeypatch, caplog):
+    monkeypatch.setattr(svc_mod, "WORKER_POLL_S", 3600)
+    mono = Mono()
+    helper = ScriptedHelper(respond=lambda *a: {"notes": []})
+    helper.release = lambda restore=None: (_ for _ in ()).throw(RuntimeError("ollama gone"))
+    s = start(mem_store, helper=helper, mono=mono)
+    try:
+        s.on_turn(turn())
+        assert s.flush()
+        with mem_store.db.scoped(None, "admin") as conn:
+            jobs.run_now(conn, "extract:adam")
+        mono.t += svc_mod.QUIET_S
+        assert s.work_once() == 1
+        assert any("release failed" in r.message for r in caplog.records)
     finally:
         s.close()
 

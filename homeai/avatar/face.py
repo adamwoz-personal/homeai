@@ -65,6 +65,7 @@ OMEGA = {"jaw_open": 50.0, "lips_close": 60.0, "lips_round": 45.0, "lips_wide": 
          "hair_amp": 4.0, "hair_speed": 3.0, "eye_tint": 5.0}
 EYES_CLOSE_OMEGA = 5.0      # falling asleep: slow
 EYES_OPEN_OMEGA = 16.0      # waking: open in ~0.3 s (§4.4)
+HAIR_PHASE_WRAP = 2 * math.pi * 1000   # hair_phase wraps here (a whole number of turns)
 
 BLINK_EVERY_S = (3.0, 6.0)
 BLINK_CLOSE_S = 0.07
@@ -283,7 +284,7 @@ class FaceMotion:
         out["eye_tint"] = self._step("eye_tint", sf.eye_tint, dt)
         speed, hamp = sf.hair
         out["hair_amp"] = self._step("hair_amp", hamp + 0.8 * low, dt)
-        self._hair_phase = (self._hair_phase + self._step("hair_speed", speed, dt) * dt) % (2 * math.pi * 1000)
+        self._hair_phase = (self._hair_phase + self._step("hair_speed", speed, dt) * dt) % HAIR_PHASE_WRAP
         out["hair_phase"] = self._hair_phase
         out["glow"] = clamp(0.4 * level + 0.6 * out["jaw_open"], 0.0, 1.0)
         return out

@@ -22,6 +22,7 @@ from __future__ import annotations
 import numpy as np
 
 from . import rig
+from .face import HAIR_PHASE_WRAP
 from .gl import Overlay
 
 DOT_SPRITE = 1.5            # sprite diameter / typical point spacing (core is 0.3x spacing in radius)
@@ -99,6 +100,7 @@ void main() {
 HAIR_VERTEX = "#version 330\n" + _POSE + """
 uniform float point_px;
 uniform float hair_phase;
+uniform float hair_wave;    // travelling-wave phase, direction already integrated (HairWave)
 uniform float hair_amp;
 uniform float swirl;
 uniform float ripple;
@@ -121,10 +123,9 @@ in vec2 aim;        // outward direction x reach: (side, 0) at the sides, up and
 in float droop;     // how much of the fall applies: 1 at the sides, less on the crown
 out vec3 c;
 void main() {
-    float dir = 1.0 - 2.0 * ripple;                     // listening: waves run up toward the head
     float sway = 0.05 * sin(swirl + phase);             // thinking: strands swing as a whole
     float curl = 0.11 * sin(7.0 * s + phase) * s;          // resting wave: wavy even when still
-    float wv = (sin(8.0 * s - hair_phase * dir + phase) * 0.10
+    float wv = (sin(8.0 * s - hair_wave + phase) * 0.10
               + sin(3.5 * s - 0.6 * hair_phase + phase * 1.7) * 0.07) * hair_amp * s + curl;
     // Out from the head, then drifting down: light gravity, felt most at the tips.
     float out_ = spread * (1.0 - (1.0 - s) * (1.0 - s));
@@ -444,6 +445,28 @@ def teeth_visibility(verts: np.ndarray, teeth_show: float, face_h: float) -> flo
 
 # ---- GL -------------------------------------------------------------------------------------
 
+class HairWave:
+    """The hair's travelling-wave phase: outward normally, toward the head while listening.
+
+    The shader used ``hair_phase * (1 - 2 * ripple)``. hair_phase is a running
+    total (thousands of rad), so as ripple eased in or out at a state change the
+    wave jumped thousands of rad in half a second: the fast wiggle Adam saw
+    with each colour change (2026-11-04). Integrating the step instead makes
+    direction change only the speed.
+    """
+
+    def __init__(self) -> None:
+        self.wave = 0.0
+        self._last: float | None = None
+
+    def advance(self, hair_phase: float, ripple: float) -> float:
+        if self._last is not None:
+            step = (hair_phase - self._last) % HAIR_PHASE_WRAP   # the modulo crosses the wrap
+            self.wave = (self.wave + step * (1.0 - 2.0 * ripple)) % (2.0 * np.pi)
+        self._last = hair_phase
+        return self.wave
+
+
 class FaceRenderer:
     def __init__(self, ctx, asset, hair: bool = True, zoom: float = ZOOM) -> None:
         import moderngl
@@ -474,6 +497,7 @@ class FaceRenderer:
                  "aim", "droop")])
             self.hair_points = len(layout)
         self.overlay = Overlay(ctx)
+        self.wave = HairWave()
         self.points = len(idx) + (self.hair_points if hair else 0)
 
     @staticmethod
@@ -498,6 +522,7 @@ class FaceRenderer:
             for name, value in {**common, "spread": HAIR_SPREAD, "drop": HAIR_DROP, "gravity": HAIR_GRAVITY,
                                 "point_px": max(1.5, 1.6 * px_per_img * self.spacing),
                                 "hair_phase": p.get("hair_phase", 0.0), "hair_amp": p.get("hair_amp", 1.0),
+                                "hair_wave": self.wave.advance(p.get("hair_phase", 0.0), frame.ripple),
                                 "swirl": frame.swirl, "ripple": frame.ripple, "ring": frame.ring,
                                 "ring_amp": frame.ring_amp, "glow": frame.glow,
                                 "colour": tuple(frame.colour)}.items():

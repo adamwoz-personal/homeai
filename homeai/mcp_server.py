@@ -141,11 +141,6 @@ def _tool_timer(arguments: dict[str, Any]) -> str:
     raise HomeError("The timer action must be set, cancel or status.")
 
 
-def _tool_announce(arguments: dict[str, Any]) -> str:
-    return run_intent(_home(), "announce", {"message": arguments.get("message", ""),
-                                            "where": arguments.get("where")})
-
-
 def _tool_music(arguments: dict[str, Any]) -> str:
     return run_intent(_home(), "music", {"action": arguments.get("action", "play"),
                                          "request": arguments.get("request"),
@@ -227,22 +222,6 @@ HOME_TOOLS: list[dict[str, Any]] = [
                 "label": {"type": "string", "description": "One or two words, e.g. 'pasta'."},
             },
             "required": ["action"],
-        },
-    },
-    {
-        "name": "announce",
-        "description": (
-            "Announce a short message on the Echo speakers, everywhere in the "
-            "house unless a room is given. Only when the user asks for an "
-            "announcement."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "message": {"type": "string"},
-                "where": {"type": "string", "description": "Room, or omit for everywhere."},
-            },
-            "required": ["message"],
         },
     },
     {
@@ -330,7 +309,6 @@ HANDLERS: dict[str, Callable[[dict[str, Any]], str]] = {
     "research": _tool_research,
     "lights": _tool_lights,
     "timer": _tool_timer,
-    "announce": _tool_announce,
     "music": _tool_music,
     "door": _tool_door,
     "routine": _tool_routine,

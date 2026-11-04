@@ -285,7 +285,7 @@ def test_unexpected_tool_exception_is_error_result_and_loop_continues(
 from homeai.home import EchoQuiet, Home, TimerLedger  # noqa: E402
 from tests.fake_ha import FakeHA  # noqa: E402
 
-HOME_TOOL_NAMES = {"lights", "timer", "announce", "music", "door", "routine"}
+HOME_TOOL_NAMES = {"lights", "timer", "music", "door", "routine"}
 
 
 @pytest.fixture
@@ -338,8 +338,17 @@ def test_timer_tool_bad_arguments(house, args):
     assert house.calls == []
 
 
-def test_announce_and_music_tools(house):
-    assert _text(_call_tool("announce", {"message": "dinner"})) == "Announced."
+def test_model_cannot_announce(monkeypatch, house):
+    """Asked to "say hello", the 8B model announced "Hello!" on every Echo
+    (2026-11-04). Announcements only come from the fast path, i.e. when the
+    words ask for one."""
+    monkeypatch.setenv("HA_TOKEN", "tok")
+    assert "announce" not in _tool_names(mcp.handle_message(_request("tools/list")))
+    assert _call_tool("announce", {"message": "Hello!"})["result"]["isError"] is True
+    assert house.calls == []
+
+
+def test_music_tool(house):
     assert _text(_call_tool("music", {"action": "play", "request": "jazz"})) == \
         "Playing jazz on the Kitchen alexa."
 

@@ -367,6 +367,12 @@ class MemoryConfig:
         "HOMEAI_LTM_HELPER_MODEL", "qwen3:4b-instruct-2507-q4_K_M"))
     # CPU threads for the helper; whisper and the voice model keep the rest.
     helper_threads: int = field(default_factory=lambda: _env_int("HOMEAI_LTM_HELPER_THREADS", 6))
+    # Ollama holds one model (OLLAMA_MAX_LOADED_MODELS=1), so loading the helper,
+    # even on the CPU, evicts the voice model. After jobs, the helper unloads and
+    # this model is warmed again, so the next question doesn't pay a cold load.
+    # Empty: leave it.
+    restore_model: str = field(default_factory=lambda: _env_str(
+        "HOMEAI_LTM_RESTORE_MODEL", "llama31-voice"))
     # Extract once nobody has spoken for this long (a "session" ended) ...
     extract_idle_s: int = field(default_factory=lambda: _env_int("HOMEAI_LTM_EXTRACT_IDLE_S", 600))
     # ... or at once when this many exchanges are waiting.

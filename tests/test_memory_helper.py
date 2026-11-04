@@ -129,3 +129,22 @@ def test_ollama_failures_are_unavailable(post):
 def test_ollama_unreachable_for_real_fails_fast():
     with pytest.raises(HelperUnavailable):
         OllamaHelper("http://127.0.0.1:9", "m", timeout_s=2).structured("t", SCHEMA, {})
+
+
+def test_release_unloads_the_helper_then_pins_the_voice_model():
+    calls = []
+    h = OllamaHelper("http://h:1", "m:4b", post=lambda u, b, t: calls.append((u, b)) or {})
+    assert h.release("voice") is True
+    assert calls == [("http://h:1/api/generate", {"model": "m:4b", "keep_alive": 0}),
+                     ("http://h:1/api/generate", {"model": "voice", "keep_alive": -1})]
+    calls.clear()
+    assert h.release(None) is True and len(calls) == 1
+
+
+@pytest.mark.parametrize("post", [
+    lambda u, b, t: (_ for _ in ()).throw(OSError("refused")),
+    lambda u, b, t: {"error": "busy"},
+])
+def test_release_failure_is_logged_not_raised(post, caplog):
+    assert OllamaHelper("http://h:1", "m", post=post).release("voice") is False
+    assert any("helper release" in r.message for r in caplog.records)

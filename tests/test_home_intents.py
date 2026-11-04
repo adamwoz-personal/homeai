@@ -136,9 +136,15 @@ def test_turn_off_the_music_is_music():
     ("announce dinner is ready", "dinner is ready"),
     ("tell everyone that we're leaving in five minutes", "we're leaving in five minutes"),
     ("make an announcement: the car is here", "the car is here"),
+    ("let everyone know that dinner is ready", "dinner is ready"),
 ])
 def test_announce(text, msg):
     assert parse(text) == HomeIntent("announce", {"message": msg})
+
+
+@pytest.mark.parametrize("text", ["say hello", "say hello to everyone", "tell me a joke", "let me know"])
+def test_not_an_announcement(text):
+    assert parse(text) is None or parse(text).kind != "announce"
 
 
 def test_music():

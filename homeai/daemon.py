@@ -93,7 +93,7 @@ MSG_FRAGMENT = "Sorry, I only caught part of that. Say hey Jarvis again if you m
 # The threshold sits above a normal conversational turn (~0.5-1.5s) so simple
 # questions are never padded, but below the point where a user assumes the
 # assistant did not hear them.
-MSG_WORKING = "Let me look that up."
+MSG_WORKING = "One moment."   # was "Let me look that up.": wrong for "say hello" on a cold load (Adam)
 PROGRESS_AFTER_S = 2.5
 
 # How long an unanswered "Which lights?" stays open.

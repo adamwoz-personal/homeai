@@ -170,7 +170,7 @@ _SET_LEVEL = re.compile(
 _ANNOUNCE = (
     re.compile(r"^(?:make an )?announce(?:ment)?(?: to (?:everyone|everybody|the house|the whole house))?"
                r"(?: that)?[:,]? (?P<msg>.+)$"),
-    re.compile(r"^tell (?:everyone|everybody|the house|the whole house)(?: that)?[:,]? (?P<msg>.+)$"),
+    re.compile(r"^(?:tell|let) (?:everyone|everybody|the house|the whole house)(?: know)?(?: that)?[:,]? (?P<msg>.+)$"),
 )
 
 _MUSIC_WORDS = re.compile(

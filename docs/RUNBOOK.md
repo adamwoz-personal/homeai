@@ -93,6 +93,9 @@ model they load evicts the voice model (`OLLAMA_MAX_LOADED_MODELS=1`). Check wit
 `ss -ltn | grep 11434`. Undo: `sudo rm` the file, `daemon-reload`, restart ollama.
 Any Ollama restart unloads the voice model; warm it with
 `curl -s localhost:11434/api/generate -d '{"model":"llama31-voice","keep_alive":-1}'`.
+The memory helper (CPU) also evicts it while it runs; afterwards the worker
+unloads the helper and re-pins the voice model (`HOMEAI_LTM_RESTORE_MODEL`,
+empty to skip). Which tools the agent called: `~/.zeroclaw/data/state/runtime-trace.jsonl`.
 
 ## Coding mode (the coder gets the whole GPU)
 
@@ -540,6 +543,9 @@ agent, and keep the garage out of Assist exposure.
   themselves live in the Alexa app. Add or rename one: edit `ROUTINES` in
   `homeai/home.py` (the exact phrase Alexa answers to), run the tests,
   restart homeai and zeroclaw (the MCP `routine` tool lists them).
+- Announcements only by phrase: "announce ...", "make an announcement ...",
+  "tell everyone ...", "let everyone know ...". The model has no announce tool
+  (it once announced "Hello!" on every Echo for "say hello").
 - Quick connection check (also run by `install.sh`):
   `.venv/bin/python -m homeai.ha_client --check` (exit 0 working, 1 not set
   up, 2 configured but broken).

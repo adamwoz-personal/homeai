@@ -697,7 +697,9 @@ A research call takes ten to fifteen seconds. During that time the assistant
 is mute, which is indistinguishable from not having heard the wake word — so
 the user repeats themselves, re-triggering the wake word mid-turn.
 
-The daemon now says "Let me look that up." when the agent exceeds 2.5 s. The
+The daemon now says "One moment." when the agent exceeds 2.5 s (it said "Let
+me look that up." until 2026-11-04, which was wrong for "say hello" on a cold
+model load). The
 threshold sits above a normal turn (0.5–1.5 s) so simple questions are never
 padded. The announcement is spoken on the *calling* thread, not the worker:
 `_speak` mutes the microphone, and two threads racing on mute state would
@@ -1546,6 +1548,18 @@ the Kitchen Echo to run them (`send_text_command` with the fixed phrase).
 the fixed strings (each also passes `safe_phrase`, tested). Unverified until
 Adam's first voice test: that a typed text command triggers an Alexa routine.
 
+"Say hello" (2026-11-04): the 8B model called the `announce` MCP tool
+(`{"message":"Hello!","where":"everywhere"}`) and every Echo spoke, despite
+the description "Only when the user asks for an announcement". Found in
+`~/.zeroclaw/data/state/runtime-trace.jsonl` (tool_call_start rows), not in any
+journal. The model no longer has an announce tool: explicit phrasings ("announce
+...", "tell/let everyone (know) ...") take the fast path. Rule: a tool with
+house-wide side effects goes to the model only if a wrong call is harmless.
+The same turn was slow because the CPU memory helper (`qwen3:4b`, num_gpu 0)
+still counts against `OLLAMA_MAX_LOADED_MODELS=1` and evicted the voice model;
+the worker now unloads the helper and re-pins the voice model after its jobs
+(`OllamaHelper.release`, `HOMEAI_LTM_RESTORE_MODEL`).
+
 ---
 
 ## Local coder quality (2026-11-01)
@@ -1764,6 +1778,11 @@ Results in `plans/AVATAR_PLAN.md` §10; tools in `tools/avatar/`, tested in
   the part diagonally, so nothing is above it. An extra lift at the part made it
   worse (taller horns); a *lower* rise (0.5) hugs the skull in a dome, with a
   wider sideways clearance (0.22 h) so it still falls beside the face (0.3 %).
+- Hair wiggled wildly at every state (colour) change: the shader's wave was
+  `hair_phase * (1 - 2*ripple)`, and hair_phase is a running total (thousands
+  of rad), so easing ripple in or out for listening swept the wave thousands of
+  rad in half a second. `HairWave` now integrates the step on the CPU. Watch
+  for this pattern: never multiply an accumulated phase by an animated factor.
 - The view centred the art, leaving a black strip under the shoulders; it
   now sits on the window's bottom edge and all the zoom room is above, where
   the crown hair goes.

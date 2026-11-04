@@ -173,6 +173,27 @@ def test_view_fills_height_and_keeps_aspect():
     np.testing.assert_allclose(px[1], (1200, 800))
 
 
+def test_hair_wave_never_jumps_when_listening_starts_or_wraps():
+    """Ripple easing 0 -> 1 -> 0 (a state change) late in a session: each frame the
+    wave moves no more than the hair's own speed allows (Adam: wild wiggle at colour
+    changes), runs backwards while listening, and crosses the phase wrap smoothly."""
+    from homeai.avatar.face import HAIR_PHASE_WRAP
+
+    w = facegl.HairWave()
+    phase, speed, dt = HAIR_PHASE_WRAP - 0.3, 1.6, 1 / 60   # wraps mid-transition (ripple ~0.37)
+    prev = w.advance(phase, 0.0)
+    moves = []
+    for i in range(120):
+        phase = (phase + speed * dt) % HAIR_PHASE_WRAP
+        ripple = min(i / 30, 1.0) if i < 60 else max(1.0 - (i - 60) / 30, 0.0)
+        cur = w.advance(phase, ripple)
+        d = (cur - prev + np.pi) % (2 * np.pi) - np.pi
+        moves.append(d)
+        prev = cur
+    assert max(abs(d) for d in moves) <= speed * dt + 1e-9
+    assert moves[0] > 0 and moves[45] < 0                   # outward, then toward the head
+
+
 def test_view_sits_the_image_on_the_window_bottom():
     side = 1000.0
     px = facegl.to_pixels(np.array([[0, 0], [side, side]]), side, (800, 800), zoom=0.8)

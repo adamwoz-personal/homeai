@@ -248,6 +248,11 @@ class MemoryService:
                 self._warn("job", "memory job loop failed: %s", exc)
                 break
             n += 1
+        if n:
+            try:
+                self.worker.helper.release(self.cfg.restore_model or None)
+            except Exception as exc:  # noqa: BLE001 - a missed warm-up only costs a slow answer
+                self._warn("release", "memory helper release failed: %s", exc)
         return n
 
     # -- spoken commands -------------------------------------------------------------

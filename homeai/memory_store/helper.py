@@ -96,6 +96,10 @@ class Helper:
     def _complete(self, task: str, schema: dict, payload: dict) -> str:
         raise NotImplementedError
 
+    def release(self, restore: str | None = None) -> bool:
+        """Done for now: give the model's memory back. True if nothing failed."""
+        return True
+
     def structured(self, task: str, schema: dict, payload: dict) -> dict:
         problem = ""
         for attempt in (1, 2):
@@ -139,6 +143,26 @@ class OllamaHelper(Helper):
         if "error" in reply:
             raise HelperUnavailable(f"{self.model}: {reply['error']}")
         return (reply.get("message") or {}).get("content", "")
+
+    def release(self, restore: str | None = None) -> bool:
+        """Unload the helper, then warm ``restore`` (the voice model) and pin it.
+
+        Ollama keeps one model loaded, so the helper evicted the voice model and
+        the next spoken question paid a multi-second cold load (2026-11-04).
+        Never raises: a failure only costs that reload later.
+        """
+        steps = [{"model": self.model, "keep_alive": 0}]
+        if restore:
+            steps.append({"model": restore, "keep_alive": -1})
+        for body in steps:
+            try:
+                reply = self._post(f"{self.url}/api/generate", body, self.timeout_s)
+            except Exception as exc:  # noqa: BLE001
+                reply = {"error": str(exc)}
+            if "error" in reply:
+                log.warning("helper release: %s: %s", body["model"], reply["error"])
+                return False
+        return True
 
 
 def _post_json(url: str, body: dict, timeout: float) -> dict:
