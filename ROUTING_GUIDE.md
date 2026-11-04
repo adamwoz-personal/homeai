@@ -4,7 +4,7 @@
 with Claude (paid). Updated as evidence accumulates. Every rule here comes from an
 observed outcome on this box, not from theory.
 
-Last updated: 2026-11-02
+Last updated: 2026-11-04
 
 ---
 
@@ -1688,6 +1688,21 @@ Results in `plans/AVATAR_PLAN.md` §10; tools in `tools/avatar/`, tested in
 - **Went live 2026-11-02** (`HOMEAI_TTS_ENGINE=inprocess` in .env, avatar unit
   enabled). Bus: every utterance announced ~68 ms ahead of audio. Adam liked
   the thinking colour shift: it covers web-search lag well.
+
+## Avatar Phase 2: states, captions, budgets (2026-11-04)
+
+- **A hand-run window is on the wrong GPU.** The service sets `DRI_PRIME=1`
+  (iGPU); `python -m homeai.avatar.app` from a shell uses the RX 7900 XT. My
+  first profile measured the dGPU. Tools that launch the window must copy the
+  service env (`avatar_profile.py` does; `--dgpu` to compare).
+- **Never probe `homeai-mode.lock` to see if a switch is running**: it takes
+  LOCK_EX|LOCK_NB, so a probe could make a real switch fail. Read
+  `/proc/locks` by inode instead (`app.lock_held`).
+- Headless EGL renders are bit-identical run to run (diff 0.0), so golden
+  tests can be tight. One staged-state module (`avatar/tour.py`) feeds the
+  goldens, `--tour`, and the profiler, so they cannot drift apart.
+- Budgets are not close: CPU 0.9 % idle / 3.1 % speaking (captions cost ~2 %),
+  52 MB GPU, 3 runs each.
 
 ## When the prompt already forbids it, filter the output (2026-11-02)
 

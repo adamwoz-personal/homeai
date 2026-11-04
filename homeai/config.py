@@ -387,6 +387,10 @@ class AvatarConfig:
     enabled: bool = field(default_factory=lambda: _env_bool("HOMEAI_AVATAR", True))
     # Empty: $XDG_RUNTIME_DIR/homeai/events.sock
     socket: str = field(default_factory=lambda: _env_str("HOMEAI_AVATAR_SOCKET", ""))
+    # Read by the window: idle minutes before the sphere sleeps, and optional
+    # "HH:MM-HH:MM" quiet hours (sleeps 30 s after any activity). Adam 2026-11-04.
+    sleep_min: float = field(default_factory=lambda: _env_float("HOMEAI_AVATAR_SLEEP_MIN", 5.0))
+    quiet_hours: str = field(default_factory=lambda: _env_str("HOMEAI_AVATAR_QUIET_HOURS", ""))
 
 
 @dataclass(frozen=True)

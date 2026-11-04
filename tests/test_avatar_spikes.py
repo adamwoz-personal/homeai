@@ -257,3 +257,18 @@ def test_inspect_bus_reports_how_early_an_utterance_arrived():
                                 "visemes": [[0, "rest", 0.0]] * 10}}, 10.0)
     assert row["early_ms"] == 68.0 and row["visemes"] == 10 and row["sent_to_arrival_ms"] == 10.0
     assert ib.describe({"type": "state", "data": {"state": "idle"}}, 1.0)["state"] == "idle"
+
+
+def test_avatar_profile_parsers_and_verdict():
+    prof = _load("avatar_profile")
+    stat = "1234 (python3 -m x) S 1 2 3 4 5 6 7 8 9 10 150 50 0 0 20 0"
+    assert prof.cpu_ticks(stat) == 200
+    assert prof.cpu_pct(100, 150, 10.0, 100) == 5.0
+    with pytest.raises(ValueError):
+        prof.cpu_pct(0, 1, 0.0, 100)
+    fd = ("drm-pdev:\t0000:03:00.0\ndrm-client-id:\t7\ndrm-resident-vram:\t1024 KiB\n"
+          "drm-resident-gtt:\t512 KiB\ndrm-total-vram:\t9999 KiB\n")
+    other = fd.replace("client-id:\t7", "client-id:\t8").replace("1024", "2048")
+    assert prof.gpu_kib([fd, fd, "pos: 0\nflags: 2\n", other]) == 1536 + 2560   # shared fd counted once
+    assert prof.verdict({"idle_cpu_pct": 4.9, "gpu_mb": 10}) == []
+    assert prof.verdict({"idle_cpu_pct": 5.1})[0].startswith("idle_cpu_pct")

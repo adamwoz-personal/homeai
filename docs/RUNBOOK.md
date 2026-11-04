@@ -64,6 +64,8 @@ named `jarvis`; on the original box it is `local` (`HOMEAI_AGENT_NAME` in
 | `HOMEAI_AVATAR` | 1 | Publish state/captions/visemes for the avatar window on `$XDG_RUNTIME_DIR/homeai/events.sock`; 0 = no socket |
 | `HOMEAI_TTS_ENGINE` | subprocess | `inprocess` loads Piper once: first audio ~25 ms instead of ~0.5 s, and lip-sync timings |
 | `HOMEAI_AVATAR_LAG_MS` | 70 | Output latency added to viseme times (in-process engine) |
+| `HOMEAI_AVATAR_SLEEP_MIN` | 5 | Idle minutes before the sphere dims to "sleep"; 0 = never |
+| `HOMEAI_AVATAR_QUIET_HOURS` | (empty) | e.g. `22:00-07:00`: in this window the sphere sleeps 30 s after any activity |
 
 Try the avatar feed without the daemon: `.venv/bin/python
 tools/avatar/avatar_demo.py --engine inprocess --text "Hello Adam."` (report in
@@ -395,6 +397,18 @@ and position persist in `~/.config/homeai/avatar.json`.
   `tools/avatar/sync_check.py` (headless render vs audio, pass ±40 ms).
 - Events not arriving: `tools/avatar/inspect_bus.py --seconds 30` prints each event and
   how early each utterance arrived.
+- States: idle (slow cyan), listening (ripple), thinking (swirl), speaking (pulses; low
+  pitches swell the big dots, sibilants brighten the small ones), followup (ring
+  travelling outward), sleep (dim, after `HOMEAI_AVATAR_SLEEP_MIN`), offline (grey),
+  busy (dim purple, "coding mode", the window spots the coding-mode drop-in itself),
+  mode switching (while `homeai-mode` holds its lock). Captions: what you said above,
+  Jarvis's current sentence below; both fade ~4 s after he stops talking.
+- See every state: `DRI_PRIME=1 .venv/bin/python -m homeai.avatar.app --tour 8` (8 s
+  each, its own window; ignores the daemon and leaves the saved geometry alone).
+- Budget check: `tools/avatar/avatar_profile.py` (CPU < 5 % idle / < 15 % speaking,
+  GPU < 300 MB; 2026-11-04 on the iGPU: 0.9 % / 3.1 %, 52 MB).
+- Golden images (`tests/golden/avatar/*.png`) fail a test when a state's look changes.
+  After a deliberate change: `tools/avatar/update_golden.py`, look at the PNGs, commit them.
 
 ## Tests
 

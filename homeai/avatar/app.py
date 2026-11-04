@@ -26,6 +26,7 @@ from pathlib import Path
 
 from .client import BusClient
 from .scene import Scene
+from .tour import TOUR, staged, tour_index
 
 log = logging.getLogger("homeai.avatar.app")
 
@@ -34,6 +35,48 @@ DEFAULT_GEOMETRY = {"size": [720, 720], "position": None, "fullscreen": False}
 VSYNC_FPS = 60
 SETTLE_FRAMES = 15          # frames before trusting the window manager's placement
 STATUS = "_status"          # internal queue item: connection up/down
+MODE_POLL_S = 1.0
+
+
+def lock_held(path: Path, proc_locks: Path = Path("/proc/locks")) -> bool:
+    """True if any process holds a flock on ``path``.
+
+    Read from /proc/locks rather than by trying the lock: a probe could make a
+    real ``homeai-mode`` switch fail with "another switch is running".
+    """
+    try:
+        inode = path.stat().st_ino
+        table = proc_locks.read_text()
+    except OSError:
+        return False
+    for line in table.splitlines():
+        parts = line.split()
+        # "1: FLOCK  ADVISORY  WRITE 1234 103:02:5678 0 EOF"
+        if len(parts) >= 6 and parts[1] == "FLOCK" and parts[5].rsplit(":", 1)[-1] == str(inode):
+            return True
+    return False
+
+
+def local_mode(dropin: Path, lock: Path) -> str | None:
+    """"switching" while homeai-mode runs, "coding" in coding mode, else None."""
+    if lock_held(lock):
+        return "switching"
+    return "coding" if dropin.exists() else None
+
+
+def mode_paths() -> tuple[Path, Path]:
+    from ..gpu_mode import DROPIN_NAME, runtime_dropin_dir
+
+    return runtime_dropin_dir() / DROPIN_NAME, Path(f"/run/user/{os.getuid()}/homeai-mode.lock")
+
+
+def build_scene() -> Scene:
+    """Scene with the sleep settings from the environment (.env via the service)."""
+    from ..config import AvatarConfig
+    from ..doorbell import parse_quiet_hours
+
+    cfg = AvatarConfig()
+    return Scene(sleep_s=cfg.sleep_min * 60, quiet=parse_quiet_hours(cfg.quiet_hours))
 
 
 def prepare_env(env: dict) -> dict:
@@ -119,6 +162,7 @@ def run(args) -> int:
     except ImportError as exc:
         log.error("avatar extra missing (%s); install with: uv pip install -e '.[avatar]'", exc)
         return 2
+    from .captions import Rasteriser
     from .gl import SphereRenderer
 
     pygame.init()
@@ -145,8 +189,13 @@ def run(args) -> int:
     events: queue.SimpleQueue = queue.SimpleQueue()
     client = BusClient(events.put, lambda up: events.put({"type": STATUS, "connected": up}),
                        args.socket)
-    client.start()
-    scene = Scene()
+    if not args.tour:
+        client.start()
+    scene = build_scene()
+    captions = Rasteriser()
+    dropin, lock = mode_paths()
+    next_mode_poll = 0.0
+    tour_start, tour_at = time.monotonic(), None
     running = True
     minimised = False
     requested = geo["position"] if geo["position"] and not geo["fullscreen"] else None
@@ -183,8 +232,21 @@ def run(args) -> int:
                 pygame.event.wait(250)          # draw nothing while hidden (§4.3)
                 continue
             now = time.monotonic()
+            if args.tour:
+                i = tour_index(now - tour_start, args.tour)
+                if i is None:
+                    break
+                if i != tour_at:
+                    tour_at = i
+                    scene, _ = staged(TOUR[i], t0=now, settle=False)
+                    log.info("tour %d/%d: %s", i + 1, len(TOUR), TOUR[i])
+                    pygame.display.set_caption(f"Jarvis - tour: {TOUR[i]}")
+            elif now >= next_mode_poll:
+                scene.local_mode = local_mode(dropin, lock)
+                next_mode_poll = now + MODE_POLL_S
             frame = scene.frame(now)
-            renderer.draw(frame, now, pygame.display.get_window_size())
+            size = pygame.display.get_window_size()
+            renderer.draw(frame, now, size, captions.image(frame.captions, size))
             pygame.display.flip()
             time.sleep(frame_delay(frame.fps, start, time.monotonic()))
             frames += 1
@@ -195,7 +257,8 @@ def run(args) -> int:
                 geo["position"] = position_to_save(list(window.position), requested, landed)
     finally:
         client.stop()
-        save_geometry(geo, args.geometry)
+        if not args.tour:                       # a tour window must not move the real one
+            save_geometry(geo, args.geometry)
         renderer.release()
         pygame.quit()
     return 0
@@ -220,6 +283,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--geometry", type=Path, default=GEOMETRY_PATH)
     parser.add_argument("--check", action="store_true",
                         help="check the avatar extra imports, print problems, exit 1 if any")
+    parser.add_argument("--tour", type=float, default=0.0, metavar="SECONDS",
+                        help="show every state for SECONDS each, then exit (ignores the daemon)")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s")

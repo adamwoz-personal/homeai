@@ -121,3 +121,39 @@ def test_chunk_utterance_with_and_without_alignments():
     d = tl.chunk_utterance("c-0", 2.0, pcm, 22050, [("h", 1000), ("a", 1205)])
     assert d["duration_ms"] == 100 and len(d["level"]) == 6 and d["visemes"][-1][1] == "rest"
     assert "visemes" not in tl.chunk_utterance("c-1", 2.0, pcm, 22050, None)
+
+
+def tone(hz, seconds=0.5, sr=22050, amp=12000):
+    t = np.arange(int(seconds * sr)) / sr
+    return (amp * np.sin(2 * np.pi * hz * t)).astype(np.int16)
+
+
+def test_band_envelopes_separate_low_and_high():
+    lo = tl.band_envelopes(tone(150), 22050)
+    hi = tl.band_envelopes(tone(5000), 22050)
+    assert len(lo["low"]) == len(tl.level_envelope(tone(150), 22050))
+    assert np.mean(lo["low"]) > 150 and np.mean(lo["high"]) < 20
+    assert np.mean(hi["high"]) > 150 and np.mean(hi["low"]) < 20
+    mid = tl.band_envelopes(tone(1200), 22050)       # between the bands: neither lights
+    assert np.mean(mid["low"]) < 40 and np.mean(mid["high"]) < 40
+
+
+def test_band_envelopes_silence_bytes_and_bad_rates():
+    quiet = tl.band_envelopes(np.zeros(22050, dtype=np.int16).tobytes(), 22050)
+    assert set(quiet["low"]) == {0} and set(quiet["high"]) == {0}
+    for sr, hz in ((0, 60), (22050, 0)):
+        with pytest.raises(ValueError):
+            tl.band_envelopes(tone(150), sr, hz)
+
+
+def test_bands_never_brighter_than_level():
+    pcm = tone(150)
+    level = tl.level_envelope(pcm, 22050)
+    bands = tl.band_envelopes(pcm, 22050, level=level)
+    assert all(b <= lv for b, lv in zip(bands["low"], level))
+
+
+def test_chunk_utterance_carries_bands():
+    d = tl.chunk_utterance("c-0", 0.0, tone(150).tobytes(), 22050, None)
+    assert len(d["bands"]["low"]) == len(d["level"])
+    assert "bands" not in tl.utterance_data("x", 0.0, 22050, 10, [0])

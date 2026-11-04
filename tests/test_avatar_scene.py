@@ -116,11 +116,11 @@ def test_snapshot_restores_state_and_disconnect_goes_offline():
 
 
 def test_unknown_state_ignored_and_caption_kept():
-    s = Scene(state="idle")
+    s = Scene(state="idle", connected=True)
     s.apply({"type": "state", "data": {"state": "dancing"}})
     s.apply({"type": "caption", "t_mono": 5.0, "data": {"who": "user", "text": "hi"}})
     assert s.state == "idle"
-    assert s.frame(5.0).caption == "user: hi"
+    assert s.frame(5.0).captions == [("user", "hi", 1.0)]
 
 
 def test_fps_policy():
@@ -137,7 +137,7 @@ def test_fps_policy():
 
 
 def test_state_colour_eases_not_jumps():
-    s = Scene(state="idle")
+    s = Scene(state="idle", connected=True)
     first = s.frame(0.0).colour
     s.state = "muted"
     nxt = s.frame(1 / 60).colour
@@ -147,12 +147,165 @@ def test_state_colour_eases_not_jumps():
 
 
 def test_stale_utterances_dropped_and_spin_integrates():
-    s = Scene(state="thinking")
+    s = Scene(state="thinking", connected=True)
     s.apply(utt(0.0, [255] * 6))
     s.frame(0.0)
     f = s.frame(2.0)
     assert s.utterances == []
     assert math.isclose(f.angle, (1.2 * 0.25) % (2 * math.pi))   # dt capped at 0.25 s
+
+
+# ---- phase 2: shown states, motion, captions ---------------------------------------
+
+def idle_scene(**kw):
+    s = Scene(state="idle", connected=True, **kw)
+    s.frame(0.0)
+    return s
+
+
+def test_sleeps_after_idle_minutes_and_any_event_wakes_it():
+    s = idle_scene(sleep_s=300.0)
+    assert s.frame(299.0).state == "idle"
+    f = s.frame(300.0)
+    assert f.state == "sleep" and f.fps == 10
+    s.apply({"type": "caption", "data": {"who": "user", "text": "hey"}})
+    assert s.frame(300.1).state == "idle"
+    assert s.frame(599.0).state == "idle"         # the timer restarted at the event
+
+
+def test_only_idle_sleeps_and_zero_disables():
+    s = Scene(state="thinking", connected=True, sleep_s=1.0)
+    s.frame(0.0)
+    assert s.frame(10.0).state == "thinking"
+    s = idle_scene(sleep_s=0.0)
+    assert s.frame(1e6).state == "idle"
+
+
+def test_speech_keeps_it_awake():
+    s = idle_scene(sleep_s=1.0)
+    s.apply(utt(0.5, [200] * 600))                # ten seconds of speech
+    s.frame(0.5)
+    assert s.frame(9.0).state == "idle"
+
+
+def test_quiet_hours_sleep_after_thirty_seconds():
+    from datetime import time as dtime
+
+    from homeai.avatar.scene import QUIET_SLEEP_S
+    window = (dtime(22, 0), dtime(7, 0))
+    s = idle_scene(sleep_s=3600.0, quiet=window, clock=lambda: dtime(23, 30))
+    assert s.frame(QUIET_SLEEP_S - 1).state == "idle"
+    assert s.frame(QUIET_SLEEP_S).state == "sleep"
+    s = idle_scene(sleep_s=3600.0, quiet=window, clock=lambda: dtime(12, 0))
+    assert s.frame(QUIET_SLEEP_S).state == "idle"
+
+
+def test_coding_mode_shows_busy_not_offline_and_switching_wins():
+    s = Scene()
+    s.local_mode = "coding"
+    f = s.frame(0.0)
+    assert f.state == "busy" and ("status", "coding mode", 1.0) in f.captions
+    s.local_mode = None
+    assert s.frame(0.1).state == "offline"
+    s.set_connected(True)
+    s.apply({"type": "state", "data": {"state": "speaking"}})
+    s.local_mode = "switching"
+    assert s.frame(0.2).state == "mode_switching"
+
+
+def test_motion_eases_in_per_state():
+    from homeai.avatar.scene import RING_PERIOD_S
+    s = Scene(state="listening", connected=True)
+    first = s.frame(0.0)
+    assert first.ripple == 0.0                     # eases in, no jump
+    f = run(s, 0.0, 1.5)[-1][1]
+    assert f.ripple > 0.95 and f.swirl == 0.0 and f.ring == -1.0
+    s.state = "thinking"
+    frames = run(s, 1.5, 3.5)
+    assert frames[-1][1].ripple < 0.05
+    assert frames[-1][1].swirl != frames[-2][1].swirl      # swirling
+    s.state = "followup"
+    f = run(s, 3.5, 5.0)[-1][1]
+    assert f.ring_amp > 0.95 and 0.0 <= f.ring < 1.0
+    later = s.frame(5.0 + RING_PERIOD_S / 4).ring
+    assert math.isclose((later - f.ring) % 1.0, 0.25, abs_tol=0.02)   # ring travels outward
+
+
+def test_bands_reach_the_frame():
+    s = Scene(state="speaking", connected=True)
+    ev = utt(0.0, [255] * 60)
+    ev["data"]["bands"] = {"low": [255] * 60, "high": [51] * 60}
+    s.apply(ev)
+    f = s.frame(0.5)
+    assert f.low == 1.0 and f.high == pytest.approx(0.2)
+    assert s.frame(5.0).low == 0.0
+
+
+def test_user_caption_fades_after_hold():
+    from homeai.avatar.scene import CAPTION_FADE_S, CAPTION_HOLD_S
+    s = idle_scene()
+    s.apply({"type": "caption", "t_mono": 1.0, "data": {"who": "user", "text": "hello"}})
+    assert s.frame(1.0 + CAPTION_HOLD_S - 0.01).captions == [("user", "hello", 1.0)]
+    mid = s.frame(1.0 + CAPTION_HOLD_S + CAPTION_FADE_S / 2).captions[0][2]
+    assert 0.4 < mid < 0.6
+    assert s.frame(1.0 + CAPTION_HOLD_S + CAPTION_FADE_S).captions == []
+
+
+def test_jarvis_caption_follows_the_sentence_being_spoken():
+    s = idle_scene()
+    s.apply({"type": "caption", "t_mono": 1.0, "data": {"who": "user", "text": "moon?"}})
+    s.apply({"type": "state", "data": {"state": "speaking"}})
+    s.apply({"type": "caption", "t_mono": 1.0,
+             "data": {"who": "jarvis", "text": "First sentence here. Second one now."}})
+    s.apply(utt(2.0, [200] * 60, uid="a"))         # 2.0-3.0
+    s.apply(utt(3.0, [200] * 60, uid="b"))         # 3.0-4.0
+    said = lambda t: [c for c in s.frame(t).captions if c[0] == "jarvis"][0][1]  # noqa: E731
+    assert said(1.5) == "First sentence here."
+    assert said(2.5) == "First sentence here."
+    assert said(3.5) == "Second one now."
+
+
+def test_jarvis_caption_held_while_talking_then_fades():
+    from homeai.avatar.scene import CAPTION_FADE_S, CAPTION_HOLD_S
+    s = idle_scene()
+    s.apply({"type": "state", "data": {"state": "speaking"}})
+    s.apply({"type": "caption", "t_mono": 0.0, "data": {"who": "jarvis", "text": "A long reply."}})
+    for t in range(1, 20):
+        assert s.frame(float(t)).captions[0][2] == 1.0      # 19 s of talking, still shown
+    s.apply({"type": "state", "data": {"state": "idle"}})
+    s.frame(20.0)
+    assert s.frame(20.0 + CAPTION_HOLD_S + CAPTION_FADE_S + 0.01).captions == []
+
+
+def test_new_question_clears_the_old_answer():
+    s = idle_scene()
+    s.apply({"type": "caption", "t_mono": 0.0, "data": {"who": "jarvis", "text": "Old answer."}})
+    s.apply({"type": "caption", "t_mono": 0.5, "data": {"who": "user", "text": "new question"}})
+    assert [c[0] for c in s.frame(1.0).captions] == ["user"]
+
+
+def test_snapshot_after_renderer_restart_restores_shown_state():
+    s = Scene()
+    s.set_connected(True)
+    s.apply({"type": "snapshot", "data": {"events": {"state": {"type": "state",
+                                                               "data": {"state": "listening"}}}}})
+    assert s.frame(0.0).state == "listening"
+
+
+def test_tour_stages_every_state():
+    from homeai.avatar.tour import TOUR, staged
+    for name in TOUR:
+        scene, t = staged(name)
+        assert scene.frame(t).state == name, name
+    with pytest.raises(ValueError):
+        staged("dancing")
+
+
+def test_tour_index_walks_states_then_ends():
+    from homeai.avatar.tour import tour_index
+    assert [tour_index(t, 2.0, 3) for t in (-1.0, 0.0, 1.99, 2.0, 5.9, 6.0)] == [0, 0, 0, 1, 2, None]
+    with pytest.raises(ValueError):
+        tour_index(1.0, 0.0)
 
 
 # ---- app helpers -----------------------------------------------------------------
@@ -203,6 +356,47 @@ def test_drain_applies_events_and_status():
     assert s.state == "offline"
 
 
+def test_lock_held_reads_proc_locks_by_inode(tmp_path):
+    lock = tmp_path / "homeai-mode.lock"
+    lock.write_text("")
+    ino = lock.stat().st_ino
+    locks = tmp_path / "locks"
+    locks.write_text(f"1: POSIX  ADVISORY  WRITE 9 103:02:{ino} 0 EOF\n"
+                     f"2: FLOCK  ADVISORY  WRITE 9 103:02:{ino + 1} 0 EOF\n")
+    assert not app.lock_held(lock, locks)           # wrong kind, wrong inode
+    locks.write_text(locks.read_text() + f"3: FLOCK  ADVISORY  WRITE 9 103:02:{ino} 0 EOF\n")
+    assert app.lock_held(lock, locks)
+    assert not app.lock_held(tmp_path / "missing", locks)
+    assert not app.lock_held(lock, tmp_path / "no-proc")
+
+
+def test_lock_held_sees_a_real_flock(tmp_path):
+    import fcntl
+    lock = tmp_path / "m.lock"
+    with open(lock, "w") as fh:
+        assert not app.lock_held(lock)
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        assert app.lock_held(lock)
+
+
+def test_local_mode(tmp_path, monkeypatch):
+    dropin, lock = tmp_path / "coding.conf", tmp_path / "lock"
+    assert app.local_mode(dropin, lock) is None
+    dropin.write_text("")
+    assert app.local_mode(dropin, lock) == "coding"
+    monkeypatch.setattr(app, "lock_held", lambda p: True)
+    assert app.local_mode(dropin, lock) == "switching"
+
+
+def test_build_scene_reads_sleep_settings(monkeypatch):
+    monkeypatch.setenv("HOMEAI_AVATAR_SLEEP_MIN", "2")
+    monkeypatch.setenv("HOMEAI_AVATAR_QUIET_HOURS", "22:00-07:00")
+    s = app.build_scene()
+    assert s.sleep_s == 120.0 and s.quiet is not None
+    monkeypatch.setenv("HOMEAI_AVATAR_QUIET_HOURS", "")
+    assert app.build_scene().quiet is None
+
+
 # ---- headless GL -----------------------------------------------------------------
 
 @pytest.fixture(scope="module")
@@ -244,3 +438,30 @@ def test_lit_radius_pure():
         fibonacci_sphere(0)
     pts = fibonacci_sphere(500)
     assert np.allclose(np.linalg.norm(pts, axis=1), 1.0, atol=1e-5)
+
+
+def test_point_attributes_deterministic_with_large_dot_share():
+    from homeai.avatar.gl import point_attributes
+    a = point_attributes(4000, seed=3)
+    assert a.shape == (4000, 5) and a.dtype == np.float32
+    assert np.array_equal(a, point_attributes(4000, seed=3))
+    assert not np.array_equal(a, point_attributes(4000, seed=4))
+    large = a[:, 4] >= 1.0
+    assert 0.25 < large.mean() < 0.35
+    assert a[:, 4].min() >= 0.6 and a[:, 4].max() <= 1.5
+
+
+def test_captions_render_over_the_sphere(gl):
+    from homeai.avatar.captions import Rasteriser
+    glmod, ctx, fbo = gl
+    r = glmod.SphereRenderer(ctx, points=2000)
+    f = Scene(state="idle", connected=True).frame(0.0)
+    r.draw(f, 0.0, fbo.size)
+    plain = np.frombuffer(fbo.read(components=3), dtype=np.uint8).reshape(240, 240, 3)
+    img = Rasteriser().image([("jarvis", "Hello there, Adam.", 1.0)], fbo.size)
+    r.draw(f, 0.0, fbo.size, captions=img)
+    shown = np.frombuffer(fbo.read(components=3), dtype=np.uint8).reshape(240, 240, 3)
+    r.release()
+    # fbo.read rows start at the bottom, like the texture: the caption is in the first rows.
+    assert np.abs(shown[:40].astype(int) - plain[:40]).sum() > 1000
+    assert np.array_equal(shown[100:140], plain[100:140])       # the sphere centre untouched

@@ -23,6 +23,8 @@ log = logging.getLogger("homeai.avatar.timeline")
 
 LEVEL_HZ = 60
 LEVEL_FLOOR_DB = -60.0
+LOW_HZ = 500.0             # band edges for the point field (voice fundamentals vs sibilance)
+HIGH_HZ = 2500.0
 PAUSE_MIN_MS = 80          # a word gap shorter than this keeps the mouth moving
 VOWEL_WEIGHT = 0.8
 STRESSED_WEIGHT = 1.0
@@ -137,6 +139,36 @@ def level_envelope(pcm: np.ndarray | bytes, sample_rate: int, hz: int = LEVEL_HZ
     return out
 
 
+def band_envelopes(pcm: np.ndarray | bytes, sample_rate: int, hz: int = LEVEL_HZ,
+                   level: list[int] | None = None) -> dict[str, list[int]]:
+    """Low (< LOW_HZ) and high (> HIGH_HZ) bands per 1/hz s window, 0-255.
+
+    Each value is the band's share of the window's spectral energy (square-rooted
+    so quiet-but-present bands show) times the window's level, so a band is
+    never brighter than the speech is loud. Drives "low swells large dots,
+    high brightens small dots" (AVATAR_PLAN §4.6).
+    """
+    if sample_rate <= 0 or hz <= 0:
+        raise ValueError("sample_rate and hz must be positive")
+    samples = np.frombuffer(pcm, dtype=np.int16) if isinstance(pcm, (bytes, bytearray)) else pcm
+    samples = np.asarray(samples, dtype=np.float64)
+    level = level_envelope(samples.astype(np.int16), sample_rate, hz) if level is None else level
+    window = sample_rate / hz
+    low, high = [], []
+    for i, lv in enumerate(level):
+        seg = samples[int(round(i * window)):int(round((i + 1) * window))]
+        if seg.size < 2 or lv == 0:
+            low.append(0)
+            high.append(0)
+            continue
+        power = np.abs(np.fft.rfft(seg * np.hanning(seg.size))) ** 2
+        freqs = np.fft.rfftfreq(seg.size, 1.0 / sample_rate)
+        total = float(power.sum()) or 1.0
+        for out, mask in ((low, freqs < LOW_HZ), (high, freqs > HIGH_HZ)):
+            out.append(int(round(lv * math.sqrt(float(power[mask].sum()) / total))))
+    return {"low": low, "high": high}
+
+
 def chain_starts(first_start: float, sample_counts: list[int], sample_rate: int) -> list[float]:
     """Start time of each chunk when they play back to back."""
     if sample_rate <= 0:
@@ -149,13 +181,16 @@ def chain_starts(first_start: float, sample_counts: list[int], sample_rate: int)
 
 
 def utterance_data(uid: str, start_mono: float, sample_rate: int, num_samples: int,
-                   level: list[int], visemes: list[list] | None = None, text: str = "") -> dict:
-    """Payload of an ``utterance`` event; ``visemes`` omitted when alignments are unavailable."""
+                   level: list[int], visemes: list[list] | None = None, text: str = "",
+                   bands: dict[str, list[int]] | None = None) -> dict:
+    """Payload of an ``utterance`` event; ``visemes``/``bands`` omitted when unavailable."""
     data = {"id": uid, "start_mono": start_mono, "sample_rate": sample_rate,
             "duration_ms": int(round(num_samples * 1000 / sample_rate)),
             "level_hz": LEVEL_HZ, "level": level, "text": text}
     if visemes:
         data["visemes"] = visemes
+    if bands:
+        data["bands"] = bands
     return data
 
 
@@ -163,5 +198,6 @@ def chunk_utterance(uid: str, start_mono: float, pcm: bytes, sample_rate: int,
                     alignments: list[tuple[str, int]] | None) -> dict:
     """``utterance`` payload for one synthesised chunk (Speaker and sync_check share this)."""
     visemes = visemes_from_alignments(alignments, sample_rate) if alignments else None
-    return utterance_data(uid, start_mono, sample_rate, len(pcm) // 2,
-                          level_envelope(pcm, sample_rate), visemes)
+    level = level_envelope(pcm, sample_rate)
+    return utterance_data(uid, start_mono, sample_rate, len(pcm) // 2, level, visemes,
+                          bands=band_envelopes(pcm, sample_rate, level=level))
