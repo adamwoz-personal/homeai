@@ -1689,6 +1689,25 @@ Results in `plans/AVATAR_PLAN.md` §10; tools in `tools/avatar/`, tested in
   enabled). Bus: every utterance announced ~68 ms ahead of audio. Adam liked
   the thinking colour shift: it covers web-search lag well.
 
+## Avatar Phase 4: the face (2026-11-04)
+
+- **`max(eyes, blink)` silently clipped wide eyes.** Listening sets the lids
+  below 0 (wider than rest), and the max with a 0 blink erased it. A blink
+  must blend from wherever the lids are: `eyes + (1 - eyes) * blink`. Caught
+  by a test asserting the value, not by looking at renders.
+- **Pixel lip-sync measures need a tight box.** sync_check on the face first
+  read corr 0.41 while the motion itself (`jaw_open`) read 0.67: the black
+  gaps between stipple dots diluted the mouth's dark share. Measure only the
+  centre of the lip gap (0.67 / 0.72 after). Always compare against the
+  un-rendered signal before blaming the motion.
+- Barycentric deform on the GPU (534 vertices in a float texture,
+  `texelFetch`) keeps the CPU near the sphere's: 1.3 % / 3.7 %, 60 MB.
+- Refactoring the sphere's overlay into `gl.Overlay` left its goldens at mean
+  diff 0.0: run `update_golden.py --check` after any shared-renderer refactor.
+- Never restart the live window while `check_mutants.sh` runs: mutants edit
+  source in place, and a restart would import one.
+- Delegation: none (motion timing, shaders, rig code: not delegable).
+
 ## Avatar Phase 3: face asset pipeline (2026-11-04)
 
 - **MediaPipe's named lip contours miss the mid-lip rings** (42, 74, 184, 77,

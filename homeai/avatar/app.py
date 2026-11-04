@@ -1,14 +1,15 @@
 """homeai-avatar: the Jarvis window (AVATAR_PLAN §4, Phase 1 sphere).
 
 Reads the daemon's event bus, plays speech timelines against the monotonic
-clock and draws the sphere. Runs without the daemon (shows "offline") and
-reconnects when it comes back. Keys: F11 fullscreen, Esc leaves fullscreen.
+clock and draws the face (Phase 4) or, without a chosen face, the sphere.
+Runs without the daemon (shows "offline") and reconnects when it comes back.
+Keys: F11 fullscreen, Esc leaves fullscreen.
 
 Display choice (Phase 0 spike): XWayland (SDL_VIDEODRIVER=x11) so the window
 position can be restored; DRI_PRIME=1 renders on the iGPU (set by the service).
 Window size/position/fullscreen persist in ~/.config/homeai/avatar.json.
 
-Usage: .venv/bin/python -m homeai.avatar.app [--socket PATH] [--points N]
+Usage: .venv/bin/python -m homeai.avatar.app [--socket PATH] [--look auto|face|sphere] [--points N]
 Needs the avatar extra (pygame-ce, moderngl) and a desktop session.
 """
 from __future__ import annotations
@@ -36,6 +37,7 @@ VSYNC_FPS = 60
 SETTLE_FRAMES = 15          # frames before trusting the window manager's placement
 STATUS = "_status"          # internal queue item: connection up/down
 MODE_POLL_S = 1.0
+LOOKS = ("auto", "face", "sphere")
 
 
 def lock_held(path: Path, proc_locks: Path = Path("/proc/locks")) -> bool:
@@ -151,6 +153,27 @@ def drain(events: "queue.SimpleQueue[dict]", scene: Scene) -> int:
             scene.apply(event)
 
 
+def choose_look(look: str, load=None) -> tuple[str, object | None, str]:
+    """(look, face asset or None, why): ``auto`` uses the face when one is chosen and loads."""
+    if look not in LOOKS:
+        raise ValueError(f"look must be one of {LOOKS}")
+    if look == "sphere":
+        return "sphere", None, "asked for the sphere"
+    if load is None:
+        from .assets import load_current as load
+    try:
+        asset = load()
+    except (OSError, ValueError, KeyError) as exc:
+        if look == "face":
+            raise
+        return "sphere", None, f"face asset unusable ({exc}); showing the sphere"
+    if asset is None:
+        if look == "face":
+            raise ValueError("no face chosen; build one and run: homeai-avatar use vN")
+        return "sphere", None, "no face chosen; showing the sphere"
+    return "face", asset, f"face {asset.version}"
+
+
 def run(args) -> int:
     geo = load_geometry(args.geometry)
     env = prepare_env(os.environ)
@@ -165,6 +188,12 @@ def run(args) -> int:
     from .captions import Rasteriser
     from .gl import SphereRenderer
 
+    try:
+        look, asset, why = choose_look(args.look)
+    except (OSError, ValueError, KeyError) as exc:
+        log.error("--look face: %s", exc)
+        return 2
+    log.info("look: %s (%s)", look, why)
     pygame.init()
     for attr, value in ((pygame.GL_CONTEXT_MAJOR_VERSION, 3), (pygame.GL_CONTEXT_MINOR_VERSION, 3),
                         (pygame.GL_CONTEXT_PROFILE_MASK, pygame.GL_CONTEXT_PROFILE_CORE)):
@@ -182,7 +211,12 @@ def run(args) -> int:
     import moderngl
 
     ctx = moderngl.create_context()
-    renderer = SphereRenderer(ctx, points=args.points)
+    if look == "face":
+        from .facegl import FaceRenderer
+
+        renderer = FaceRenderer(ctx, asset)
+    else:
+        renderer = SphereRenderer(ctx, points=args.points)
     log.info("avatar window up: %s, driver %s", ctx.info.get("GL_RENDERER", "?"),
              env.get("SDL_VIDEODRIVER"))
 
@@ -279,7 +313,9 @@ def check() -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Jarvis avatar window")
     parser.add_argument("--socket", type=Path, default=None, help="event bus (default: the daemon's)")
-    parser.add_argument("--points", type=int, default=12000)
+    parser.add_argument("--points", type=int, default=12000, help="sphere points")
+    parser.add_argument("--look", choices=LOOKS, default="auto",
+                        help="auto: the chosen face if there is one, else the sphere")
     parser.add_argument("--geometry", type=Path, default=GEOMETRY_PATH)
     parser.add_argument("--check", action="store_true",
                         help="check the avatar extra imports, print problems, exit 1 if any")

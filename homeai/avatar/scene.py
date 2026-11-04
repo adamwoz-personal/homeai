@@ -22,6 +22,7 @@ from typing import Callable
 
 from ..doorbell import in_quiet_hours
 from ..speech import split_sentences
+from .face import FaceMotion, hold_filter, spring  # noqa: F401 - spring re-exported
 
 # Mouth openness of each viseme class (timeline.VISEME_CLASSES), 0 closed .. 1 wide.
 VISEME_OPEN = {"rest": 0.0, "PP": 0.0, "FF": 0.15, "TH": 0.3, "DD": 0.3, "SH": 0.35,
@@ -62,17 +63,6 @@ STALE_S = 1.0               # forget an utterance this long after it ends
 LEVEL_FLOOR = 0.15          # level (0-1) below which a viseme is not voiced
 
 
-def spring(x: float, v: float, target: float, omega: float, dt: float) -> tuple[float, float]:
-    """One exact step of a critically damped spring; stable for any dt >= 0."""
-    if dt <= 0:
-        return x, v
-    d = x - target
-    e = math.exp(-omega * dt)
-    nx = target + (d + (v + omega * d) * dt) * e
-    nv = (v - omega * (v + omega * d) * dt) * e
-    return nx, nv
-
-
 @dataclass
 class Utterance:
     id: str
@@ -84,6 +74,9 @@ class Utterance:
     vis_open: list[float]       # openness * weight
     low: list[int] = field(default_factory=list)    # band envelopes at level_hz
     high: list[int] = field(default_factory=list)
+    mouth_t: list[float] = field(default_factory=list)   # the face's visemes after face.hold_filter
+    mouth_cls: list[str] = field(default_factory=list)
+    mouth_w: list[float] = field(default_factory=list)
 
     @classmethod
     def from_event(cls, data: dict) -> "Utterance":
@@ -93,11 +86,14 @@ class Utterance:
         duration = float(data.get("duration_ms") or len(level) / hz * 1000) / 1000
         vis = data.get("visemes") or []
         bands = data.get("bands") or {}
+        held = hold_filter([(float(v[0]) / 1000, str(v[1]), float(v[2])) for v in vis])
         return cls(id=str(data.get("id", "")), start=start, end=start + duration, level=level,
                    level_hz=hz, vis_t=[float(v[0]) / 1000 for v in vis],
                    vis_open=[VISEME_OPEN.get(v[1], 0.5) * float(v[2]) for v in vis],
                    low=[int(v) for v in bands.get("low") or []],
-                   high=[int(v) for v in bands.get("high") or []])
+                   high=[int(v) for v in bands.get("high") or []],
+                   mouth_t=[k[0] for k in held], mouth_cls=[k[1] for k in held],
+                   mouth_w=[k[2] for k in held])
 
     def _sample(self, values: list[int], t: float) -> float:
         i = int((t - self.start) * self.level_hz)
@@ -138,6 +134,7 @@ class Frame:
     low: float = 0.0            # speech bands 0-1
     high: float = 0.0
     captions: list[tuple[str, str, float]] = field(default_factory=list)  # (who, text, alpha)
+    params: dict[str, float] = field(default_factory=dict)   # face rig values (face.FaceMotion)
 
 
 @dataclass
@@ -179,6 +176,7 @@ class Scene:
     _swirl: float = 0.0
     _last: float | None = None
     _angle: float = 0.0
+    face: FaceMotion = field(default_factory=FaceMotion)
 
     # ---- events ----
     def apply(self, event: dict) -> None:
@@ -305,7 +303,9 @@ class Scene:
         radius = BASE_RADIUS * (1 + amp * math.sin(2 * math.pi * now / period)) + OPEN_RADIUS * openness
         spin = {"thinking": 1.2, "sleep": 0.05, "offline": 0.0, "busy": 0.05}.get(shown, 0.25)
         self._angle = (self._angle + spin * dt) % (2 * math.pi)
-        return Frame(state=shown, radius=radius, openness=openness, colour=self._colour,
+        level = next((u.level_at(now) for u in self.utterances if u.start <= now < u.end), 0.0)
+        params = self.face.update(now, dt, shown, self.utterances, level, low)
+        return Frame(params=params,state=shown, radius=radius, openness=openness, colour=self._colour,
                      glow=min(1.0, self._glow + 0.3 * openness), spin=spin, angle=self._angle,
                      fps=self.fps(now), ripple=ripple, swirl=self._swirl,
                      ring=(now % RING_PERIOD_S) / RING_PERIOD_S if ring_amp > 0.01 else -1.0,

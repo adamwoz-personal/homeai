@@ -226,3 +226,21 @@ def deform(rest: np.ndarray, fields: dict[str, np.ndarray], params: dict[str, fl
 def positions(verts: np.ndarray, triangles: np.ndarray, tri: np.ndarray, bary: np.ndarray) -> np.ndarray:
     """(N, 2) point positions from bound triangles and barycentric weights."""
     return np.einsum("nk,nkd->nd", bary, verts[triangles[tri]])
+
+
+class Deformer:
+    """``deform`` for every frame without allocating: fields stacked once, results in one buffer."""
+
+    def __init__(self, rest: np.ndarray, fields: dict[str, np.ndarray]) -> None:
+        self.names = tuple(sorted(fields))
+        self.rest = np.asarray(rest, dtype=np.float32)
+        self.stack = np.stack([np.asarray(fields[n], dtype=np.float32) for n in self.names])
+        self.values = np.zeros(len(self.names), dtype=np.float32)
+        self.out = np.empty_like(self.rest)
+
+    def __call__(self, params: dict[str, float]) -> np.ndarray:
+        for i, name in enumerate(self.names):
+            self.values[i] = params.get(name, 0.0)
+        np.einsum("p,pvd->vd", self.values, self.stack, out=self.out)
+        self.out += self.rest
+        return self.out

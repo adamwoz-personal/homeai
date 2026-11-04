@@ -244,6 +244,49 @@ def build(image: Path, out_dir: Path, *, points: int = DEFAULTS["points"], seed:
                 "gamma": gamma})
 
 
+_OVAL = (10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148,
+         176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109)
+_EYES = ((33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246),
+         (263, 249, 390, 373, 374, 380, 381, 382, 362, 398, 384, 385, 386, 387, 388, 466))
+_BROWS = ((70, 63, 105, 66, 107, 55, 65, 52, 53, 46), (300, 293, 334, 296, 336, 285, 295, 282, 283, 276))
+
+
+def synthetic_face(landmarks: np.ndarray, side: int, out_dir: Path, points: int = 6000, seed: int = 1) -> dict:
+    """A plain stippled face drawn from landmarks alone (numpy only): test and golden asset.
+
+    Bright oval with dark eyes, bright brows and lips, and a dark mouth slit,
+    coloured by height so pose and lid motion show. Independent of any artwork.
+    """
+    started = time.monotonic()
+    lm = np.asarray(landmarks, dtype=np.float64)
+    verts = np.vstack([lm, boundary_ring(lm, side)]).astype(np.float32)
+    tris = build_mesh(verts)
+    rng = np.random.default_rng(seed)
+    cand = rng.uniform(0, side, (points * 6, 2))
+    dens = np.where(rig._inside(cand, lm[list(_OVAL)]), 0.55, 0.0)
+    for eye in _EYES:
+        dens[rig._inside(cand, lm[list(eye)])] = 0.08
+    for brow in _BROWS:
+        dens[rig._inside(cand, lm[list(brow)])] = 1.0
+    lips = rig._inside(cand, lm[list(rig._LIPS_UPPER_OUTER + rig._LIPS_LOWER_OUTER[::-1])])
+    slit = rig._inside(cand, lm[list(rig._LIPS_UPPER_INNER + rig._LIPS_LOWER_INNER[::-1])])
+    dens[lips] = 0.95
+    dens[slit] = 0.0
+    keep = cand[rng.random(len(cand)) < dens][:points]
+    if len(keep) < points // 2:
+        raise BuildError(f"synthetic face kept only {len(keep)} points")
+    d = np.zeros(len(keep))
+    for value, mask in ((0.55, rig._inside(keep, lm[list(_OVAL)])),
+                        (0.95, rig._inside(keep, lm[list(rig._LIPS_UPPER_OUTER + rig._LIPS_LOWER_OUTER[::-1])]))):
+        d[mask] = value
+    y = keep[:, 1] / side
+    colour = np.column_stack([0.25 + 0.5 * y, 0.95 - 0.3 * y, 0.45 + 0.4 * (1 - y)]).astype(np.float32)
+    tri, bary = bind(keep, verts, tris)
+    return write_asset(out_dir, side=side, verts=verts, tris=tris, fields=rig.default_fields(verts), xy=keep,
+                       size=stipple.sizes(d).astype(np.float32), colour=colour, tri=tri, bary=bary,
+                       inputs={"image": "synthetic"}, params={"points": points, "seed": seed}, started=started)
+
+
 def write_asset(out_dir: Path, *, side: int, verts: np.ndarray, tris: np.ndarray, fields: dict,
                 xy: np.ndarray, size: np.ndarray, colour: np.ndarray, tri: np.ndarray, bary: np.ndarray,
                 inputs: dict, params: dict, started: float) -> dict:

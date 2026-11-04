@@ -429,6 +429,28 @@ points.npz, previews, build.json with hashes). Versions are never overwritten;
 - Needs the avatar-build extra (mediapipe, opencv, scipy) and the model from
   `tools/avatar/landmarks_probe.py --download`.
 
+### Face look (Phase 4)
+
+With a current face the window shows it (`--look auto`, default). Without one, or
+if the face fails to load, it shows the sphere and logs why. `--look sphere` forces the
+sphere; `--look face` refuses to start without a usable face.
+
+- What moves: the mouth follows the speech's visemes (lips look ahead 60 ms, jaw 40 ms,
+  so P/B/M close before the sound). Teeth show faintly as the lips part. It also
+  blinks every 3-6 s, makes saccades, breathes and sways the head. Listening widens
+  the eyes, thinking looks up and away, sleep closes the eyes slowly, and waking opens
+  them in ~0.3 s. The aura "hair" around the skull takes the state's colour and motion.
+- Look at every pose without the daemon: `tools/avatar/inspect_face.py [--pose AA ...]`
+  -> `~/homeai-bench/face-render-<stamp>/contact.png`.
+- Lip sync offline: `tools/avatar/sync_check.py --look face --size 480` (2026-11-04:
+  lag 0 / -4 ms, corr 0.67 / 0.72).
+- Budget: `tools/avatar/avatar_profile.py --look face` (2026-11-04 on the iGPU, 3 runs:
+  1.3 % idle / 3.7 % speaking CPU, 60 MB GPU).
+- Face goldens (`tests/golden/avatar/face/*.png`) use a synthetic face built from the
+  landmark fixture, not the chosen art; update with `tools/avatar/update_golden.py --only face`.
+- Tuning lives in `homeai/avatar/face.py` (viseme shapes, timing, per-state motion)
+  and `homeai/avatar/facegl.py` (sprite, teeth, hair geometry, zoom).
+
 ## Tests
 
 ```bash

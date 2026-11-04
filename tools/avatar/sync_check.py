@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 # Copyright (c) 2026 Adam Wosotowsky
 # SPDX-License-Identifier: BUSL-1.1
-"""Avatar Phase 1 functionality test: does the drawn sphere move with the voice?
+"""Avatar functionality test: does the drawn sphere (or face's mouth) move with the voice?
 
-Why: AVATAR_PLAN §10 Phase 1 exit. The scene's spring, lookahead and viseme
-mapping could make the sphere open early or late without any unit test
+Why: AVATAR_PLAN §10 Phase 1 and Phase 4 exits. The scene's spring, lookahead and viseme
+mapping could make the mouth open early or late without any unit test
 noticing. This synthesises real speech with the real Piper voice, builds the
 same utterance events the daemon publishes (timeline.chunk_utterance), plays
 them through the real Scene, renders every frame headless (EGL) with the real
-shaders, measures the drawn sphere's size from the pixels, and
+shaders, measures the drawn sphere's size (or, with --look face, the dark
+share of the mouth box on the current face) from the pixels, and
 cross-correlates it with the audio's loudness. Pass: best lag within
 +/- --tolerance-ms and correlation >= --min-corr. Playback latency is
 NOT tested here (it's HOMEAI_AVATAR_LAG_MS, measured by measure_output_latency.py).
 
 Usage:
-    .venv/bin/python tools/avatar/sync_check.py
+    .venv/bin/python tools/avatar/sync_check.py [--look face]
     .venv/bin/python tools/avatar/sync_check.py --text "..." --rate 240 --no-render
 Writes ~/homeai-bench/sync_check-<stamp>.json. Exit 0 pass, 1 fail, 2 setup error.
 """
@@ -78,14 +79,40 @@ def audio_track(chunks: list[tuple[float, bytes, int]], times: np.ndarray, windo
     return out
 
 
+def mouth_box(asset, size: int) -> tuple[int, int, int, int]:
+    """(x0, y0, x1, y1) window px around the mouth at rest plus the jaw's full drop."""
+    from homeai.avatar import facegl
+
+    v = asset.verts
+    h = asset.face_height
+    corners = v[[61, 291]]
+    pts = np.array([[corners[:, 0].min() + 0.3 * np.ptp(corners[:, 0]), v[13, 1]],
+                    [corners[:, 0].max() - 0.3 * np.ptp(corners[:, 0]), v[14, 1] + 0.04 * h]])
+    px = facegl.to_pixels(pts, float(asset.image_size[0]), (size, size), facegl.ZOOM)
+    x0, y0 = np.floor(px.min(axis=0)).astype(int)
+    x1, y1 = np.ceil(px.max(axis=0)).astype(int)
+    return max(x0, 0), max(y0, 0), min(x1, size), min(y1, size)
+
+
+def dark_share(rgb: np.ndarray, box: tuple[int, int, int, int], threshold: int = 12) -> float:
+    """Share of near-black pixels in ``box``: grows as the mouth opens. Pure."""
+    x0, y0, x1, y1 = box
+    region = rgb[y0:y1, x0:x1]
+    if region.size == 0:
+        raise ValueError(f"empty mouth box {box}")
+    return float((region.max(axis=2) < threshold).mean())
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--text", default=DEFAULT_TEXT)
     parser.add_argument("--rate", type=float, default=240.0, help="simulated frames per second")
     parser.add_argument("--size", type=int, default=240)
+    parser.add_argument("--look", choices=("sphere", "face"), default="sphere",
+                        help="face: the current face asset; measures the dark mouth gap")
     parser.add_argument("--tolerance-ms", type=float, default=40.0)
     parser.add_argument("--min-corr", type=float, default=0.5)
-    parser.add_argument("--no-render", action="store_true", help="use Frame.radius, skip GL")
+    parser.add_argument("--no-render", action="store_true", help="use Frame.radius / jaw_open, skip GL")
     parser.add_argument("--lookahead-ms", type=float, default=None,
                         help="override scene.LOOKAHEAD_S (tuning; 0 shows the spring's raw lag)")
     args = parser.parse_args()
@@ -119,12 +146,27 @@ def main() -> int:
     end = starts[-1] + pcm_chunks[-1].num_samples / pcm_chunks[-1].sample_rate + 0.5
     times = np.arange(START - 0.5, end, 1 / args.rate)
 
-    renderer = fbo = ctx = None
+    renderer = fbo = ctx = asset = box = None
+    if args.look == "face":
+        from homeai.avatar import assets
+        try:
+            asset = assets.load_current()
+        except (OSError, ValueError) as exc:
+            print(f"setup: face asset unusable ({exc})")
+            return 2
+        if asset is None:
+            print("setup: no face chosen (homeai-avatar use vN)")
+            return 2
+        box = mouth_box(asset, args.size)
     if not args.no_render:
         try:
             from homeai.avatar import gl
             ctx, fbo = gl.headless((args.size, args.size))
-            renderer = gl.SphereRenderer(ctx, points=6000)
+            if asset is not None:
+                from homeai.avatar.facegl import FaceRenderer
+                renderer = FaceRenderer(ctx, asset, hair=False)
+            else:
+                renderer = gl.SphereRenderer(ctx, points=6000)
         except Exception as exc:  # noqa: BLE001
             print(f"setup: headless GL unavailable ({exc}); use --no-render")
             return 2
@@ -132,11 +174,11 @@ def main() -> int:
     for i, t in enumerate(times):
         frame = scene.frame(float(t))
         if renderer is None:
-            mouth[i] = frame.radius
+            mouth[i] = frame.params["jaw_open"] if asset is not None else frame.radius
         else:
             renderer.draw(frame, float(t), fbo.size)
             px = np.frombuffer(fbo.read(components=3), dtype=np.uint8).reshape(args.size, args.size, 3)
-            mouth[i] = gl.lit_radius(px)
+            mouth[i] = dark_share(np.flipud(px), box) if asset is not None else gl.lit_radius(px)
     if renderer is not None:
         renderer.release()
         ctx.release()
@@ -156,7 +198,7 @@ def main() -> int:
     result = {"when": datetime.now().isoformat(timespec="seconds"), "text": args.text,
               "chunks": len(pcm_chunks), "aligned": engine.aligned,
               "audio_s": round(float(end - START - 0.5), 2), "synth_s": round(synth_s, 3),
-              "rate": args.rate, "rendered": renderer is not None or not args.no_render,
+              "rate": args.rate, "look": args.look, "rendered": not args.no_render,
               "lookahead_ms": round(scene_mod.LOOKAHEAD_S * 1000, 1),
               "lag_ms": round(lag * 1000, 1), "corr": round(corr, 3),
               "tolerance_ms": args.tolerance_ms, "min_corr": args.min_corr, "passed": passed,

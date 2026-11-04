@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 
+from .face import BLINK_CLOSE_S
 from .scene import Scene
 
 TOUR = ("idle", "listening", "thinking", "speaking", "followup", "sleep", "offline", "busy",
@@ -60,6 +61,38 @@ def staged(state: str, t0: float = 100.0, settle: bool = True) -> tuple[Scene, f
     return scene, t
 
 
+FACE_VISEMES = ("rest", "PP", "FF", "TH", "DD", "SH", "RR", "KK", "OU", "AA", "EH", "IH")
+FACE_TOUR = FACE_VISEMES + ("blink", "sleep", "listening", "thinking", "offline")
+
+
+def held_viseme(start: float, cls: str, seconds: float = 1.0, hz: int = 60) -> dict:
+    """One utterance holding viseme ``cls`` at full loudness: the mouth settles on its shape."""
+    n = int(seconds * hz)
+    return {"type": "utterance", "data": {
+        "id": f"hold-{cls}", "start_mono": start, "level_hz": hz, "level": [255] * n,
+        "duration_ms": seconds * 1000, "visemes": [[0, cls, 1.0]], "bands": {"low": [0] * n, "high": [0] * n}}}
+
+
+def staged_face(name: str, t0: float = 100.0) -> tuple[Scene, float]:
+    """A Scene posed for face golden ``name``: a held viseme, a mid-blink, or a settled state."""
+    if name not in FACE_TOUR:
+        raise ValueError(f"unknown face pose {name!r}; pick from {', '.join(FACE_TOUR)}")
+    if name in FACE_VISEMES:
+        scene, t = staged("speaking", t0=t0, settle=False)
+        scene.utterances.clear()
+        scene.apply(held_viseme(t, name))
+        end = t + 0.5
+    else:
+        scene, t = staged("idle" if name == "blink" else name, t0=t0)
+        end = t + (BLINK_CLOSE_S + 0.01 if name == "blink" else 0.0)
+        if name == "blink":
+            scene.face.blink_now(t)
+    while t < end:
+        t = min(end, t + 1 / 60)
+        scene.frame(t)
+    return scene, t
+
+
 def tour_index(elapsed: float, per_state: float, count: int = len(TOUR)) -> int | None:
     """Which tour state to show ``elapsed`` s in; None once the tour has finished."""
     if per_state <= 0:
@@ -70,6 +103,13 @@ def tour_index(elapsed: float, per_state: float, count: int = len(TOUR)) -> int 
 
 GOLDEN_SIZE = (240, 240)
 GOLDEN_POINTS = 6000
+FACE_GOLDEN_SIZE = (256, 256)
+FACE_GOLDEN_POINTS = 6000
+FACE_FIXTURE = "tests/fixtures/avatar/landmarks_3341.json"
+# Pairs that must look different (viseme pairs that share a shape, e.g. DD/TH, are allowed to be close).
+FACE_DISTINCT = (("rest", "AA"), ("rest", "OU"), ("rest", "IH"), ("AA", "OU"), ("PP", "AA"),
+                 ("rest", "blink"), ("rest", "sleep"), ("rest", "listening"), ("rest", "thinking"),
+                 ("rest", "offline"))
 MAX_MEAN_DIFF = 2.0         # 0-255 per channel; driver rounding stays well under this
 MAX_BAD_SHARE = 0.01        # share of pixels allowed to differ by more than BAD_PIXEL
 BAD_PIXEL = 48
@@ -103,6 +143,49 @@ def render_states(states=TOUR, size: tuple[int, int] = (360, 360), points: int =
             scene, t = staged(name)
             frame = scene.frame(t)
             renderer.draw(frame, t, size, captions=raster.image(frame.captions, size))
+            rgb = np.frombuffer(fbo.read(components=3), dtype=np.uint8).reshape(size[1], size[0], 3)
+            yield name, np.flipud(rgb).copy()
+    finally:
+        renderer.release()
+        ctx.release()
+
+
+def render_face_golden(poses=FACE_TOUR, fixture=None):
+    """Yield ``(pose, rgb)`` of the synthetic test face (tests/fixtures/avatar landmarks)."""
+    import json
+    import tempfile
+    from pathlib import Path
+
+    import numpy as np
+
+    from . import assets, facebuild
+
+    fixture = Path(fixture) if fixture else Path(__file__).resolve().parents[2] / FACE_FIXTURE
+    data = json.loads(fixture.read_text())
+    with tempfile.TemporaryDirectory() as tmp:
+        facebuild.synthetic_face(np.array(data["landmarks"]), int(data["image_size"][0]), Path(tmp) / "v1",
+                                 points=FACE_GOLDEN_POINTS)
+        asset = assets.load(Path(tmp) / "v1")
+    yield from render_face(asset, poses, FACE_GOLDEN_SIZE)
+
+
+def render_face(asset, poses=FACE_TOUR, size: tuple[int, int] = (360, 360), hair: bool = True,
+                captions: bool = False):
+    """Yield ``(pose, rgb)`` of the face look drawn headless (EGL)."""
+    import numpy as np
+
+    from . import gl
+    from .captions import Rasteriser
+    from .facegl import FaceRenderer
+
+    ctx, fbo = gl.headless(size)
+    renderer = FaceRenderer(ctx, asset, hair=hair)
+    raster = Rasteriser()
+    try:
+        for name in poses:
+            scene, t = staged_face(name)
+            frame = scene.frame(t)
+            renderer.draw(frame, t, size, captions=raster.image(frame.captions, size) if captions else None)
             rgb = np.frombuffer(fbo.read(components=3), dtype=np.uint8).reshape(size[1], size[0], 3)
             yield name, np.flipud(rgb).copy()
     finally:

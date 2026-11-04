@@ -103,6 +103,40 @@ def point_attributes(points: int, seed: int = 7) -> np.ndarray:
     return np.hstack([fibonacci_sphere(points), phase[:, None], size[:, None]]).astype(np.float32)
 
 
+class Overlay:
+    """Draws an RGBA image (captions) over the whole viewport; re-uploads only a new image."""
+
+    def __init__(self, ctx) -> None:
+        import moderngl
+
+        self.ctx, self._mgl = ctx, moderngl
+        self.prog = ctx.program(vertex_shader=OVERLAY_VERTEX, fragment_shader=OVERLAY_FRAGMENT)
+        quad = np.array([-1, -1, 1, -1, -1, 1, 1, 1], dtype=np.float32)
+        self.quad = ctx.buffer(quad.tobytes())
+        self.vao = ctx.vertex_array(self.prog, [(self.quad, "2f", "xy")])
+        self.tex = None
+        self._tex_image = None
+
+    def draw(self, image: np.ndarray) -> None:
+        h, w = image.shape[:2]
+        if self.tex is None or self.tex.size != (w, h):
+            if self.tex is not None:
+                self.tex.release()
+            self.tex = self.ctx.texture((w, h), 4)
+            self._tex_image = None
+        if image is not self._tex_image:              # Rasteriser returns the cached array
+            self.tex.write(image.tobytes())
+            self._tex_image = image                   # held, so identity is never reused
+        self.ctx.blend_func = self._mgl.SRC_ALPHA, self._mgl.ONE_MINUS_SRC_ALPHA
+        self.tex.use(0)
+        self.vao.render(self._mgl.TRIANGLE_STRIP)
+
+    def release(self) -> None:
+        for obj in (self.vao, self.quad, self.prog, self.tex):
+            if obj is not None:
+                obj.release()
+
+
 class SphereRenderer:
     def __init__(self, ctx, points: int = 12000, seed: int = 7) -> None:
         import moderngl
@@ -114,12 +148,7 @@ class SphereRenderer:
         self.prog = ctx.program(vertex_shader=VERTEX, fragment_shader=FRAGMENT)
         self.vbo = ctx.buffer(point_attributes(points, seed).tobytes())
         self.vao = ctx.vertex_array(self.prog, [(self.vbo, "3f 1f 1f", "pos", "phase", "size")])
-        self.overlay = ctx.program(vertex_shader=OVERLAY_VERTEX, fragment_shader=OVERLAY_FRAGMENT)
-        quad = np.array([-1, -1, 1, -1, -1, 1, 1, 1], dtype=np.float32)
-        self.quad = ctx.buffer(quad.tobytes())
-        self.quad_vao = ctx.vertex_array(self.overlay, [(self.quad, "2f", "xy")])
-        self.tex = None
-        self._tex_image = None
+        self.overlay = Overlay(ctx)
 
     def _set(self, name: str, value) -> None:
         uniform = self.prog.get(name, None)   # the GLSL compiler drops unused uniforms
@@ -141,26 +170,12 @@ class SphereRenderer:
             self._set(name, value)
         self.vao.render(self._points_mode)
         if captions is not None:
-            self._draw_overlay(captions)
-
-    def _draw_overlay(self, image: np.ndarray) -> None:
-        h, w = image.shape[:2]
-        if self.tex is None or self.tex.size != (w, h):
-            if self.tex is not None:
-                self.tex.release()
-            self.tex = self.ctx.texture((w, h), 4)
-            self._tex_image = None
-        if image is not self._tex_image:              # Rasteriser returns the cached array
-            self.tex.write(image.tobytes())
-            self._tex_image = image                   # held, so identity is never reused
-        self.ctx.blend_func = self._mgl.SRC_ALPHA, self._mgl.ONE_MINUS_SRC_ALPHA
-        self.tex.use(0)
-        self.quad_vao.render(self._mgl.TRIANGLE_STRIP)
+            self.overlay.draw(captions)
 
     def release(self) -> None:
-        for obj in (self.vao, self.vbo, self.prog, self.quad_vao, self.quad, self.overlay, self.tex):
-            if obj is not None:
-                obj.release()
+        for obj in (self.vao, self.vbo, self.prog):
+            obj.release()
+        self.overlay.release()
 
 
 def headless(size: tuple[int, int] = (360, 360)):

@@ -12,7 +12,7 @@ speech, then followup, samples /proc/<pid>/stat and the DRM fdinfo, writes
 on this box); check it by eye.
 
 Usage:
-    .venv/bin/python tools/avatar/avatar_profile.py [--seconds 15] [--points 12000]
+    .venv/bin/python tools/avatar/avatar_profile.py [--seconds 15] [--look face] [--points 12000]
 """
 from __future__ import annotations
 
@@ -86,7 +86,9 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--seconds", type=float, default=15.0, help="per phase")
-    parser.add_argument("--points", type=int, default=12000)
+    parser.add_argument("--points", type=int, default=12000, help="sphere points")
+    parser.add_argument("--look", choices=("auto", "face", "sphere"), default="auto",
+                        help="like homeai-avatar: auto shows the chosen face if there is one")
     parser.add_argument("--dgpu", action="store_true",
                         help="render on the RX 7900 XT (default: the iGPU, like the service)")
     args = parser.parse_args()
@@ -99,6 +101,7 @@ def main() -> int:
     bus = EventBus(sock, source="profile")
     bus.start()
     proc = subprocess.Popen([sys.executable, "-m", "homeai.avatar.app", "--socket", str(sock),
+                             "--look", args.look,
                              "--points", str(args.points), "--geometry", str(tmp / "geo.json")],
                             cwd=REPO, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     measured: dict = {}
@@ -131,7 +134,7 @@ def main() -> int:
             proc.kill()
         bus.stop()
     broken = verdict(measured)
-    report = {"when": datetime.now().isoformat(timespec="seconds"), "points": args.points,
+    report = {"when": datetime.now().isoformat(timespec="seconds"), "look": args.look, "points": args.points,
               "gpu": "dgpu" if args.dgpu else "igpu",
               "seconds_per_phase": args.seconds, **measured, "budget": BUDGET, "broken": broken}
     BENCH_DIR.mkdir(exist_ok=True)
