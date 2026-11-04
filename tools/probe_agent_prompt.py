@@ -23,9 +23,19 @@ How it works, without touching the live voice agent
 
 The live ``~/.zeroclaw`` is never modified.
 
+Never touches the house
+-----------------------
+The temp agent still has the real MCP tools, so any tool call in the model's
+reply runs for real (2026-11-04: probing "say hello" played jazz on the
+kitchen Echo). By default the proxy therefore never contacts the model; it
+answers with a canned text reply. ``--real-reply`` forwards to the model but
+strips every tool call (native ``tool_calls`` and text that names a tool)
+before ZeroClaw sees it, so only the words come back.
+
 Usage
 -----
     probe_agent_prompt.py "What do you think about free will?"
+    probe_agent_prompt.py --real-reply "What do you think about free will?"
     probe_agent_prompt.py --agent local --full --save /tmp/prompt.json "hi"
 """
 
@@ -44,14 +54,86 @@ import urllib.request
 from pathlib import Path
 
 ZC_HOME = Path.home() / ".zeroclaw"
+CANNED = "[probe: model not called]"
+SUPPRESSED = "[probe: tool call suppressed]"
+
+
+def _tool_names(request: dict) -> list[str]:
+    return [t.get("function", {}).get("name") or "" for t in request.get("tools") or []]
+
+
+def _completion(content: str, model: str) -> dict:
+    return {"id": "probe", "object": "chat.completion", "model": model,
+            "choices": [{"index": 0, "finish_reason": "stop",
+                         "message": {"role": "assistant", "content": content}}]}
+
+
+def strip_tool_calls(response: dict, tool_names: list[str]) -> tuple[dict, int]:
+    """Remove every tool call from an OpenAI chat completion.
+
+    Drops native ``tool_calls`` and replaces any content that names one of
+    the offered tools, since ZeroClaw also parses tool calls out of text.
+    Returns the cleaned response and how many choices were changed.
+    """
+    removed = 0
+    for choice in response.get("choices") or []:
+        msg = choice.get("message") or {}
+        content = msg.get("content") or ""
+        named = any(n and n in content for n in tool_names)
+        if msg.pop("tool_calls", None) or named:
+            removed += 1
+            msg["content"] = SUPPRESSED if named or not content.strip() else content
+            choice["finish_reason"] = "stop"
+    return response, removed
+
+
+def to_sse(response: dict) -> bytes:
+    """Re-emit a complete chat completion as a one-chunk stream."""
+    msg = response["choices"][0]["message"]
+    chunk = {"id": response.get("id", "probe"), "object": "chat.completion.chunk",
+             "model": response.get("model", ""),
+             "choices": [{"index": 0, "finish_reason": "stop",
+                          "delta": {"role": "assistant", "content": msg.get("content") or ""}}]}
+    return f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n".encode()
 
 
 class _Recorder(http.server.BaseHTTPRequestHandler):
     upstream = ""
+    real_reply = False
     captured: list[dict] = []
+    suppressed = 0
 
     def log_message(self, *args):  # silence default stderr logging
         pass
+
+    def _send(self, status: int, data: bytes, content_type: str):
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _reply_safely(self, request: dict):
+        """Answer a chat request without letting any tool call through."""
+        stream = bool(request.get("stream"))
+        if not self.real_reply:
+            response = _completion(CANNED, request.get("model", ""))
+        else:
+            body = json.dumps({**request, "stream": False}).encode()
+            req = urllib.request.Request(
+                self.upstream + self.path, data=body, method="POST",
+                headers={"Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(req, timeout=600) as resp:
+                    response = json.loads(resp.read())
+            except (OSError, ValueError) as exc:
+                response = _completion(f"[probe: model error {exc}]", request.get("model", ""))
+            response, n = strip_tool_calls(response, _tool_names(request))
+            _Recorder.suppressed += n
+        if stream:
+            self._send(200, to_sse(response), "text/event-stream")
+        else:
+            self._send(200, json.dumps(response).encode(), "application/json")
 
     def _forward(self, body: bytes | None):
         req = urllib.request.Request(
@@ -77,10 +159,17 @@ class _Recorder(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
         try:
-            self.captured.append({"path": self.path, "body": json.loads(body)})
+            request = json.loads(body)
         except ValueError:
             self.captured.append({"path": self.path, "raw": body.decode(errors="replace")})
-        self._forward(body)
+            self._send(400, b'{"error":"probe: not JSON"}', "application/json")
+            return
+        self.captured.append({"path": self.path, "body": request})
+        if isinstance(request, dict) and "messages" in request:
+            self._reply_safely(request)
+        else:
+            self._send(404, b'{"error":"probe: only chat requests are answered"}',
+                       "application/json")
 
     def do_GET(self):
         self._forward(None)
@@ -123,6 +212,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--agent", default="local")
     ap.add_argument("--upstream", default="http://127.0.0.1:11434",
                     help="real model server; its URL is rewritten in the temp config")
+    ap.add_argument("--real-reply", action="store_true",
+                    help="call the model for a real reply (tool calls are stripped, "
+                         "never executed); default answers with a canned reply")
     ap.add_argument("--full", action="store_true", help="print the full system prompt")
     ap.add_argument("--save", help="write captured requests as JSON")
     ap.add_argument("--with-memory", action="store_true",
@@ -137,6 +229,7 @@ def main(argv: list[str] | None = None) -> int:
     port = _free_port()
     proxy = f"http://127.0.0.1:{port}"
     _Recorder.upstream = args.upstream.rstrip("/")
+    _Recorder.real_reply = args.real_reply
     server = http.server.ThreadingHTTPServer(("127.0.0.1", port), _Recorder)
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
@@ -188,6 +281,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"tools ({len(tools)}): {', '.join(t for t in tools if t)}")
     print("\n--- system prompt" + ("" if args.full else " (first 3000 chars; --full for all)") + " ---")
     print(system if args.full else system[:3000])
+    if _Recorder.suppressed:
+        print(f"tool calls suppressed: {_Recorder.suppressed} (none were executed)")
     print("\n--- reply ---")
     print(proc.stdout.strip()[-1500:])
 

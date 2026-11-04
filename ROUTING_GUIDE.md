@@ -45,6 +45,8 @@ delegation in the scorecard at the end.
 3. Commit only after the full pytest suite and the mutants pass.
 4. Measure before claiming; repeat measurements; label unverified claims.
 5. Change one thing at a time; keep the baseline in `~/homeai-bench/`.
+6. Any probe that runs a real agent must not let the model's tool calls run:
+   they act on the house (a "say hello" probe played jazz on an Echo).
 
 **Long-term memory (Phases 1-3 built 2026-11-01; `plans/MEMORY_PLAN.md` §15):**
 Postgres `homeai` (socket, peer auth), code in `homeai/memory_store/`, CLI
@@ -185,7 +187,7 @@ Naming tells you what a script does without opening it:
 | Prefix | Does | Examples |
 |---|---|---|
 | `bench_*` | Measures; writes results with `--out` | `bench_llm.py` (answer quality per model), `bench_conversation.py` (multi-turn repetition, length, hedging), `bench_tokps.py` (llama-server prompt/generation tok/s), `bench_whisper.py` (STT models), `bench_speaker_separation.py` (speaker-id go/no-go: same- vs different-speaker similarity and embed time; `--clips DIR` for household recordings, `--model` to compare models) |
-| `probe_*` | Inspects one thing on the live system | `probe_agent_prompt.py` (exact request ZeroClaw sends; `--set` tries config changes on a temp copy, `--with-memory`), `probe_voice_tools.py` (can the voice agent cause side effects? checks physical evidence), `probe_bargein.py` (wake scores during our own speech), `probe_soul.py` (SOUL.md canary), `wake_word_similarity.py` (how close a misheard word is to the wake word; tunes `WAKE_SIMILARITY`), `say_to_jarvis.sh` (speak a phrase through the speakers to the live daemon and print what it logged), `probe_wake_reset.py` (does the wake detector re-fire on silence after reset?), `piper_voice_samples.py` (same reply in every Piper voice; timings + `--play`), `test_memory_privacy_sandbox.sh` (`homeai-mode memory` against the real zeroclaw on a copy of ~/.zeroclaw; proves purged text is gone from disk), `probe_tool_cap.py` (how many sequential tool calls an agent really gets; detects shell loops by timing), `probe_speaker_fbank.py` / `probe_speaker_vs_sherpa.py` (homeai's speaker features vs kaldi-native-fbank and sherpa-onnx; run from a throwaway venv, see docstrings) |
+| `probe_*` | Inspects one thing on the live system | `probe_agent_prompt.py` (exact request ZeroClaw sends; canned reply by default, `--real-reply` calls the model with tool calls stripped; `--set` tries config changes on a temp copy, `--with-memory`), `probe_voice_tools.py` (can the voice agent cause side effects? checks physical evidence), `probe_bargein.py` (wake scores during our own speech), `probe_soul.py` (SOUL.md canary), `wake_word_similarity.py` (how close a misheard word is to the wake word; tunes `WAKE_SIMILARITY`), `say_to_jarvis.sh` (speak a phrase through the speakers to the live daemon and print what it logged), `probe_wake_reset.py` (does the wake detector re-fire on silence after reset?), `piper_voice_samples.py` (same reply in every Piper voice; timings + `--play`), `test_memory_privacy_sandbox.sh` (`homeai-mode memory` against the real zeroclaw on a copy of ~/.zeroclaw; proves purged text is gone from disk), `probe_tool_cap.py` (how many sequential tool calls an agent really gets; detects shell loops by timing), `probe_speaker_fbank.py` / `probe_speaker_vs_sherpa.py` (homeai's speaker features vs kaldi-native-fbank and sherpa-onnx; run from a throwaway venv, see docstrings) |
 | `report_*` / `inspect_*` | Reads saved output without re-running | `report_bench.py`, `inspect_conversation_bench.py` (`compare` runs, `show` flagged conversations), `inspect_captured_prompt.py` (tool calls and results in a capture), `inspect_zc_memory.py` (read-only view of ZeroClaw's brain.db) |
 | `mutation/` | Proves tests guard real behaviour | `check_mutants.sh` breaks the code on purpose and requires the named tests to fail |
 | `eval_*` | Scores an agent on real tasks with an objective check | `eval_local_coder.py` (builder agent: PASS / LIED / FAIL, and checks the main checkout is untouched) |
@@ -1559,6 +1561,16 @@ The same turn was slow because the CPU memory helper (`qwen3:4b`, num_gpu 0)
 still counts against `OLLAMA_MAX_LOADED_MODELS=1` and evicted the voice model;
 the worker now unloads the helper and re-pins the voice model after its jobs
 (`OllamaHelper.release`, `HOMEAI_LTM_RESTORE_MODEL`).
+
+Jazz in the kitchen (2026-11-04): after the fix above, Claude ran
+`probe_agent_prompt.py "say hello"` to list the voice tools. The probe forwarded
+to the real model, and its temp agent had the real MCP server, so the model's
+`homeai__music {"request":"jazz","where":"kitchen"}` played on the Echo. Adam
+blamed Jarvis. The probe now answers with a canned reply by default;
+`--real-reply` forwards but strips native and text tool calls
+(`tests/test_probe_agent_prompt.py`, 3 mutants). Lesson: a "read-only" probe
+that runs the agent is not read-only. Check the trace timestamp against your
+own commands before blaming the model.
 
 ---
 
