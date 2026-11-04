@@ -1706,6 +1706,9 @@ Results in `plans/AVATAR_PLAN.md` §10; tools in `tools/avatar/`, tested in
   diff 0.0: run `update_golden.py --check` after any shared-renderer refactor.
 - Never restart the live window while `check_mutants.sh` runs: mutants edit
   source in place, and a restart would import one.
+- Check the service's `MemoryPeak` after a renderer change, not just the
+  profile's CPU/GPU: a one-off 400x14000 numpy distance matrix at start-up
+  took the window from 60 MB to 311 MB peak (chunked: 81 MB).
 - Delegation: none (motion timing, shaders, rig code: not delegable).
 
 ## Avatar Phase 3: face asset pipeline (2026-11-04)
