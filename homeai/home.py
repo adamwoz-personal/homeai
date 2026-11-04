@@ -98,6 +98,31 @@ def strip_wake_words(text: str, wake_words: Iterable[str]) -> str:
     return re.sub(r"\s{2,}", " ", text).strip(" ,")
 
 
+# Adam's Alexa routines (2026-11-04), by their exact trigger phrase. Only these
+# fixed strings are ever sent to Alexa to run a routine; add new ones here.
+ROUTINES = ("all clear", "condition red", "condition yellow", "it's movie time", "it's business time")
+
+_ROUTINE_LEAD = re.compile(r"^(?:(?:run|start|do|trigger|activate|go|set|engage|initiate|begin)\s+"
+                           r"(?:(?:to|the|my|our)\s+)*)?")
+_ROUTINE_TAIL = re.compile(r"\s+(?:routine|scene|mode|protocol)$")
+
+
+def routine_key(text: str) -> str:
+    """Comparable form: lowercase, no punctuation, 'it is' -> 'its'."""
+    t = norm(text)
+    return re.sub(r"\bit is\b", "its", t)
+
+
+def find_routine(text: str) -> str | None:
+    """The ROUTINES phrase ``text`` asks for ('run the movie time routine', 'Condition red!'), or None."""
+    t = _ROUTINE_TAIL.sub("", _ROUTINE_LEAD.sub("", routine_key(text)))
+    for phrase in ROUTINES:
+        key = routine_key(phrase)
+        if t in (key, re.sub(r"^its ", "", key)):
+            return phrase
+    return None
+
+
 def format_duration(seconds: float) -> str:
     seconds = max(0, int(round(seconds)))
     hours, rest = divmod(seconds, 3600)
@@ -353,6 +378,15 @@ class Home:
         return "Okay."
 
     # -- routines and phones ---------------------------------------------------
+
+    def routine(self, name: str | None) -> str:
+        """Run one of Adam's Alexa routines by its exact trigger phrase (ROUTINES only)."""
+        phrase = find_routine(name or "")
+        if phrase is None:
+            raise HomeError(f"I don't know a routine called {name or 'that'}. "
+                            f"I know {join_names(list(ROUTINES))}.")
+        self._alexa(self.echo(None), phrase)
+        return f"{_capital(phrase)}."
 
     def goodnight(self) -> str:
         """Bedtime: every light off. Lights that are unreachable are not an error."""
@@ -626,6 +660,8 @@ def run_intent(home: Home, kind: str, args: dict) -> str:
         return home.music(args.get("action", "play"), args.get("request"), args.get("where"))
     if kind == "goodnight":
         return home.goodnight()
+    if kind == "routine":
+        return home.routine(args.get("name"))
     if kind in ("door", "door_battery"):
         from . import doorbell  # noqa: PLC0415 - doorbell imports this module
         return (doorbell.door_status if kind == "door" else doorbell.door_battery)(

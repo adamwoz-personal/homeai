@@ -40,7 +40,7 @@ import sys
 from typing import Any, Callable
 
 from .ha_client import HAError, is_configured
-from .home import HomeError, build_home, run_intent
+from .home import ROUTINES, HomeError, build_home, run_intent
 from .research import research_prompt
 from .weather import WeatherError, get_weather
 from .wake_verify import _name_words
@@ -157,7 +157,25 @@ def _tool_door(arguments: dict[str, Any]) -> str:
                       {"where": arguments.get("where")})
 
 
+def _tool_routine(arguments: dict[str, Any]) -> str:
+    return run_intent(_home(), "routine", {"name": arguments.get("name")})
+
+
 HOME_TOOLS: list[dict[str, Any]] = [
+    {
+        "name": "routine",
+        "description": (
+            "Run one of the user's lighting routines (scenes) on Alexa. Use it "
+            "when they say one of these phrases or ask for that mood, e.g. "
+            "'red alert' -> 'condition red', 'lights back to normal' -> "
+            "'all clear'. Say what the tool returns."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"name": {"type": "string", "enum": list(ROUTINES)}},
+            "required": ["name"],
+        },
+    },
     {
         "name": "door",
         "description": (
@@ -315,6 +333,7 @@ HANDLERS: dict[str, Callable[[dict[str, Any]], str]] = {
     "announce": _tool_announce,
     "music": _tool_music,
     "door": _tool_door,
+    "routine": _tool_routine,
 }
 
 

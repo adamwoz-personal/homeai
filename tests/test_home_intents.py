@@ -187,3 +187,19 @@ def test_timer_without_duration_asks_how_long(text):
     intent = parse(text)
     assert intent.kind == "timer_set" and intent.args["seconds"] is None
 
+
+@pytest.mark.parametrize("text,name", [
+    ("condition red", "condition red"),
+    ("okay, it's movie time", "it's movie time"),
+    ("please run the all clear routine", "all clear"),
+    ("Condition yellow.", "condition yellow"),
+])
+def test_routine(text, name):
+    assert parse(text) == HomeIntent("routine", {"name": name})
+
+
+@pytest.mark.parametrize("text", ["what does condition red mean", "is it movie time yet", "all clear now what"])
+def test_not_a_routine(text):
+    intent = parse(text)
+    assert intent is None or intent.kind != "routine"
+

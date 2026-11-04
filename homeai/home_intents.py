@@ -22,6 +22,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from .home import find_routine
+
 # -- numbers and durations ----------------------------------------------------
 
 _UNITS = {"zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
@@ -98,7 +100,7 @@ def parse_duration(text: str) -> int | None:
 
 @dataclass(frozen=True)
 class HomeIntent:
-    kind: str                       # lights | timer_set | timer_cancel | timer_status | announce | music | door | door_battery
+    kind: str                       # lights | timer_set | timer_cancel | timer_status | announce | music | door | door_battery | routine
     args: dict = field(default_factory=dict)
 
 
@@ -215,6 +217,9 @@ def parse(text: str) -> HomeIntent | None:
                                                 "label": _label(m.group("label"), m.group("label2"))})
     if _GOODNIGHT.match(t):
         return HomeIntent("goodnight", {})
+    routine = find_routine(t)
+    if routine:
+        return HomeIntent("routine", {"name": routine})
     if _DOOR_QUESTION.match(t):
         return HomeIntent("door", {})
     if _DOOR_BATTERY.match(t):

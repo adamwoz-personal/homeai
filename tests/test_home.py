@@ -14,11 +14,13 @@ import pytest
 from homeai.ha_client import HAUnavailable
 from homeai.home import (
     TIMER_CANCEL_MIN_GAP_S,
+    ROUTINES,
     EchoQuiet,
     Home,
     HomeError,
     TimerLedger,
     announcement_seconds,
+    find_routine,
     format_duration,
     format_remaining,
     norm_light,
@@ -223,6 +225,43 @@ def test_echo_ambiguous(ha, tmp_path, clock):
 
 def test_echo_ignores_non_alexa_devices(home):
     assert all(e.name != "Hue Bridge" for e in home.echos())
+
+
+# -- Alexa routines -------------------------------------------------------------
+
+@pytest.mark.parametrize("text,phrase", [
+    ("condition red", "condition red"),
+    ("Condition Red!", "condition red"),
+    ("run the movie time routine", "it's movie time"),
+    ("it is movie time", "it's movie time"),
+    ("its business time", "it's business time"),
+    ("go to condition yellow", "condition yellow"),
+    ("all clear", "all clear"),
+])
+def test_find_routine(text, phrase):
+    assert find_routine(text) == phrase
+
+
+@pytest.mark.parametrize("text", ["condition", "red", "clear", "movie", "condition blue", "all clear the timers",
+                                  "buy condition red", "it's time"])
+def test_find_routine_rejects(text):
+    assert find_routine(text) is None
+
+
+def test_routine_sends_only_the_fixed_phrase_to_the_kitchen_echo(home, ha):
+    assert home.routine("run the movie time routine") == "It's movie time."
+    assert ha.alexa_commands() == [("dev-kitchen_alexa", "it's movie time")]
+
+
+def test_unknown_routine_lists_the_known_ones_and_sends_nothing(home, ha):
+    with pytest.raises(HomeError, match="condition red"):
+        home.routine("buy a sofa")
+    assert ha.alexa_commands() == []
+
+
+def test_routine_phrases_pass_the_alexa_safety_filter():
+    for phrase in ROUTINES:
+        assert safe_phrase(phrase, 6) == phrase
 
 
 # -- announcements ------------------------------------------------------------

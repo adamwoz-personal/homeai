@@ -1536,6 +1536,13 @@ lights off via `Home.goodnight()`. `Home.notify_phones()` pushes to every
 Installer: `./install.sh --home-assistant` runs `homeai/install/ha_setup.py`
 (side effects injected; the token is never printed).
 
+Alexa routines (2026-11-04): neither HA's `alexa_devices` nor Amazon can list
+or export routines, so Adam's phrases live in `home.ROUTINES` and Jarvis asks
+the Kitchen Echo to run them (`send_text_command` with the fixed phrase).
+"routine" stays in BLOCKED_WORDS for free text; the routine path sends only
+the fixed strings (each also passes `safe_phrase`, tested). Unverified until
+Adam's first voice test: that a typed text command triggers an Alexa routine.
+
 ---
 
 ## Local coder quality (2026-11-01)

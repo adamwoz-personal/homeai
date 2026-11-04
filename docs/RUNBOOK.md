@@ -530,6 +530,12 @@ agent, and keep the garage out of Assist exposure.
   rings are also pushed to it (`HOMEAI_DOORBELL_PHONE=0` stops that); the push
   is not silenced by quiet hours. A garage-left-open alert waits on
   `garage-hardware`.
+- Alexa routines: "all clear", "condition red", "condition yellow", "it's
+  movie time", "it's business time" ("run condition red", "movie time" also
+  work). Jarvis asks the default Echo to run them by phrase; the routines
+  themselves live in the Alexa app. Add or rename one: edit `ROUTINES` in
+  `homeai/home.py` (the exact phrase Alexa answers to), run the tests,
+  restart homeai and zeroclaw (the MCP `routine` tool lists them).
 - Quick connection check (also run by `install.sh`):
   `.venv/bin/python -m homeai.ha_client --check` (exit 0 working, 1 not set
   up, 2 configured but broken).
