@@ -61,8 +61,10 @@ def test_hair_hangs_from_the_sides_not_the_crown(verts):
                          for y in r[:, 1]])
         gap = (r[:, 0] - edge) * side
         assert (gap > 0).all() and (gap < 2 * spacing).all()
-    lo, hi = a[a[:, 1] < np.median(a[:, 1])], a[a[:, 1] >= np.median(a[:, 1])]
-    assert hi[:, 3].mean() > 2 * lo[:, 3].mean()           # short above the ears, long below
+    strands = np.unique(a[:, [1, 3]], axis=0)              # (root y, length) per strand
+    third = len(strands) // 3
+    by_y = strands[np.argsort(strands[:, 0])]
+    assert by_y[-third:, 1].mean() > 3 * by_y[:third, 1].mean()   # short above the ears, long below
     assert ((a[:, 4] >= 0) & (a[:, 4] < 1)).all()
 
 

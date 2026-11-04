@@ -26,10 +26,14 @@ from .gl import Overlay
 
 DOT_SPRITE = 1.5            # sprite diameter / typical point spacing (core is 0.3x spacing in radius)
 SHIMMER_PX = 0.25           # image px
-HAIR_STRANDS = 140
-HAIR_POINTS = 28            # per strand
+HAIR_STRANDS = 320
+HAIR_POINTS = 40            # per strand, on average (shared by length)
 HAIR_LIT = 0.12             # colour above this is part of the head's silhouette
 HAIR_GAP = 0.25             # lit dots further than this (x face height) beyond the head are strays
+HAIR_SPREAD = 0.38          # Adam 2026-11-04: drift wider, less gravity (was 0.10 out, 1.0 down)
+HAIR_DROP = 0.85
+HAIR_GRAVITY = 0.45
+HAIR_LOCKS = 9.0            # rad of wave phase from the top root to the bottom one
 HEAD_DEPTH = 0.25           # head pose shift, share of the face height
 ZOOM = 0.86                 # the image's height as a share of the window: room for the aura
 LUMA = (0.299, 0.587, 0.114)
@@ -99,6 +103,9 @@ uniform float low;
 uniform float high;
 uniform float glow;
 uniform vec3 colour;
+uniform float spread;       // outward drift at the tip, x strand length
+uniform float drop;         // downward reach at the tip, x strand length
+uniform float gravity;      // 0 straight slant .. 1 droops near the tips
 in vec2 root;       // image px, just outside the head's silhouette
 in float side;      // -1 left, +1 right
 in float len;       // strand length, image px (short above the ears, long below)
@@ -109,11 +116,13 @@ out vec3 c;
 void main() {
     float dir = 1.0 - 2.0 * ripple;                     // listening: waves run up toward the head
     float sway = 0.05 * sin(swirl + phase);             // thinking: strands swing as a whole
-    float wv = (sin(7.0 * s - hair_phase * dir + phase) * 0.06
-              + sin(3.0 * s - 0.6 * hair_phase + phase * 1.7) * 0.04) * hair_amp * s;
-    // Out from the head a little, then falling: gravity wins along the strand.
-    float out_ = 0.10 * (1.0 - (1.0 - s) * (1.0 - s));
-    vec2 p = root + len * vec2(side * (out_ + wv + sway * s), s);
+    float curl = 0.11 * sin(7.0 * s + phase) * s;          // resting wave: wavy even when still
+    float wv = (sin(8.0 * s - hair_phase * dir + phase) * 0.10
+              + sin(3.5 * s - 0.6 * hair_phase + phase * 1.7) * 0.07) * hair_amp * s + curl;
+    // Out from the head, then drifting down: light gravity, felt most at the tips.
+    float out_ = spread * (1.0 - (1.0 - s) * (1.0 - s));
+    float fall = (1.0 - gravity) * s + gravity * s * s;
+    vec2 p = root + len * vec2(side * (out_ + wv + sway * s), drop * fall);
     gl_Position = to_clip(pose(p));
     float fade = pow(1.0 - s, 1.1) * smoothstep(0.0, 0.05, s);
     float hit = ring < 0.0 ? 0.0 : 1.0 - smoothstep(0.0, 0.08, abs(s - ring));
@@ -211,8 +220,9 @@ def hair_layout(xy: np.ndarray, verts: np.ndarray, spacing: float, strands: int 
         edge = silhouette_edge(pts, y, side, 2.0 * spacing, centre=centre, gap=HAIR_GAP * h)
         if edge is None:
             continue
-        length = h * (0.08 + 0.95 * t ** 1.3) * rng.uniform(0.85, 1.15)
-        roots.append((edge + side * 1.2 * spacing, y, side, length, rng.uniform(0, 2 * np.pi)))
+        length = h * (0.15 + 1.45 * t ** 1.1) * rng.uniform(0.8, 1.2)
+        roots.append((edge + side * 1.2 * spacing, y, side, length,
+                      HAIR_LOCKS * t + rng.uniform(-0.5, 0.5)))       # neighbours wave together: locks
     if not roots:
         raise ValueError("no silhouette found for the hair")
     total = sum(r[3] for r in roots)
@@ -369,7 +379,8 @@ class FaceRenderer:
                   "head": (p.get("head_yaw", 0.0), p.get("head_pitch", 0.0), p.get("head_roll", 0.0)),
                   "view": view(self.side, size, self.zoom), "low": frame.low, "high": frame.high}
         if self.hair_vao is not None:
-            for name, value in {**common, "point_px": max(1.5, 1.6 * px_per_img * self.spacing),
+            for name, value in {**common, "spread": HAIR_SPREAD, "drop": HAIR_DROP, "gravity": HAIR_GRAVITY,
+                                "point_px": max(1.5, 1.6 * px_per_img * self.spacing),
                                 "hair_phase": p.get("hair_phase", 0.0), "hair_amp": p.get("hair_amp", 1.0),
                                 "swirl": frame.swirl, "ripple": frame.ripple, "ring": frame.ring,
                                 "ring_amp": frame.ring_amp, "glow": frame.glow,
