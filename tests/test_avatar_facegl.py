@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from homeai.avatar import facegl, rig
-from tests.avatar_face import mesh
+from tests.avatar_face import head_with_skull, mesh
 
 
 @pytest.fixture(scope="module")
@@ -64,8 +64,11 @@ def test_hair_hangs_from_the_sides_and_down_the_neck(verts):
     assert (a[:, 1] >= top - 1e-3).all()                    # crown=0: nothing above the brows
     assert a[:, 1].max() > jaw + 0.6 * h                    # all the way down the neck
     assert set(np.unique(a[:, 2])) == {-1.0, 1.0}
-    np.testing.assert_array_equal(a[:, 7], a[:, 2])         # side strands aim straight out, full droop
-    assert (a[:, 8] == 0).all() and (a[:, 9] == 1).all()
+    np.testing.assert_array_equal(a[:, 7], a[:, 2])         # side strands aim straight out
+    assert (a[:, 8] == 0).all()
+    order = np.argsort(a[:, 1])                            # less gravity up high: frames the face
+    assert (np.diff(a[order, 9]) >= -1e-6).all() and a[order[0], 9] < 0.85
+    assert (a[a[:, 1] > jaw, 9] == 1.0).all()
     for side in (-1, 1):                                   # roots sit just outside the art, never on it
         r = a[a[:, 2] == side]
         edge = np.array([facegl.silhouette_edge(xy, y, side, 2 * spacing,
@@ -85,25 +88,38 @@ def test_hair_hangs_from_the_sides_and_down_the_neck(verts):
     assert ((a[:, 4] >= 0) & (a[:, 4] < 1)).all()
 
 
-def test_crown_hair_sprouts_outward_and_meets_the_sides(verts):
-    xy = verts.astype(np.float64)
+def test_crown_hair_is_long_falls_beside_the_face_and_meets_the_sides(verts):
+    xy = head_with_skull(verts)                            # the head alone, without the mesh's frame ring
     spacing = facegl.point_spacing(xy)
     h = rig.face_height(verts)
     a = facegl.hair_layout(xy, verts, spacing, strands=20, crown=40, seed=2)
     top = min(verts[105, 1], verts[334, 1])
     origin = np.array([verts[list(rig.REGIONS["jaw"] + rig.REGIONS["forehead"]), 0].mean(), top])
-    crown = np.unique(a[a[:, 9] < 1.0][:, [0, 1, 7, 8]], axis=0)   # crown strands droop less than 1
+    is_crown = a[:, 1] < top - 1e-3
+    crown = np.unique(a[is_crown][:, [0, 1, 3]], axis=0)
     assert len(crown) > 30
+    assert crown[:, 2].mean() > h                          # as long as the side hair, not tufts
     out = crown[:, :2] - origin
-    n = out / np.linalg.norm(out, axis=1, keepdims=True)
-    assert ((crown[:, 2:] * n).sum(axis=1) > 0).all()      # sprouting away from the head
-    for row, u in zip(out, n):                             # just outside the skull's outline
-        edge = facegl.ray_edge(xy, origin, u, 2 * spacing, facegl.HAIR_GAP * h)
-        assert 0 < np.linalg.norm(row) - edge < 2 * spacing
-    assert crown[:, 1].min() < top - 0.25 * h              # over the top of the skull
+    for row in out:                                        # roots just outside the skull's outline
+        d = np.linalg.norm(row)
+        edge = facegl.ray_edge(xy, origin, row / d, 2 * spacing, facegl.HAIR_GAP * h)
+        assert 0 < d - edge < 2 * spacing
+    assert crown[:, 1].min() < verts[10, 1]                # over the top of the head
     for side in (-1, 1):                                   # no gap between crown and side hair
         s = crown[np.sign(crown[:, 0] - origin[0]) == side]
         assert s[:, 1].max() > top - 0.05 * h
+    rest = facegl.hair_rest(a[is_crown])
+    assert facegl.inside_outline(xy, verts, spacing, rest).mean() < 0.01   # beside the face, not over it
+
+
+def test_inside_outline():
+    xy = np.stack(np.meshgrid(np.arange(0, 101, 4.0), np.arange(0, 101, 4.0)), -1).reshape(-1, 2)
+    verts = np.zeros((478, 2))
+    verts[[105, 334], 1] = 50.0                            # brow line across the middle
+    verts[list(rig.REGIONS["jaw"] + rig.REGIONS["forehead"]), 0] = 50.0
+    verts[10, 1], verts[152, 1] = 0.0, 100.0               # face height 100
+    p = np.array([[50.0, 20.0], [50.0, -20.0], [50.0, 80.0], [130.0, 80.0], [-30.0, 30.0]])
+    np.testing.assert_array_equal(facegl.inside_outline(xy, verts, 4.0, p), [True, False, True, False, False])
 
 
 def test_hair_points_follow_strand_length_by_default(verts):

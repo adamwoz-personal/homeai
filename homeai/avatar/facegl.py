@@ -27,10 +27,12 @@ from .gl import Overlay
 DOT_SPRITE = 1.5            # sprite diameter / typical point spacing (core is 0.3x spacing in radius)
 SHIMMER_PX = 0.25           # image px
 HAIR_STRANDS = 320          # side strands from the brows to the jaw angle; the neck gets more at that density
-HAIR_CROWN = 160            # short strands sprouting from the skull's outline (Adam 2026-11-04)
+HAIR_CROWN = 240            # long strands from the skull's outline, parted in the middle (Adam 2026-11-04: more)
 HAIR_DENSITY = 48           # points per face-height of strand length (was 40 per strand at ~0.84 h)
-HAIR_CROWN_LIFT = 2.0       # crown strands reach out this much further than side ones before drooping
-HAIR_COMB = 0.6             # crown strands lean toward their own side: a centre parting
+HAIR_CROWN_LEN = (1.0, 1.6)  # x face height: as long as the side hair (Adam: "longer, like the sides")
+HAIR_CROWN_CLEAR = 0.12     # crown strands reach this far (x face height) past the head's edge before falling
+HAIR_CROWN_RISE = 1.0       # upward start at the top of the head (1.5 clears more but grows horns)
+HAIR_HIGH_DROOP = 0.8       # gravity on hair rooted up high (crown, brows), rising to 1 at the jaw: frames the face
 HAIR_LIT = 0.12             # colour above this is part of the head's silhouette
 HAIR_GAP = 0.25             # lit dots further than this (x face height) beyond the head are strays
 HAIR_SPREAD = 0.38          # Adam 2026-11-04: drift wider, less gravity (was 0.10 out, 1.0 down)
@@ -238,14 +240,24 @@ def _side_roots(pts, v, h, spacing, strands, rng) -> list:
         taper = 1.0 - 0.7 * below                           # lower down the neck, less is still on screen
         length = h * (0.15 + 1.45 * min(t, 1.0) ** 1.1) * taper * rng.uniform(0.8, 1.2)
         roots.append((edge + side * 1.2 * spacing, y, side, length,
-                      HAIR_LOCKS * t + rng.uniform(-0.5, 0.5), float(side), 0.0, 1.0))   # neighbours: locks
+                      HAIR_LOCKS * t + rng.uniform(-0.5, 0.5), float(side), 0.0,
+                      HAIR_HIGH_DROOP + (1.0 - HAIR_HIGH_DROOP) * min(t, 1.0)))   # neighbours: locks
     return roots
 
 
 def _crown_roots(pts, v, h, spacing, strands, rng) -> list:
-    """Short strands just outside the skull's outline, sprouting up and combed to their side."""
+    """Long strands from just outside the skull's outline, parted in the middle: each rises a
+    little, reaches sideways just past the head's edge, then falls like the side hair."""
     top = float(min(v[105, 1], v[334, 1]))
     origin = (float(v[list(rig.REGIONS["jaw"] + rig.REGIONS["forehead"]), 0].mean()), top)
+    jaw = float(max(v[172, 1], v[397, 1]))
+    centre = origin[0]
+    rows = np.linspace(top, jaw, 12)
+    reach = {}
+    for s in (-1.0, 1.0):                                   # the head's widest point below the brows
+        edges = [silhouette_edge(pts, y, int(s), 2.0 * spacing, centre=centre, gap=HAIR_GAP * h) for y in rows]
+        edges = [(e - centre) * s for e in edges if e is not None]
+        reach[s] = max(edges) if edges else None
     roots = []
     for k in range(strands):
         a = np.radians(90.0) * (2.0 * (k + rng.uniform(0.1, 0.9)) / strands - 1.0)   # 0 up, +-90 brow level
@@ -254,13 +266,54 @@ def _crown_roots(pts, v, h, spacing, strands, rng) -> list:
         if edge is None:
             continue
         side = 1.0 if a > 0 else -1.0
-        lean = n + HAIR_COMB * np.array([side, 0.0])
-        lift = 1.0 + (HAIR_CROWN_LIFT - 1.0) * abs(n[1])    # at brow level, reach like the side strands
-        aim = lift * lean / np.linalg.norm(lean)
         root = np.asarray(origin) + n * (edge + 1.2 * spacing)
-        roots.append((root[0], root[1], side, h * rng.uniform(0.12, 0.3),
-                      HAIR_LOCKS * abs(a) + rng.uniform(-0.5, 0.5), aim[0], aim[1], 0.25 + 0.75 * abs(n[0])))
+        length = h * rng.uniform(*HAIR_CROWN_LEN)
+        width = reach[side] if reach[side] is not None else edge * abs(n[0])
+        clear = width + HAIR_CROWN_CLEAR * h - (root[0] - origin[0]) * side   # sideways to clear the head
+        aim = (side * max(clear, 0.0) / (HAIR_SPREAD * length), -HAIR_CROWN_RISE * abs(n[1]))
+        roots.append((root[0], root[1], side, length,
+                      HAIR_LOCKS * abs(a) + rng.uniform(-0.5, 0.5), aim[0], aim[1], HAIR_HIGH_DROOP))
     return roots
+
+
+def hair_rest(layout: np.ndarray, spread: float = HAIR_SPREAD, drop: float = HAIR_DROP,
+              gravity: float = HAIR_GRAVITY) -> np.ndarray:
+    """(M, 2) image px of each hair point at rest (no wave, sway or head pose).
+
+    The hair shader's path on the CPU, for tests and probes: keep it in step
+    with HAIR_VERTEX.
+    """
+    a = np.asarray(layout, dtype=np.float64)
+    rx, ry, side, ln, s, phase = a[:, :6].T
+    ax, ay, droop = a[:, 7:10].T
+    curl = 0.11 * np.sin(7.0 * s + phase) * s
+    out = spread * (1.0 - (1.0 - s) ** 2)
+    fall = (1.0 - gravity) * s + gravity * s * s
+    return np.column_stack([rx + ln * (ax * out + side * curl), ry + ln * (ay * out + drop * droop * fall)])
+
+
+def inside_outline(xy: np.ndarray, verts: np.ndarray, spacing: float, p: np.ndarray) -> np.ndarray:
+    """(M,) bool: which of ``p`` lie inside the art's outline by more than a dot, i.e. over
+    the head rather than beside it. The same walks the hair roots use: rays from the
+    brow-line centre above the brows, rows below."""
+    v = np.asarray(verts, dtype=np.float64)
+    pts = np.asarray(xy, dtype=np.float64)
+    h = rig.face_height(v)
+    top = float(min(v[105, 1], v[334, 1]))
+    centre = float(v[list(rig.REGIONS["jaw"] + rig.REGIONS["forehead"]), 0].mean())
+    origin = np.array([centre, top])
+    inside = np.zeros(len(p), bool)
+    for i, q in enumerate(np.asarray(p, dtype=np.float64)):
+        if q[1] < top:
+            d = float(np.linalg.norm(q - origin))
+            edge = ray_edge(pts, origin, (q - origin) / max(d, 1e-9), 2.0 * spacing, HAIR_GAP * h)
+        else:
+            side = 1 if q[0] > centre else -1
+            edge = silhouette_edge(pts, q[1], side, 2.0 * spacing, centre=centre, gap=HAIR_GAP * h)
+            d = (q[0] - centre) * side
+            edge = None if edge is None else (edge - centre) * side
+        inside[i] = edge is not None and d < edge - spacing
+    return inside
 
 
 def hair_layout(xy: np.ndarray, verts: np.ndarray, spacing: float, strands: int = HAIR_STRANDS,

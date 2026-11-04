@@ -1742,6 +1742,19 @@ Results in `plans/AVATAR_PLAN.md` §10; tools in `tools/avatar/`, tested in
   side strands' at brow level. Neck strands taper (0.3x at the bottom) because
   the rest is off screen: 30.7k -> 24.9k points. Budget unchanged (3 runs:
   1.4 % / 2.9-3.1 % CPU, 57.6 MB): extra points cost the GPU only.
+- Long crown hair (Adam: "longer, like the sides"): long strands from the
+  top would fall across the face, so each one's sideways reach is computed to
+  clear the head's widest point (below the brows) by 0.12 h before it falls,
+  with a small upward start. `hair_rest` replays the shader path on the CPU and
+  `inside_outline` + `tools/avatar/probe_hair_paths.py` measure how much rests
+  over the face (real art 0.2 %). A higher arc (rise 1.5) cleared more but
+  grew horn-like peaks: judge the render, not just the number. The synthetic
+  landmarks stop at the hairline (no skull), so the test adds a skull dome
+  (`head_with_skull`) like real art has. Adam is fine with hair *waving*
+  over the face; only the resting path is guarded.
+- 240 crown strands and less gravity up high (HAIR_HIGH_DROOP 0.8 rising to 1
+  at the jaw) to frame the face: 38k hair points, still 1.3 % / 3.1-3.3 % CPU,
+  57.1 MB (3 runs). Adam: the hair budget may grow if it looks better.
 - The view centred the art, leaving a black strip under the shoulders; it
   now sits on the window's bottom edge and all the zoom room is above, where
   the crown hair goes.
