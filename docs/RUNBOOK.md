@@ -410,6 +410,25 @@ and position persist in `~/.config/homeai/avatar.json`.
 - Golden images (`tests/golden/avatar/*.png`) fail a test when a state's look changes.
   After a deliberate change: `tools/avatar/update_golden.py`, look at the PNGs, commit them.
 
+### Face assets (Phase 3)
+
+Faces are built from art into `~/.local/share/homeai/avatar/vN/` (rig.json,
+points.npz, previews, build.json with hashes). Versions are never overwritten;
+`current`/`previous` are symlinks. `~/.local/bin/homeai-avatar` is a symlink to
+`bin/homeai-avatar` (made by hand, like homeai-mode).
+
+- Compare art: `.venv/bin/python tools/avatar/build_face.py --candidates [IMAGE ...]`
+  -> `~/homeai-bench/face-candidates-<stamp>/contact_sheet.png` (source, mesh, still,
+  jaw open, blink + brows); nothing is installed.
+- Build a version: `tools/avatar/build_face.py IMAGE [--use] [--points 14000] [--overrides F]`
+  (~2 s). Landmarks wrong? `tools/avatar/landmark_editor.py IMAGE` (drag, S saves
+  `<image>.landmarks.json`), then build with `--overrides` that file.
+- Switch: `homeai-avatar list | current | check [vN] | use vN | rollback`, then
+  `systemctl --user restart homeai-avatar`. A version that fails its hash or
+  validation check cannot be made current.
+- Needs the avatar-build extra (mediapipe, opencv, scipy) and the model from
+  `tools/avatar/landmarks_probe.py --download`.
+
 ## Tests
 
 ```bash

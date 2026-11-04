@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Manage built avatar faces (list/current/check/use/rollback). See homeai/avatar/assets.py.
+set -euo pipefail
+cd "$(dirname "$(readlink -f "$0")")/.."
+exec .venv/bin/python -m homeai.avatar.assets "$@"

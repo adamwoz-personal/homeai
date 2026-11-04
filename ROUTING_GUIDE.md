@@ -1689,6 +1689,25 @@ Results in `plans/AVATAR_PLAN.md` §10; tools in `tools/avatar/`, tested in
   enabled). Bus: every utterance announced ~68 ms ahead of audio. Adam liked
   the thinking colour shift: it covers web-search lag well.
 
+## Avatar Phase 3: face asset pipeline (2026-11-04)
+
+- **MediaPipe's named lip contours miss the mid-lip rings** (42, 74, 184, 77,
+  96, ...). With only the named lists, jaw_open left triangles joining upper
+  and lower lip, and dots smeared across the open mouth. The lips are now
+  classified per face by geometry (`rig.lip_regions`: inside the outer
+  contour, side of the inner line) and any triangle joining the lips
+  (corners excepted) is dropped. Caught by a stretch test, not by eye.
+- **Importing mediapipe starts PortAudio** (its audio tasks pull in
+  sounddevice) and fails with no PulseAudio server, e.g. in tests. Read tool
+  versions with `importlib.metadata`, never by importing.
+- Lloyd stippling is not the cost I feared: 14k points, 30 iterations, 2x
+  grid takes ~2 s per build (3 candidates, 2 runs).
+- A first stretch test passed with an inner-lip ramp bug in place; asserting
+  "the lips part by ≥80 % of the chin's drop" caught it. Write the
+  quantitative assertion, not "moved > 0".
+- Delegation: none. Voice mode was live (switching would take Jarvis down),
+  and this was rig/mesh code, which the builder may not touch anyway.
+
 ## Avatar Phase 2: states, captions, budgets (2026-11-04)
 
 - **A hand-run window is on the wrong GPU.** The service sets `DRI_PRIME=1`
