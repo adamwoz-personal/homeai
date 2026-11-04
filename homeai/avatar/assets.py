@@ -189,7 +189,8 @@ def rollback(root: Path) -> str:
 def load_current(root: Path | None = None) -> FaceAsset | None:
     """The face in use, or None when none has been built or chosen."""
     root = root or asset_root()
-    return load(root / "current") if current(root) else None
+    name = current(root)
+    return load(root / name) if name else None
 
 
 def main(argv: list[str] | None = None) -> int:

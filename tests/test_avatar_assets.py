@@ -92,7 +92,7 @@ def test_use_swaps_current_and_previous_and_rollback_returns(root, built):
     assert assets.use(root, "v1") is None
     assert assets.use(root, "v2") == "v1"
     assert assets.current(root) == "v2" and (root / "previous").resolve().name == "v1"
-    assert assets.load_current(root).version == "current"
+    assert assets.load_current(root).version == "v2"
     assert assets.rollback(root) == "v1"
     assert assets.current(root) == "v1" and assets._link(root, "previous") == "v2"
     assert assets.use(root, "v1") == "v1"                     # already current: nothing moves
