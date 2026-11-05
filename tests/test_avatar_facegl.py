@@ -390,7 +390,7 @@ def test_asset_hair_uses_the_arts_marked_channels(verts):
         a = facegl.asset_hair(asset, facegl.point_spacing(xy))
         return len(np.unique(a[:, [0, 1]], axis=0))
 
-    assert strands(art) >= strands("other art") + facegl.HAIR_SCALP - 1
+    assert strands(art) >= strands("other art") + facegl.HAIR_SCALP + facegl.HAIR_NECK - 2
 
 
 def test_hair_is_long_everywhere(verts):
@@ -439,3 +439,24 @@ def test_crown_strands_land_across_a_width(verts):
     reach = np.abs(a[:, 7]) * facegl.HAIR_SPREAD * a[:, 3] / facegl.HAIR_LENGTH
     landing = reach + (a[:, 0] - origin_x) * side           # clears the head's widest point, every strand
     assert landing[reach > 0].min() > 0.9 * widest + facegl.HAIR_CROWN_CLEAR * h
+
+
+def test_every_marked_artwork_has_both_neck_slots():
+    assert all(len(quads) == 2 for quads in facegl.NECK_CHANNELS.values())
+
+
+def test_neck_hair_roots_in_its_slot_and_hangs(verts):
+    """Adam: the dark space between the neck wire and the neck had no hair."""
+    xy = head_with_skull(verts)
+    h = rig.face_height(verts)
+    cx, jaw = verts[list(rig.REGIONS["jaw"] + rig.REGIONS["forehead"]), 0].mean(), verts[152, 1]
+    quads = tuple(((cx + s, jaw), (cx + s + 20, jaw), (cx + s + 20, jaw + 60), (cx + s, jaw + 60)) for s in (-120, 100))
+    kw = dict(strands=20, crown=0, ears=0, seed=2)
+    a = facegl.hair_layout(xy, verts, facegl.point_spacing(xy), neck=quads, neck_strands=30, **kw)
+    base = facegl.hair_layout(xy, verts, facegl.point_spacing(xy), **kw)
+    extra = a[~np.isin(a[:, 3], base[:, 3])]
+    assert len(np.unique(extra[:, [0, 1]], axis=0)) >= 29
+    assert set(np.unique(extra[:, 2])) == {-1.0, 1.0}
+    assert (np.sign(extra[:, 0] - cx) == extra[:, 2]).all()
+    drop = facegl.hair_rest(extra)[:, 1] - extra[:, 1]
+    assert drop[extra[:, 4] > 0.9].min() > 0.2 * h          # it hangs

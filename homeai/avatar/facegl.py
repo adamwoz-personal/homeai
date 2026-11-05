@@ -53,6 +53,15 @@ SCALP_CHANNELS = {
         ((557, 140), (585, 140), (590, 190), (562, 190)),   # beyond the right outer plate
     ),
 }
+HAIR_NECK = 200             # strands from the dark slots beside the neck wires
+# The dark slots between the neck wires and the neck, per artwork, as for SCALP_CHANNELS.
+NECK_CHANNELS = {
+    "afe7fb9676533ae8daf8770bc06a85d474874e9103ff6d896821adaa84833f5c": (
+        ((203, 575), (226, 585), (240, 690), (224, 690)),   # left: outer wire to the jaw and neck
+        ((530, 570), (560, 570), (548, 660), (528, 665)),   # right
+    ),
+}
+HAIR_NECK_LEN = (0.4, 0.9)  # x face height
 HAIR_EAR = 240              # extra strands around the ears (Adam: more there)
 HAIR_EAR_LEN = (0.6, 1.3)   # x face height
 HAIR_HIGH_DROOP = 0.6       # (Adam: lower, twice) gravity on hair rooted up high (crown, brows), rising to 1 at the jaw: frames the face
@@ -389,6 +398,18 @@ def _scalp_roots(pts, v, h, spacing, quads, strands, rng) -> list:
     return roots
 
 
+def _neck_roots(v, h, quads, strands, rng) -> list:
+    """Strands from the dark slots beside the neck wires, hanging down and easing outward."""
+    spots = scalp_spots(quads, strands, seed=11)
+    centre = float(v[list(rig.REGIONS["jaw"] + rig.REGIONS["forehead"]), 0].mean())
+    roots = []
+    for x, y in spots:
+        side = 1.0 if x > centre else -1.0
+        roots.append((x, y, side, HAIR_LENGTH * h * rng.uniform(*HAIR_NECK_LEN),
+                      rng.uniform(0.0, 2.0 * np.pi), side, 0.0, 1.0, 0.0))
+    return roots
+
+
 def crown_rise(peak: float, drop: float = HAIR_DROP, gravity: float = HAIR_GRAVITY,
                droop: float = HAIR_HIGH_DROOP) -> float:
     """The upward reach (x strand length) that peaks ``peak`` above the root before gravity wins."""
@@ -496,7 +517,8 @@ def hair_wind(q: np.ndarray, t: float) -> np.ndarray:
 
 def hair_layout(xy: np.ndarray, verts: np.ndarray, spacing: float, strands: int = HAIR_STRANDS,
                 crown: int = HAIR_CROWN, points: int | None = None, seed: int = 5,
-                ears: int = HAIR_EAR, scalp=(), scalp_strands: int = HAIR_SCALP) -> np.ndarray:
+                ears: int = HAIR_EAR, scalp=(), scalp_strands: int = HAIR_SCALP, neck=(),
+                neck_strands: int = HAIR_NECK) -> np.ndarray:
     """(M, 11) float32 per hair point: root x, root y, side, length, s, phase, size, aim x, aim y, droop, bend.
 
     Side strands hang from just outside the head's silhouette from brow height
@@ -515,7 +537,8 @@ def hair_layout(xy: np.ndarray, verts: np.ndarray, spacing: float, strands: int 
         raise ValueError("no silhouette found for the hair")
     h = rig.face_height(v)
     roots = (_side_roots(pts, v, h, spacing, strands, rng) + _crown_roots(pts, v, h, spacing, crown, rng)
-             + _ear_roots(pts, v, h, spacing, ears, rng) + _scalp_roots(pts, v, h, spacing, scalp, scalp_strands, rng))
+             + _ear_roots(pts, v, h, spacing, ears, rng) + _scalp_roots(pts, v, h, spacing, scalp, scalp_strands, rng)
+             + _neck_roots(v, h, neck, neck_strands, rng))
     if not roots:
         raise ValueError("no silhouette found for the hair")
     total = sum(r[3] for r in roots)
@@ -532,8 +555,9 @@ def hair_layout(xy: np.ndarray, verts: np.ndarray, spacing: float, strands: int 
 
 def asset_hair(asset, spacing: float) -> np.ndarray:
     """The hair layout for a face asset, with scalp hair if its artwork's channels are marked."""
-    scalp = SCALP_CHANNELS.get(asset.build.get("inputs", {}).get("image_sha256"), ())
-    return hair_layout(lit_points(asset.xy, asset.colour), asset.verts, spacing, scalp=scalp)
+    art = asset.build.get("inputs", {}).get("image_sha256")
+    return hair_layout(lit_points(asset.xy, asset.colour), asset.verts, spacing,
+                       scalp=SCALP_CHANNELS.get(art, ()), neck=NECK_CHANNELS.get(art, ()))
 
 
 def mouth_points(verts: np.ndarray, per_gap: int = 6, seed: int = 3) -> tuple[np.ndarray, np.ndarray, np.ndarray]:

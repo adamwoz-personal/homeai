@@ -31,7 +31,7 @@ def main() -> None:
     layout = facegl.hair_layout(lit, asset.verts, spacing, strands=args.strands, crown=args.crown)
     print(f"hair points {len(layout)} (layout at the given counts)")
     seen = set()
-    for x, y, side, length, _s, _phase, _size, ax, ay, droop in layout:
+    for x, y, side, length, _s, _phase, _size, ax, ay, droop, _bend in layout:
         if (x, y) in seen:
             continue
         seen.add((x, y))
