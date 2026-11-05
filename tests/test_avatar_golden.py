@@ -286,3 +286,75 @@ def test_mouth_rings_keep_their_shape_as_the_jaw_opens(pulse_asset, monkeypatch)
 
     loose, _, rest = _opened(pulse_asset, monkeypatch, ())
     assert np.ptp((loose[:n] - rest[:n])[ring], axis=0).max() > 0.02 * rig.face_height(v)
+
+
+def _eye_readback(asset, gaze):
+    """(positions, colours) of every face dot from the real shader, at ``gaze``, and the buffers."""
+    import moderngl
+
+    from homeai.avatar import facegl, gl, rig
+
+    idx, attrs = facegl.face_buffers(asset)
+    rest = np.asarray(asset.verts, dtype=np.float32)
+    moved = rig.deform(rest, rig.default_fields(rest), {"gaze_x": gaze[0], "gaze_y": gaze[1]}).astype(np.float32)
+    windows = facegl.eye_windows(rest, asset.xy, attrs[:len(asset.xy), 8])
+    try:
+        ctx, _ = gl.headless((8, 8))
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"no headless GL: {exc}")
+    prog = ctx.program(vertex_shader=facegl.FACE_VERTEX, varyings=["gl_Position", "c"])
+    for name, value in {"view": (1.0, 1.0, 0.0, 0.0), "pivot": (0.0, 0.0), "depth": 0.0, "head": (0.0, 0.0, 0.0),
+                        "shimmer": 0.0, "verts": 0, "bright": 1.0, "teeth": 1.0, "lids": (0.0, 0.0),
+                        "eye_tint": (1.0, 1.0, 1.0, 0.0), "eye_window_r": windows[0],
+                        "eye_window_l": windows[1]}.items():
+        facegl.FaceRenderer._set(prog, name, value)
+    tex = ctx.texture((len(rest), 1), 2, moved.tobytes(), dtype="f4")
+    tex.filter = moderngl.NEAREST, moderngl.NEAREST
+    tex.use(0)
+    vao = ctx.vertex_array(prog, [(ctx.buffer(idx.tobytes()), "3i", "idx"),
+                                  (ctx.buffer(attrs.tobytes()), "3f 3f 1f 1f 1f 2f", "w", "col", "size", "phase",
+                                   "layer", "rigid")])
+    out = ctx.buffer(reserve=len(idx) * 28)
+    vao.transform(out, moderngl.POINTS)
+    got = np.frombuffer(out.read(), dtype=np.float32).reshape(-1, 7).copy()
+    ctx.release()
+    return got[:, :2] * (1.0, -1.0), got[:, 4:7].sum(axis=1), attrs
+
+
+def test_the_iris_keeps_its_pattern_at_full_gaze(pulse_asset):
+    """Adam: the eyes broke up when they looked far to the side. Dots of an iris all move together."""
+    from homeai.avatar import facegl
+
+    still, _, attrs = _eye_readback(pulse_asset, (0.0, 0.0))
+    looking, _, _ = _eye_readback(pulse_asset, (0.9, 0.9))
+    for eye in facegl.EYE_LAYERS.values():
+        iris = attrs[:, 8] == eye + facegl.IRIS_LAYER
+        assert iris.sum() > 3
+        shift = looking[iris] - still[iris]
+        assert np.abs(shift).max() > 1.0 and np.ptp(shift, axis=0).max() < 0.05
+
+
+def test_gaze_moves_nothing_but_the_irises(pulse_asset):
+    from homeai.avatar import facegl
+
+    still, _, attrs = _eye_readback(pulse_asset, (0.0, 0.0))
+    looking, _, _ = _eye_readback(pulse_asset, (0.9, 0.9))
+    others = np.modf(attrs[:, 8])[0] != facegl.IRIS_LAYER
+    assert np.abs(looking[others] - still[others]).max() < 0.05
+
+
+def test_rebinding_leaves_every_dot_where_it_was_at_rest(pulse_asset):
+    still, _, _ = _eye_readback(pulse_asset, (0.0, 0.0))
+    np.testing.assert_allclose(still[:len(pulse_asset.xy)], pulse_asset.xy, atol=0.05)
+
+
+def test_the_iris_tucks_under_the_lids(pulse_asset):
+    """Adam: the eyes overlapped the eyelids. Whole at rest, dimmed where it moves past the window."""
+    from homeai.avatar import facegl
+
+    _, rest_light, attrs = _eye_readback(pulse_asset, (0.0, 0.0))
+    _, light, _ = _eye_readback(pulse_asset, (0.0, 0.9))
+    iris = np.modf(attrs[:, 8])[0] == facegl.IRIS_LAYER
+    expected = attrs[iris, 3:6].sum(axis=1) * 0.85          # the shader's brightness with no glow
+    np.testing.assert_allclose(rest_light[iris], expected, rtol=1e-3)
+    assert (light[iris] < 0.01).any()

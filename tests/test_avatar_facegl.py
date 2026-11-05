@@ -478,3 +478,17 @@ def test_a_ring_with_no_points_changes_nothing():
     tri, bary, offset = facegl.bind_rings(xy, np.array([4]), np.eye(3, dtype=np.float32)[:1],
                                           (((90.0, 90.0), (3.0, 3.0)),))
     assert tri.tolist() == [4] and not offset.any()
+
+
+def test_iris_dots_join_their_eye_and_the_rest_keep_their_place(verts):
+    centre = verts[468]
+    xy = np.array([centre + (1.0, 0.0), centre + (500.0, 0.0), verts[1]], dtype=np.float32)
+    idx = np.array([[468, 469, 33], [468, 469, 33], [1, 2, 4]], dtype=np.int32)
+    bary = np.full((3, 3), 1 / 3, dtype=np.float32)
+    offset = np.zeros((3, 2), dtype=np.float32)
+    layer = np.array([facegl.EYE_LAYERS["r"], 0.0, 0.0], dtype=np.float32)
+    facegl.bind_irises(xy, idx, bary, offset, layer, verts)
+    assert layer[0] == facegl.EYE_LAYERS["r"] + facegl.IRIS_LAYER and idx[0].tolist() == [468] * 3
+    assert not np.isin(idx[1], list(rig.REGIONS["iris_r"])).any()       # off the iris vertices
+    np.testing.assert_allclose(verts[idx[:2, 0]] + offset[:2], xy[:2], atol=1e-3)
+    assert idx[2].tolist() == [1, 2, 4] and not offset[2].any()         # nothing to do with the eyes

@@ -135,6 +135,8 @@ uniform float high;
 uniform float shimmer;
 uniform vec2 lids;          // blink_r, blink_l: 1 = shut
 uniform vec4 eye_tint;      // rgb, amount: the irises glow the state's colour
+uniform vec4 eye_window_r;  // centre, radii (image px): an iris shows only inside this, as if behind the lids
+uniform vec4 eye_window_l;
 in ivec3 idx;
 in vec3 w;
 in vec3 col;
@@ -146,6 +148,8 @@ out vec3 c;
 vec2 V(int i) { return texelFetch(verts, ivec2(i, 0), 0).xy; }
 void main() {
     vec2 p = w.x * V(idx.x) + w.y * V(idx.y) + w.z * V(idx.z) + rigid;
+    vec4 window = layer > 4.5 ? eye_window_l : eye_window_r;
+    float behind = smoothstep(0.9, 1.0, length((p - window.xy) / window.zw));
     p += shimmer * vec2(sin(t * 1.9 + phase), cos(t * 1.6 + phase * 1.7));
     gl_Position = to_clip(pose(p));
     float small = 1.0 - step(1.0, size);
@@ -156,6 +160,7 @@ void main() {
     if (layer > 3.5) {                                      // eye interior: hidden by the lid, tinted by state
         float shut = layer > 4.5 ? lids.y : lids.x;
         k *= 1.0 - smoothstep(0.25, 0.8, shut);
+        if (fract(layer) > 0.1) k *= 1.0 - behind;          // the iris slides under the lids
         base = mix(col, eye_tint.rgb * (0.6 + 0.8 * g.r), eye_tint.a);
         k *= 1.0 + 0.8 * eye_tint.a;
     }
@@ -599,6 +604,10 @@ def mouth_points(verts: np.ndarray, per_gap: int = 6, seed: int = 3) -> tuple[np
 
 EYE_LAYERS = {"r": 4.0, "l": 5.0}               # face_buffers layer for points inside each eye
 EYE_GROW = (1.1, 1.3)                           # eye outline scaled about its centre: painted eyes overhang the lids
+IRIS_LAYER = 0.25                               # added to an eye's layer for the dots of its iris
+IRIS_GROW = 1.4                                 # painted iris, x the landmarks' iris radius
+WINDOW_CLEAR = 1.14                             # eye window, x the iris's reach at rest
+IRIS_EYES = (("iris_r", rig.EYE_R_UPPER + rig.EYE_R_LOWER), ("iris_l", rig.EYE_L_UPPER + rig.EYE_L_LOWER))
 
 
 def eye_layers(points: np.ndarray, verts: np.ndarray) -> np.ndarray:
@@ -612,6 +621,58 @@ def eye_layers(points: np.ndarray, verts: np.ndarray) -> np.ndarray:
         c = poly.mean(axis=0)
         out[rig._inside(pts, c + (poly - c) * EYE_GROW)] = layer
     return out
+
+
+def iris_disc(verts: np.ndarray, region: str) -> tuple[int, np.ndarray, float]:
+    """(centre vertex, its rest position, radius in image px) of the painted iris."""
+    v = np.asarray(verts, dtype=np.float64)
+    ring = rig.REGIONS[region]
+    return ring[0], v[ring[0]], IRIS_GROW * float(np.ptp(v[list(ring)][:, 0])) / 2
+
+
+def eye_windows(verts: np.ndarray, xy: np.ndarray, layer: np.ndarray) -> list[tuple[float, float, float, float]]:
+    """Per eye, (x, y, rx, ry) image px: where its iris can show, from where the lids cut the painted iris at rest.
+
+    ``xy`` and ``layer`` are the face's dots. The window only just clears the iris at rest, so any move toward a lid
+    starts to tuck it under; fading starts at 0.9 of the window, hence the margin.
+    """
+    v = np.asarray(verts, dtype=np.float64)
+    out = []
+    for (region, lids), eye in zip(IRIS_EYES, EYE_LAYERS.values()):
+        _, centre, radius = iris_disc(v, region)
+        dots = np.asarray(xy, dtype=np.float64)[layer == eye + IRIS_LAYER]
+        contour = v[list(lids)]
+        x = float(contour[:, 0].min() + contour[:, 0].max()) / 2
+        y = float(dots[:, 1].min() + dots[:, 1].max()) / 2 if len(dots) else float(centre[1])
+        half = (float(np.abs(dots[:, 0] - x).max()), float(np.ptp(dots[:, 1])) / 2) if len(dots) else (radius, radius)
+        rx, ry = max(WINDOW_CLEAR * half[0], float(np.ptp(contour[:, 0])) / 2), WINDOW_CLEAR * half[1]
+        reach = float(np.linalg.norm((dots - (x, y)) / (rx, ry), axis=1).max()) if len(dots) else 0.0
+        grow = max(1.0, reach / 0.89)                       # whole at rest, even at the ellipse's narrow shoulders
+        out.append((x, y, rx * grow, ry * grow))
+    return out
+
+
+def bind_irises(xy: np.ndarray, idx: np.ndarray, bary: np.ndarray, offset: np.ndarray, layer: np.ndarray,
+                verts: np.ndarray) -> None:
+    """Gaze moves only the iris vertices, so re-bind in place what touches them (Adam: the eyes broke up to the side).
+
+    An iris's dots follow its centre vertex at fixed offsets and so keep their pattern. Anything else on a triangle
+    with an iris vertex follows the nearest lid vertex instead: the lids still carry it, the gaze doesn't.
+    """
+    v = np.asarray(verts, dtype=np.float64)
+    moved = np.isin(idx, [i for region, _ in IRIS_EYES for i in rig.REGIONS[region]]).any(axis=1)
+    for (region, _), eye in zip(IRIS_EYES, EYE_LAYERS.values()):
+        vertex, centre, radius = iris_disc(v, region)
+        iris = (layer == eye) & (np.linalg.norm(xy - centre, axis=1) <= radius)
+        idx[iris], bary[iris] = vertex, (1.0, 0.0, 0.0)
+        offset[iris] = xy[iris] - centre
+        layer[iris] = eye + IRIS_LAYER
+        moved &= ~iris
+    lids = np.array(sorted({i for _, contour in IRIS_EYES for i in contour}))
+    nearest = lids[np.argmin(np.linalg.norm(xy[moved, None, :] - v[None, lids, :], axis=2), axis=1)]
+    idx[moved] = nearest[:, None]
+    bary[moved] = (1.0, 0.0, 0.0)
+    offset[moved] = xy[moved] - v[nearest]
 
 
 def bind_rings(xy: np.ndarray, tri: np.ndarray, bary: np.ndarray, rings) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -639,12 +700,14 @@ def face_buffers(asset, seed: int = 11) -> tuple[np.ndarray, np.ndarray]:
     tri, bary, offset = bind_rings(asset.xy, asset.tri, asset.bary, MOUTH_RINGS.get(art, ()))
     idx = asset.triangles[tri].astype(np.int32)
     n = len(idx)
+    layer = eye_layers(asset.xy, asset.verts)
+    bind_irises(asset.xy, idx, bary, offset, layer, asset.verts)
     attrs = np.empty((n, 11), np.float32)
     attrs[:, 0:3] = bary
     attrs[:, 3:6] = asset.colour
     attrs[:, 6] = asset.size
     attrs[:, 7] = rng.uniform(0, 2 * np.pi, n)
-    attrs[:, 8] = eye_layers(asset.xy, asset.verts)
+    attrs[:, 8] = layer
     attrs[:, 9:11] = offset
     t_idx, t_w, t_layer = mouth_points(asset.verts)
     m = len(t_idx)
@@ -776,6 +839,7 @@ class FaceRenderer:
             self.hair_points = len(layout)
             self.pulse_tex = ctx.texture((HAIR_PULSE_SAMPLES, 1), 4, dtype="f4")
             self.pulse_tex.filter = moderngl.NEAREST, moderngl.NEAREST
+        self.windows = eye_windows(asset.verts, asset.xy, attrs[:len(asset.xy), 8])
         self.overlay = Overlay(ctx)
         self.wave = HairWave()
         self.pulse = HairPulse()
@@ -819,6 +883,7 @@ class FaceRenderer:
                             "bright": p.get("bright", 1.0), "grey": p.get("grey", 0.0),
                             "glow": p.get("glow", 0.0), "teeth": teeth, "shimmer": SHIMMER_PX,
                             "lids": (p.get("blink_r", 0.0), p.get("blink_l", 0.0)),
+                            "eye_window_r": self.windows[0], "eye_window_l": self.windows[1],
                             "eye_tint": (*frame.colour, p.get("eye_tint", 0.0))}.items():
             self._set(self.face_prog, name, value)
         self.verts_tex.use(0)

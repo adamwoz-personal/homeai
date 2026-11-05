@@ -1896,3 +1896,15 @@ Speech now reaches the aura hair through a ring buffer, delayed by distance alon
 - Measure before building on an idea from a plan: the ether layer added 0.02 of 255 to the dark half of the
   720x720 window because the longer hair had already filled it. Adam dropped it.
 
+## Eyes that move need more than a moving iris (2026-11-05)
+
+- Eye-follow held the gaze at the extremes, where saccades only ever passed through. The iris's dots sat on mesh
+  triangles shared with the lids, so it stretched from 37 to 48 px and shattered, and up to 34% of its dots left the
+  eye opening. Same cure as the mouth rings: one anchor, fixed offsets. Everything else on those triangles moves to the
+  nearest lid vertex, so gaze moves nothing but the iris.
+- Additive dots can't occlude, so an iris crossing a lid brightens it. Dim the iris outside a window fitted to where
+  the lids cut the painted iris at rest.
+- A mutant that loops forever hangs the run with no timeout: bound any loop a test drives, so the mutant fails instead.
+- `pgrep -f` matches its own shell when the pattern is in the command, and `.` matches `/` in a path. Bracket tricks
+  don't cover that second case. `pkill -f` killed its own command this way.
+
