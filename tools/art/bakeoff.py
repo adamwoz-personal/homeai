@@ -79,18 +79,19 @@ def main() -> int:
     out.mkdir(parents=True)
     results = {}
     images: dict[str, dict[str, list[str]]] = {s: {m: [] for m in models} for s in chosen}
-    with CoderStopped(), Comfy(out / "comfy.log") as comfy:
-        for model in models:                            # one model at a time: load it once
-            for scenario in chosen:
-                width, height, prompts = SCENARIOS[scenario]
-                for p, prompt in enumerate(prompts):
-                    for seed in range(args.seeds):
-                        run = comfy.run(workflow(model, prompt, 1000 + seed, width, height, f"{scenario}-{model}"))
-                        results.setdefault(scenario, {}).setdefault(model, []).append(run)
-                        print(scenario, model, p, seed, run.get("seconds"), run.get("error", ""), flush=True)
-                        if "image" in run:
-                            images[scenario][model].append(run["image"])
-                (out / "results.json").write_text(json.dumps(results, indent=1))
+    with CoderStopped():
+        for model in models:                            # one server per model: load it once, RAM stays bounded
+            with Comfy(out / f"comfy-{model}.log") as comfy:
+                for scenario in chosen:
+                    width, height, prompts = SCENARIOS[scenario]
+                    for p, prompt in enumerate(prompts):
+                        for seed in range(args.seeds):
+                            run = comfy.run(workflow(model, prompt, 1000 + seed, width, height, f"{scenario}-{model}"))
+                            results.setdefault(scenario, {}).setdefault(model, []).append(run)
+                            print(scenario, model, p, seed, run.get("seconds"), run.get("error", ""), flush=True)
+                            if "image" in run:
+                                images[scenario][model].append(run["image"])
+                    (out / "results.json").write_text(json.dumps(results, indent=1))
     for scenario, rows in images.items():
         sheet(rows, out / f"{scenario}.png")
     print(out)

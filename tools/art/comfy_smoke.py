@@ -33,13 +33,12 @@ def main() -> int:
     out = Path.home() / "homeai-bench" / f"comfy-smoke-{datetime.now():%Y%m%d-%H%M%S}"
     out.mkdir(parents=True)
     results = {"baseline_vram_gb": None, "models": {}}
-    with CoderStopped(), Comfy(out / "comfy.log") as comfy:
+    with CoderStopped():
         results["baseline_vram_gb"] = vram_used_gb()
         print("VRAM with the coder stopped:", results["baseline_vram_gb"], flush=True)
         for model in args.model or MODELS:
-            comfy.free()
             runs = []
-            with VramPeak() as peak:
+            with Comfy(out / f"comfy-{model}.log") as comfy, VramPeak() as peak:
                 for i in range(1 + args.warm):
                     run = comfy.run(workflow(model, PROMPT, seed=7 + i, prefix=f"smoke-{model}"))
                     runs.append(run)

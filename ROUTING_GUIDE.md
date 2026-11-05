@@ -1920,3 +1920,11 @@ Speech now reaches the aura hair through a ring buffer, delayed by distance alon
   model has nothing left that acts on the house. They are matched from the words in `home_intents.py`, with
   `ROUTINE_ALIASES` for the mood phrases the model used to map. Cost: looser wordings the matcher misses no longer work.
 
+## ComfyUI out of memory took the terminal with it (2026-11-05)
+
+- With 29 GB of RAM, ComfyUI held klein and Z-Image and was loading SDXL at 26.8 GB resident. The kernel's OOM killer
+  killed it, and because it ran in the same scope as the terminal, Adam's Claude session went too. The coder stayed
+  stopped, because a killed process runs no `finally`. Check for that first after any crash.
+- A heavy child needs its own cgroup and a cap (`systemd-run --user --scope -p MemoryMax=...`), then the kernel kills
+  only it. Plan's `homeai-comfyui.service` must carry the same limit. One server per model keeps RAM bounded.
+

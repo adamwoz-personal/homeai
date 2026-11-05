@@ -21,6 +21,7 @@ it can be tested exhaustively with synthetic timestamps and no hardware.
 from __future__ import annotations
 
 import logging
+import warnings
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -71,6 +72,13 @@ class EnergyDetector:
 # the ~1.3 s of audio its wake models look at.
 FLUSH_FRAME = 1280
 FLUSH_FRAMES = 30
+
+
+def quiet_missing_cuda() -> None:
+    """openwakeword asks ONNX for CUDA before CPU whatever the machine has, and each detector warned about it:
+    one per reply, as every reply builds one for barge-in. CPU is what it's meant to run on, so that one warning is noise.
+    """
+    warnings.filterwarnings("ignore", message="Specified provider 'CUDAExecutionProvider'", category=UserWarning)
 
 
 class OpenWakeWordDetector:
@@ -129,6 +137,7 @@ class OpenWakeWordDetector:
             return False, self._error
 
         try:
+            quiet_missing_cuda()
             self._model = Model(wakeword_model_paths=[path])
         except Exception as exc:  # noqa: BLE001 - model loading raises broadly
             self._error = f"could not load wake model {self._model_name!r}: {exc}"

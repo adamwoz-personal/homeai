@@ -399,6 +399,8 @@ MUTANTS=(
   "av4c-window-cuts-iris-at-rest|homeai/avatar/facegl.py|s/grow = max(1.0, reach \/ 0.89) /grow = 1.0 /|tests/test_avatar_golden.py -k tucks"
   "av4c-window-too-loose|homeai/avatar/facegl.py|s/^WINDOW_CLEAR = 1.14 /WINDOW_CLEAR = 3.00 /|tests/test_avatar_golden.py -k tucks"
   "model-can-run-routines|homeai/mcp_server.py|s/    \"timer\": _tool_timer,/    \"timer\": _tool_timer, \"routine\": lambda a: run_intent(_home(), \"routine\", {\"name\": a.get(\"name\")}),/|tests/test_mcp_server.py -k cannot_act"
+  "wake-cuda-warning-loud|homeai/wake.py|s/^    warnings.filterwarnings(\"ignore\", message=\"Specified provider .CUDAExecutionProvider.\", category=UserWarning)$/    pass/|tests/test_wake.py -k missing_cuda"
+  "wake-all-warnings-quiet|homeai/wake.py|s/message=\"Specified provider .CUDAExecutionProvider.\", //|tests/test_wake.py -k missing_cuda"
   "home-routine-aliases-gone|homeai/home.py|s/return ROUTINE_ALIASES.get(t)/return None/|tests/test_home_intents.py -k routine_aliases"
   "av4b-crown-lands-on-one-line|homeai/avatar/facegl.py|s/^HAIR_CROWN_FAN = 0.5 /HAIR_CROWN_FAN = 0.0 /|tests/test_avatar_facegl.py -k land_across"
   "av4b-ring-shader-drops-offset|homeai/avatar/facegl.py|s/ + w.z \* V(idx.z) + rigid;/ + w.z * V(idx.z);/|tests/test_avatar_golden.py -k mouth_rings"

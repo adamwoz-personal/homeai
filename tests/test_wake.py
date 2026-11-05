@@ -359,3 +359,17 @@ def test_openwakeword_reset_flushes_features_before_clearing_predictions() -> No
     assert calls == ["silence"] * wake.FLUSH_FRAMES + ["reset"]
     assert wake.FLUSH_FRAMES * wake.FLUSH_FRAME / 16000 >= 2.0
     assert det.last_score == 0.0
+
+
+def test_only_the_missing_cuda_warning_is_silenced():
+    import warnings
+
+    from homeai.wake import quiet_missing_cuda
+
+    with warnings.catch_warnings(record=True) as seen:
+        warnings.simplefilter("always")
+        quiet_missing_cuda()
+        warnings.warn("Specified provider 'CUDAExecutionProvider' is not in available provider names.", UserWarning)
+        warnings.warn("Specified provider 'OtherExecutionProvider' is not in available provider names.", UserWarning)
+    assert [str(w.message)[:40] for w in seen] == ["Specified provider 'OtherExecutionProvid"]
+

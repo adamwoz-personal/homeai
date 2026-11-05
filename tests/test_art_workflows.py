@@ -36,3 +36,12 @@ def test_unknown_model_is_refused():
 def test_z_image_gets_its_sampling_shift():
     graph = comfy_common.workflow("zimage", "a fox", 7)
     assert graph["sample"]["inputs"]["model"] == ["shift", 0]
+
+
+def test_comfy_runs_capped_and_local():
+    """It reached 26.8 GB of 29 GB and the OOM killer took Adam's terminal with it (2026-11-05)."""
+    command = comfy_common.comfy_command()
+    assert command[:3] == ["systemd-run", "--user", "--scope"]
+    assert f"MemoryMax={comfy_common.MEMORY_CAP}" in command and "MemorySwapMax=0" in command
+    assert command[command.index("--listen") + 1] == "127.0.0.1"
+

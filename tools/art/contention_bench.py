@@ -59,25 +59,26 @@ def main() -> int:
     out = Path.home() / "homeai-bench" / f"contention-{datetime.now():%Y%m%d-%H%M%S}.json"
     results = {}
     ask()                                               # warm
-    with CoderStopped(), Comfy(out.with_suffix(".log")) as comfy:
+    with CoderStopped():
         results["quiet"] = summary([ask() for _ in range(args.rounds)])
         print("quiet", results["quiet"], flush=True)
         for model in args.model or MODELS:
-            comfy.run(workflow(model, LOOP_PROMPT, seed=1))                 # loaded before timing
-            stop = threading.Event()
+            with Comfy(out.with_suffix(f".{model}.log")) as comfy:
+                comfy.run(workflow(model, LOOP_PROMPT, seed=1))             # loaded before timing
+                stop = threading.Event()
 
-            def draw() -> None:
-                seed = 2
-                while not stop.is_set():
-                    comfy.run(workflow(model, LOOP_PROMPT, seed=seed))
-                    seed += 1
+                def draw() -> None:
+                    seed = 2
+                    while not stop.is_set():
+                        comfy.run(workflow(model, LOOP_PROMPT, seed=seed))
+                        seed += 1
 
-            worker = threading.Thread(target=draw, daemon=True)
-            worker.start()
-            time.sleep(2.0)
-            rows = [ask() for _ in range(args.rounds)]
-            stop.set()
-            worker.join()
+                worker = threading.Thread(target=draw, daemon=True)
+                worker.start()
+                time.sleep(2.0)
+                rows = [ask() for _ in range(args.rounds)]
+                stop.set()
+                worker.join()
             results[model] = summary(rows)
             print(model, results[model], flush=True)
             out.write_text(json.dumps(results, indent=1))

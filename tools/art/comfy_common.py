@@ -2,7 +2,9 @@
 
 Why: the smoke test, contention bench and bake-off all need the same runner. Phase 6
 replaces this with homeai/art/comfy.py once the bake-off has picked what to keep.
-ComfyUI binds to 127.0.0.1 only.
+ComfyUI binds to 127.0.0.1 only. It runs in its own cgroup with a hard memory cap: on
+2026-11-05 it held every model in RAM, reached 26.8 GB of 29 GB, and the OOM killer took
+Adam's terminal with it. Over the cap, only ComfyUI dies. Use one server per model.
 """
 from __future__ import annotations
 
@@ -19,6 +21,7 @@ ROOT = Path.home() / ".local/share/homeai/comfyui"
 URL = "http://127.0.0.1:8188"
 OLLAMA = "http://127.0.0.1:11434"
 MODELS = ("klein", "zimage", "sdxl")
+MEMORY_CAP = "18G"
 NEGATIVE = "blurry, low quality, watermark, text artefacts, deformed"
 
 
@@ -63,11 +66,19 @@ def workflow(model: str, prompt: str, seed: int, width: int = 1024, height: int 
     return graph
 
 
+def comfy_command(extra: tuple[str, ...] = ()) -> list[str]:
+    """ComfyUI, capped: its own scope, no swap, nothing cached between prompts."""
+    return ["systemd-run", "--user", "--scope", "--quiet", "-p", f"MemoryMax={MEMORY_CAP}", "-p", "MemorySwapMax=0",
+            str(ROOT / "venv/bin/python"), "main.py", "--listen", "127.0.0.1", "--port", "8188",
+            "--disable-auto-launch", "--cache-none", "--disable-pinned-memory", *extra]
+
+
 def http(url: str, payload: dict | None = None, timeout: float = 30.0) -> dict:
     data = json.dumps(payload).encode() if payload is not None else None
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"} if data else {})
     with urllib.request.urlopen(req, timeout=timeout) as reply:
-        return json.loads(reply.read())
+        body = reply.read()
+    return json.loads(body) if body else {}
 
 
 def vram_used_gb() -> float:
@@ -110,8 +121,7 @@ class Comfy:
     def __enter__(self):
         env = {**os.environ, "HIP_VISIBLE_DEVICES": "0"}
         self._out = self.log.open("w")
-        self.proc = subprocess.Popen([str(ROOT / "venv/bin/python"), "main.py", "--listen", "127.0.0.1", "--port", "8188",
-                                      "--disable-auto-launch", *self.extra], cwd=ROOT / "app", env=env,
+        self.proc = subprocess.Popen(comfy_command(self.extra), cwd=ROOT / "app", env=env,
                                      stdout=self._out, stderr=subprocess.STDOUT)
         end = time.monotonic() + 180
         while time.monotonic() < end:
@@ -140,6 +150,8 @@ class Comfy:
         except urllib.error.HTTPError as exc:
             return {"seconds": 0.0, "error": exc.read().decode()[:500]}
         while time.monotonic() - start < timeout:
+            if self.proc.poll() is not None:
+                return {"seconds": round(time.monotonic() - start, 2), "error": f"ComfyUI died ({self.proc.returncode})"}
             entry = http(f"{URL}/history/{prompt_id}").get(prompt_id)
             if entry and entry.get("status", {}).get("completed"):
                 images = [i for node in entry["outputs"].values() for i in node.get("images", [])]
