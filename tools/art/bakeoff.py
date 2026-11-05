@@ -2,12 +2,14 @@
 """Run the art scenarios on every image model, for Adam to rate (AVATAR_PLAN §8, Phase 5).
 
 Why: numbers plus Adam's ratings pick each preset's default model. Every prompt runs
-on every model with the same seeds, and each scenario gets one contact sheet: a
-column per model. results.json has seconds and any errors; ratings merge into it
-later. Output goes to ~/homeai-bench/bakeoff-<time>/. The coder is stopped meanwhile.
+on every model with the same seeds, and each scenario gets one contact sheet per
+seed: a column per model. results.json has seconds and any errors; ratings merge
+into it later. Anime models only run the scenarios they're meant for. A model that
+fails is recorded and skipped. Output goes to ~/homeai-bench/bakeoff-<time>/. The
+coder is stopped meanwhile. Timings here are not a benchmark: use comfy_smoke.py.
 
 Usage:
-    .venv/bin/python tools/art/bakeoff.py [--model klein] [--scenario landscape] [--seeds 2]
+    .venv/bin/python tools/art/bakeoff.py [--model klein] [--scenario landscape] [--seeds 3]
 """
 from __future__ import annotations
 
@@ -19,7 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from comfy_common import MODELS, Comfy, CoderStopped, workflow  # noqa: E402
+from comfy_common import ANIME, MODELS, RETIRED, Comfy, CoderStopped, workflow  # noqa: E402
 
 MIRA = ("Mira, a young elven ranger with short copper hair, a scar through her left eyebrow, "
         "a green hooded cloak and a silver leaf brooch")
@@ -29,6 +31,11 @@ SCENARIOS = {
                               "painterly fantasy landscape"]),
     "battle_map": (1024, 1024, ["top-down tabletop battle map of a ruined stone keep, cracked flagstones, a collapsed "
                                 "wall, a well in the courtyard, even lighting, no perspective, no grid, no text"]),
+    "battle_map_grid": (1024, 1024, ["top-down tabletop D&D battle map of a dungeon with three rooms joined by corridors, "
+                                     "stone floors, a square one-inch grid drawn over the whole map, even lighting, "
+                                     "no perspective, no text"]),
+    "floor_plan": (1344, 768, ["architectural floor plan of a two-bedroom cottage, black ink on white paper, top-down, "
+                               "walls, doors and windows drawn to scale, furniture outlines, no text"]),
     "world_map": (1344, 768, ["hand-drawn fantasy world map on aged parchment, coastlines, mountains, forests and "
                               "rivers in ink, compass rose, no lettering"]),
     "character": (1024, 1024, [f"portrait of {MIRA}, fantasy illustration",
@@ -51,6 +58,9 @@ SCENARIOS = {
 }
 
 
+ANIME_SCENARIOS = ("anime", "character", "kid")
+
+
 def sheet(rows: dict[str, list[str]], path: Path, cell: int = 480) -> None:
     """One column per model, one row per image, labelled."""
     from PIL import Image, ImageDraw
@@ -71,29 +81,37 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--model", action="append", choices=MODELS)
     ap.add_argument("--scenario", action="append", choices=tuple(SCENARIOS))
-    ap.add_argument("--seeds", type=int, default=1)
+    ap.add_argument("--seeds", type=int, default=3)
+    ap.add_argument("--no-voice", action="store_true", help="stop Jarvis and unload the voice model during the run")
     args = ap.parse_args()
-    models = args.model or MODELS
+    models = args.model or tuple(m for m in MODELS if m not in RETIRED)
     chosen = args.scenario or tuple(SCENARIOS)
     out = Path.home() / "homeai-bench" / f"bakeoff-{datetime.now():%Y%m%d-%H%M%S}"
     out.mkdir(parents=True)
     results = {}
-    images: dict[str, dict[str, list[str]]] = {s: {m: [] for m in models} for s in chosen}
-    with CoderStopped():
+    images: dict[tuple[str, int], dict[str, list[str]]] = {}
+    with CoderStopped(voice_off=args.no_voice):
         for model in models:                            # one server per model: load it once, RAM stays bounded
-            with Comfy(out / f"comfy-{model}.log") as comfy:
-                for scenario in chosen:
-                    width, height, prompts = SCENARIOS[scenario]
-                    for p, prompt in enumerate(prompts):
-                        for seed in range(args.seeds):
-                            run = comfy.run(workflow(model, prompt, 1000 + seed, width, height, f"{scenario}-{model}"))
-                            results.setdefault(scenario, {}).setdefault(model, []).append(run)
-                            print(scenario, model, p, seed, run.get("seconds"), run.get("error", ""), flush=True)
-                            if "image" in run:
-                                images[scenario][model].append(run["image"])
-                    (out / "results.json").write_text(json.dumps(results, indent=1))
-    for scenario, rows in images.items():
-        sheet(rows, out / f"{scenario}.png")
+            try:
+                with Comfy(out / f"comfy-{model}.log") as comfy:
+                    for scenario in chosen:
+                        if model in ANIME and scenario not in ANIME_SCENARIOS:
+                            continue
+                        width, height, prompts = SCENARIOS[scenario]
+                        for p, prompt in enumerate(prompts):
+                            for seed in range(args.seeds):
+                                run = comfy.run(workflow(model, prompt, 1000 + seed, width, height, f"{scenario}-{model}"))
+                                results.setdefault(scenario, {}).setdefault(model, []).append(run)
+                                print(scenario, model, p, seed, run.get("seconds"), run.get("error", "")[:120], flush=True)
+                                if "image" in run:
+                                    images.setdefault((scenario, seed), {}).setdefault(model, []).append(run["image"])
+                                elif "died" in run.get("error", ""):
+                                    raise RuntimeError(run["error"])
+                        (out / "results.json").write_text(json.dumps(results, indent=1))
+            except RuntimeError as exc:
+                print(model, "FAILED:", exc, flush=True)
+    for (scenario, seed), rows in images.items():
+        sheet(rows, out / f"{scenario}-seed{seed}.png", cell=384)
     print(out)
     return 0
 

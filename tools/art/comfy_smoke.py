@@ -29,11 +29,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--model", action="append", choices=MODELS)
     ap.add_argument("--warm", type=int, default=3)
+    ap.add_argument("--no-voice", action="store_true", help="stop Jarvis and unload the voice model during the run")
     args = ap.parse_args()
     out = Path.home() / "homeai-bench" / f"comfy-smoke-{datetime.now():%Y%m%d-%H%M%S}"
     out.mkdir(parents=True)
     results = {"baseline_vram_gb": None, "models": {}}
-    with CoderStopped():
+    with CoderStopped(voice_off=args.no_voice):
         results["baseline_vram_gb"] = vram_used_gb()
         print("VRAM with the coder stopped:", results["baseline_vram_gb"], flush=True)
         for model in args.model or MODELS:
