@@ -30,10 +30,31 @@ DOT_SPRITE = 1.5            # sprite diameter / typical point spacing (core is 0
 SHIMMER_PX = 0.25           # image px
 HAIR_STRANDS = 320          # side strands from the brows to the jaw angle; the neck gets more at that density
 HAIR_CROWN = 720            # long strands from the skull's outline, parted in the middle (Adam 2026-11-04: more, twice)
+HAIR_LENGTH = 1.6           # all hair (Adam 2026-11-05: longer everywhere)
 HAIR_DENSITY = 48           # points per face-height of strand length (was 40 per strand at ~0.84 h)
 HAIR_CROWN_LEN = (1.6, 2.6)  # x face height: longer than the side hair (Adam: "longer", three times)
 HAIR_CROWN_CLEAR = 0.22     # crown strands reach this far (x face height) past the head's edge before falling
-HAIR_CROWN_RISE = 0.5       # upward start at the top: low hugs the skull in a dome (1.0 left a V at the part, 1.5 horns)
+HAIR_CROWN_LIFT = 0.22      # x face height: crown hair grows this far up before gravity turns it (Adam: grow up, then fall)
+HAIR_TEMPLE_LEN = 0.43      # crown strands at brow level, share of their length: meets the side hair with no step
+HAIR_LIFT_FADE = (85.0, 130.0)  # degrees round from the top: lift fades to none here (Adam: temples fell too fast)
+HAIR_CROWN_FAN = 0.5        # x face height: crown strands land across this width; one line piled up into "cat ears"
+HAIR_PART = 20.0            # degrees either side of the top where strands mix sides: no hard part line
+HAIR_SCALP = 300            # strands from the channels beside the scalp's plates (Adam: not from the plates)
+HAIR_SCALP_LEN = (0.9, 1.5)  # x face height: shorter than the crown, so the plates stay visible
+# The channels between the four raised plates, per artwork (sha256 of the source image), as quads in crop px.
+# Marked by hand on tools/avatar/probe_scalp_roots.py: the stipple evens out dot density, so finding them
+# automatically failed on v1 and on the crisper build alike. Any rebuild of the same art keeps them.
+SCALP_CHANNELS = {
+    "afe7fb9676533ae8daf8770bc06a85d474874e9103ff6d896821adaa84833f5c": (
+        ((242, 55), (310, 25), (312, 75), (255, 100)),      # left outer plate to centre left
+        ((350, 12), (412, 14), (410, 75), (352, 75)),       # between the two centre plates
+        ((452, 25), (527, 50), (515, 100), (447, 75)),      # centre right to right outer
+        ((172, 150), (202, 150), (197, 200), (172, 200)),   # beyond the left outer plate
+        ((557, 140), (585, 140), (590, 190), (562, 190)),   # beyond the right outer plate
+    ),
+}
+HAIR_EAR = 240              # extra strands around the ears (Adam: more there)
+HAIR_EAR_LEN = (0.6, 1.3)   # x face height
 HAIR_HIGH_DROOP = 0.6       # (Adam: lower, twice) gravity on hair rooted up high (crown, brows), rising to 1 at the jaw: frames the face
 HAIR_LIT = 0.12             # colour above this is part of the head's silhouette
 HAIR_GAP = 0.25             # lit dots further than this (x face height) beyond the head are strays
@@ -41,6 +62,15 @@ HAIR_SPREAD = 0.38          # Adam 2026-11-04: drift wider, less gravity (was 0.
 HAIR_DROP = 0.85
 HAIR_GRAVITY = 0.45
 HAIR_LOCKS = 9.0            # rad of wave phase from the top root to the bottom one
+HAIR_SIDE_SHIFT = 1.1       # rad of curl phase between the sides, so left doesn't mirror right
+HAIR_WIND = 0.14            # breeze at the tip, x strand length (Adam: a gentle breeze, not a sine wave)
+# One wind field for all the hair, in face heights and hair_phase: (amount, kx, ky, rate, offset) sines.
+# Rates are whole thousandths, so hair_phase's wrap (2 pi x 1000) is seamless. The rate-only terms are the
+# slow change of direction, the same on both sides; the rest roll across the hair.
+HAIR_WIND_X = ((0.35, 0.0, 0.0, 0.113, 0.5), (0.30, 0.9, 1.3, 0.710, 0.0),
+               (0.18, -1.7, 2.9, 1.130, 1.0), (0.09, 3.1, 5.3, 1.910, 2.0))
+HAIR_WIND_Y = ((0.12, 0.0, 0.0, 0.089, 2.1), (0.16, 1.2, -0.8, 0.590, 0.7), (0.08, -2.3, 2.1, 1.370, 3.0))
+HAIR_GUST = (0.65, 0.35, 0.6, 0.197)    # base, swing, kx, rate: the breeze comes and goes across the head
 HAIR_PULSE_HZ = 60          # speech history samples per second
 HAIR_PULSE_SAMPLES = 128    # ring length: must outlast the slowest strand (2.1 s)
 HAIR_PULSE_SPEED = 2.6      # face heights per second: about 1 s to the longest crown tip (Adam: travel, not flash)
@@ -61,6 +91,19 @@ vec2 pose(vec2 p) {
     return pivot + vec2(d.x * cr - d.y * sr, d.x * sr + d.y * cr);
 }
 vec4 to_clip(vec2 p) { return vec4((p - view.zw) * vec2(view.x, -view.y), 0.0, 1.0); }
+"""
+
+
+def _wind_glsl(terms) -> str:
+    return " + ".join(f"{a:.3f} * sin({kx:.3f} * q.x + {ky:.3f} * q.y - {w:.3f} * t + {o:.3f})"
+                      for a, kx, ky, w, o in terms)
+
+
+_WIND = f"""
+vec2 wind(vec2 q, float t) {{   // keep in step with hair_wind()
+    float gust = {HAIR_GUST[0]:.3f} + {HAIR_GUST[1]:.3f} * sin({HAIR_GUST[2]:.3f} * q.x - {HAIR_GUST[3]:.3f} * t);
+    return gust * vec2({_wind_glsl(HAIR_WIND_X)}, {_wind_glsl(HAIR_WIND_Y)});
+}}
 """
 FACE_VERTEX = "#version 330\n" + _POSE + """
 uniform sampler2D verts;
@@ -102,8 +145,10 @@ void main() {
     gl_PointSize = point_px * size * (1.0 + 0.25 * low * (1.0 - small));
 }
 """
-HAIR_VERTEX = "#version 330\n" + _POSE + """
+HAIR_VERTEX = "#version 330\n" + _POSE + _WIND + """
 uniform float point_px;
+uniform float face_h;       // image px
+uniform float hair_wind_amount;
 uniform float hair_phase;
 uniform float hair_wave;    // travelling-wave phase, direction already integrated (HairWave)
 uniform float hair_amp;
@@ -127,6 +172,7 @@ in float phase;
 in float size;
 in vec2 aim;        // outward direction x reach: (side, 0) at the sides, up and over on the crown
 in float droop;     // how much of the fall applies: 1 at the sides, less on the crown
+in float bend;      // 0 reaches out from the root, 1 rises first and reaches out later (top of the crown)
 out vec3 c;
 vec4 speech(float delay) {  // the ring ``delay`` samples ago, blended between samples
     int n = textureSize(pulse, 0).x;
@@ -138,21 +184,24 @@ vec4 speech(float delay) {  // the ring ``delay`` samples ago, blended between s
 }
 void main() {
     vec4 sp = speech(s * len * pulse_per_px);
+    float amp = hair_amp + 0.8 * sp.w;
     float sway = 0.05 * sin(swirl + phase);             // thinking: strands swing as a whole
-    float curl = 0.11 * sin(7.0 * s + phase) * s;          // resting wave: wavy even when still
-    float wv = (sin(8.0 * s - hair_wave + phase) * 0.10
-              + sin(3.5 * s - 0.6 * hair_phase + phase * 1.7) * 0.07) * (hair_amp + 0.8 * sp.w) * s + curl;
+    float curl = (0.08 * sin(7.0 * s + phase) + 0.045 * sin(12.7 * s + 1.6 * phase)) * s;  // wavy even when still
+    float heard = ripple * 0.10 * sin(8.0 * s - hair_wave + phase) * amp * s;   // listening: waves run inward
     // Out from the head, then drifting down: light gravity, felt most at the tips.
     float out_ = spread * (1.0 - (1.0 - s) * (1.0 - s));
     float fall = (1.0 - gravity) * s + gravity * s * s;
-    vec2 p = root + len * (aim * out_ + vec2(side * (wv + sway * s), drop * droop * fall));
+    vec2 reach = vec2(mix(out_, spread * s * s * (3.0 - 2.0 * s), bend), out_);
+    vec2 rest = root + len * (aim * reach + vec2(side * curl, drop * droop * fall));
+    vec2 breeze = hair_wind_amount * amp * pow(s, 1.5) * wind(rest / face_h, hair_phase);
+    vec2 p = rest + len * (breeze + vec2(side * heard + sway * s, 0.0));
     gl_Position = to_clip(pose(p));
     float fade = pow(1.0 - s, 1.1) * smoothstep(0.0, 0.05, s);
     float hit = ring < 0.0 ? 0.0 : 1.0 - smoothstep(0.0, 0.08, abs(s - ring));
     float small = 1.0 - step(1.0, size);
     float base = 0.35 + 0.65 * glow;
     float carry = pow(1.0 - s, 0.35) * smoothstep(0.0, 0.05, s);   // pulses outlast the strand's own fade
-    c = colour * (base * fade * (1.0 + 2.0 * ring_amp * hit) + carry * (0.2 * sp.z + 1.5 * base * sp.y * small)) * 1.2;
+    c = colour * (base * fade * (1.0 + 2.0 * ring_amp * hit) + carry * (0.1 * sp.z + 0.75 * base * sp.y * small)) * 1.2;
     gl_PointSize = point_px * size * (1.0 + 0.6 * sp.x * (1.0 - small));
 }
 """
@@ -238,6 +287,18 @@ def ray_edge(xy: np.ndarray, origin, direction, band: float, gap: float) -> floa
     return float(xs[gaps[0]] if len(gaps) else xs[-1])
 
 
+def smooth(lo: float, hi: float, x: float) -> float:
+    """0 below ``lo``, 1 above ``hi``, an S-curve between."""
+    u = min(max((x - lo) / (hi - lo), 0.0), 1.0)
+    return u * u * (3.0 - 2.0 * u)
+
+
+def lift_at(turn: float, h: float, length: float, droop: float = HAIR_HIGH_DROOP) -> float:
+    """aim y for a strand rooted ``turn`` degrees round from the top: one curve for all the hair."""
+    peak = HAIR_CROWN_LIFT * h * max(np.cos(np.radians(min(turn, 90.0))), 0.0) / length
+    return -crown_rise(peak, droop=droop) * (1.0 - smooth(*HAIR_LIFT_FADE, turn)) / HAIR_SPREAD
+
+
 def _side_roots(pts, v, h, spacing, strands, rng) -> list:
     """Brows to the bottom of the art: short above the ears, long from the jaw down the neck."""
     top = float(min(v[105, 1], v[334, 1]))                  # brows: about the top of the ears
@@ -256,10 +317,11 @@ def _side_roots(pts, v, h, spacing, strands, rng) -> list:
             continue
         below = (y - jaw) / max(bottom - jaw, 1.0) if y > jaw else 0.0
         taper = 1.0 - 0.7 * below                           # lower down the neck, less is still on screen
-        length = h * (0.15 + 1.45 * min(t, 1.0) ** 1.1) * taper * rng.uniform(0.8, 1.2)
+        length = HAIR_LENGTH * h * (0.9 + 0.7 * min(t, 1.0) ** 1.1) * taper * rng.uniform(0.8, 1.2)
+        droop = HAIR_HIGH_DROOP + (1.0 - HAIR_HIGH_DROOP) * min(t, 1.0)
         roots.append((edge + side * 1.2 * spacing, y, side, length,
-                      HAIR_LOCKS * t + rng.uniform(-0.5, 0.5), float(side), 0.0,
-                      HAIR_HIGH_DROOP + (1.0 - HAIR_HIGH_DROOP) * min(t, 1.0)))   # neighbours: locks
+                      HAIR_LOCKS * t + side * HAIR_SIDE_SHIFT + rng.uniform(-0.5, 0.5), float(side),
+                      lift_at(90.0 + 45.0 * t, h, length, droop), droop, 0.0))   # neighbours: locks
     return roots
 
 
@@ -269,13 +331,7 @@ def _crown_roots(pts, v, h, spacing, strands, rng) -> list:
     top = float(min(v[105, 1], v[334, 1]))
     origin = (float(v[list(rig.REGIONS["jaw"] + rig.REGIONS["forehead"]), 0].mean()), top)
     jaw = float(max(v[172, 1], v[397, 1]))
-    centre = origin[0]
-    rows = np.linspace(top, jaw, 12)
-    reach = {}
-    for s in (-1.0, 1.0):                                   # the head's widest point below the brows
-        edges = [silhouette_edge(pts, y, int(s), 2.0 * spacing, centre=centre, gap=HAIR_GAP * h) for y in rows]
-        edges = [(e - centre) * s for e in edges if e is not None]
-        reach[s] = max(edges) if edges else None
+    reach = _head_reach(pts, h, spacing, origin[0], top, jaw)
     roots = []
     for k in range(strands):
         a = np.radians(90.0) * (2.0 * (k + rng.uniform(0.1, 0.9)) / strands - 1.0)   # 0 up, +-90 brow level
@@ -284,13 +340,90 @@ def _crown_roots(pts, v, h, spacing, strands, rng) -> list:
         if edge is None:
             continue
         side = 1.0 if a > 0 else -1.0
+        if rng.random() < 0.5 * (1.0 - min(abs(a) / np.radians(HAIR_PART), 1.0)):
+            side = -side                                    # near the top either way: no hard part line
         root = np.asarray(origin) + n * (edge + 1.2 * spacing)
-        length = h * rng.uniform(*HAIR_CROWN_LEN)
+        turn = float(np.degrees(abs(a)))
+        length = HAIR_LENGTH * h * rng.uniform(*HAIR_CROWN_LEN) * (1.0 - (1.0 - HAIR_TEMPLE_LEN) * smooth(40.0, 90.0, turn))
         width = reach[side] if reach[side] is not None else edge * abs(n[0])
-        clear = width + HAIR_CROWN_CLEAR * h - (root[0] - origin[0]) * side   # sideways to clear the head
-        aim = (side * max(clear, 0.0) / (HAIR_SPREAD * length), -HAIR_CROWN_RISE * abs(n[1]))
+        land = width + (HAIR_CROWN_CLEAR + HAIR_CROWN_FAN * rng.random()) * h
+        clear = HAIR_LENGTH * (land - (root[0] - origin[0]) * side)   # sideways to clear the head
+        aim = (side * max(clear, 0.0) / (HAIR_SPREAD * length), lift_at(turn, h, length))
         roots.append((root[0], root[1], side, length,
-                      HAIR_LOCKS * abs(a) + rng.uniform(-0.5, 0.5), aim[0], aim[1], HAIR_HIGH_DROOP))
+                      HAIR_LOCKS * abs(a) + side * HAIR_SIDE_SHIFT + rng.uniform(-0.5, 0.5), aim[0], aim[1],
+                      HAIR_HIGH_DROOP, abs(n[1])))
+    return roots
+
+
+def _head_reach(pts, h, spacing, centre, top, jaw) -> dict:
+    """The head's widest point below the brows, each side of ``centre``."""
+    rows = np.linspace(top, jaw, 12)
+    reach = {}
+    for s in (-1.0, 1.0):
+        edges = [silhouette_edge(pts, y, int(s), 2.0 * spacing, centre=centre, gap=HAIR_GAP * h) for y in rows]
+        edges = [(e - centre) * s for e in edges if e is not None]
+        reach[s] = max(edges) if edges else None
+    return reach
+
+
+def _scalp_roots(pts, v, h, spacing, quads, strands, rng) -> list:
+    """Strands from between the scalp's plates: up and out from the skull like the crown, then falling."""
+    spots = scalp_spots(quads, strands)
+    if not len(spots):
+        return []
+    top = float(min(v[105, 1], v[334, 1]))
+    origin = np.array([v[list(rig.REGIONS["jaw"] + rig.REGIONS["forehead"]), 0].mean(), top])
+    reach = _head_reach(pts, h, spacing, origin[0], top, float(max(v[172, 1], v[397, 1])))
+    roots = []
+    for x, y in spots:
+        d = np.array([x, y]) - origin
+        n = d / max(float(np.linalg.norm(d)), 1e-9)
+        side = 1.0 if d[0] > 0 else -1.0
+        length = HAIR_LENGTH * h * rng.uniform(*HAIR_SCALP_LEN)
+        width = reach[side] if reach[side] is not None else abs(d[0])
+        land = width + (HAIR_CROWN_CLEAR + HAIR_CROWN_FAN * rng.random()) * h
+        clear = HAIR_LENGTH * (land - d[0] * side)
+        rise = lift_at(float(np.degrees(np.arctan2(abs(d[0]), -d[1]))), h, length)
+        roots.append((x, y, side, length, HAIR_LOCKS * abs(n[0]) + side * HAIR_SIDE_SHIFT + rng.uniform(-0.5, 0.5),
+                      side * max(clear, 0.0) / (HAIR_SPREAD * length), rise, HAIR_HIGH_DROOP, abs(n[1])))
+    return roots
+
+
+def crown_rise(peak: float, drop: float = HAIR_DROP, gravity: float = HAIR_GRAVITY,
+               droop: float = HAIR_HIGH_DROOP) -> float:
+    """The upward reach (x strand length) that peaks ``peak`` above the root before gravity wins."""
+    s = np.linspace(0.0, 1.0, 129)
+    up = 1.0 - (1.0 - s) ** 2
+    down = drop * droop * ((1.0 - gravity) * s + gravity * s * s)
+    lo, hi = 0.0, 8.0
+    for _ in range(40):
+        mid = (lo + hi) / 2
+        if (mid * up - down).max() < peak:
+            lo = mid
+        else:
+            hi = mid
+    return hi
+
+
+def _ear_roots(pts, v, h, spacing, strands, rng) -> list:
+    """Extra strands from the head's edge between the brows and the mouth, where the ears sit."""
+    top = float(min(v[105, 1], v[334, 1]))
+    jaw = float(max(v[172, 1], v[397, 1]))
+    bottom = top + 0.7 * (jaw - top)
+    centre = float(v[list(rig.REGIONS["jaw"] + rig.REGIONS["forehead"]), 0].mean())
+    roots = []
+    for k in range(strands):
+        side = -1 if k % 2 == 0 else 1
+        y = float(rng.uniform(top, bottom))
+        edge = silhouette_edge(pts, y, side, 2.0 * spacing, centre=centre, gap=HAIR_GAP * h)
+        if edge is None:
+            continue
+        t = (y - top) / (jaw - top)
+        length = HAIR_LENGTH * h * rng.uniform(*HAIR_EAR_LEN)
+        droop = HAIR_HIGH_DROOP + (1.0 - HAIR_HIGH_DROOP) * t
+        roots.append((edge + side * 1.2 * spacing, y, side, length,
+                      HAIR_LOCKS * t + side * HAIR_SIDE_SHIFT + rng.uniform(-0.5, 0.5), float(side),
+                      lift_at(90.0 + 45.0 * t, h, length, droop), droop, 0.0))
     return roots
 
 
@@ -303,11 +436,12 @@ def hair_rest(layout: np.ndarray, spread: float = HAIR_SPREAD, drop: float = HAI
     """
     a = np.asarray(layout, dtype=np.float64)
     rx, ry, side, ln, s, phase = a[:, :6].T
-    ax, ay, droop = a[:, 7:10].T
-    curl = 0.11 * np.sin(7.0 * s + phase) * s
+    ax, ay, droop, bend = a[:, 7:11].T
+    curl = (0.08 * np.sin(7.0 * s + phase) + 0.045 * np.sin(12.7 * s + 1.6 * phase)) * s
     out = spread * (1.0 - (1.0 - s) ** 2)
     fall = (1.0 - gravity) * s + gravity * s * s
-    return np.column_stack([rx + ln * (ax * out + side * curl), ry + ln * (ay * out + drop * droop * fall)])
+    across = out + bend * (spread * s * s * (3.0 - 2.0 * s) - out)
+    return np.column_stack([rx + ln * (ax * across + side * curl), ry + ln * (ay * out + drop * droop * fall)])
 
 
 def inside_outline(xy: np.ndarray, verts: np.ndarray, spacing: float, p: np.ndarray) -> np.ndarray:
@@ -334,9 +468,36 @@ def inside_outline(xy: np.ndarray, verts: np.ndarray, spacing: float, p: np.ndar
     return inside
 
 
+def scalp_spots(quads, count: int, seed: int = 9) -> np.ndarray:
+    """(count, 2) image px spread evenly over four-cornered ``quads`` (corners in order round the edge)."""
+    q = np.asarray(quads, dtype=np.float64).reshape(-1, 4, 2)
+    if not len(q) or count <= 0:
+        return np.empty((0, 2))
+    x, y = q[..., 0], q[..., 1]
+    area = 0.5 * np.abs((x * np.roll(y, -1, axis=1) - y * np.roll(x, -1, axis=1)).sum(axis=1))
+    rng = np.random.default_rng(seed)
+    pick = rng.choice(len(q), count, p=area / area.sum())
+    u, v = rng.random((2, count, 1))
+    a, b, c, d = (q[pick, i] for i in range(4))
+    return (1 - v) * ((1 - u) * a + u * b) + v * ((1 - u) * d + u * c)
+
+
+def hair_wind(q: np.ndarray, t: float) -> np.ndarray:
+    """(M, 2) breeze at ``q`` (face heights) at hair_phase ``t``: the shader's wind() on the CPU."""
+    x, y = np.asarray(q, dtype=np.float64).T
+
+    def blow(terms):
+        return sum(a * np.sin(kx * x + ky * y - w * t + o) for a, kx, ky, w, o in terms)
+
+    base, swing, kx, rate = HAIR_GUST
+    gust = base + swing * np.sin(kx * x - rate * t)
+    return np.column_stack([gust * blow(HAIR_WIND_X), gust * blow(HAIR_WIND_Y)])
+
+
 def hair_layout(xy: np.ndarray, verts: np.ndarray, spacing: float, strands: int = HAIR_STRANDS,
-                crown: int = HAIR_CROWN, points: int | None = None, seed: int = 5) -> np.ndarray:
-    """(M, 10) float32 per hair point: root x, root y, side, length, s, phase, size, aim x, aim y, droop.
+                crown: int = HAIR_CROWN, points: int | None = None, seed: int = 5,
+                ears: int = HAIR_EAR, scalp=(), scalp_strands: int = HAIR_SCALP) -> np.ndarray:
+    """(M, 11) float32 per hair point: root x, root y, side, length, s, phase, size, aim x, aim y, droop, bend.
 
     Side strands hang from just outside the head's silhouette from brow height
     (about the top of the ears) down past the jaw to the bottom of the neck:
@@ -353,19 +514,26 @@ def hair_layout(xy: np.ndarray, verts: np.ndarray, spacing: float, strands: int 
     if not len(pts):
         raise ValueError("no silhouette found for the hair")
     h = rig.face_height(v)
-    roots = _side_roots(pts, v, h, spacing, strands, rng) + _crown_roots(pts, v, h, spacing, crown, rng)
+    roots = (_side_roots(pts, v, h, spacing, strands, rng) + _crown_roots(pts, v, h, spacing, crown, rng)
+             + _ear_roots(pts, v, h, spacing, ears, rng) + _scalp_roots(pts, v, h, spacing, scalp, scalp_strands, rng))
     if not roots:
         raise ValueError("no silhouette found for the hair")
     total = sum(r[3] for r in roots)
     points = int(round(HAIR_DENSITY * total / h)) if points is None else points
     out = []
-    for x, y, side, length, phase, ax, ay, droop in roots:
+    for x, y, side, length, phase, ax, ay, droop, bend in roots:
         n = max(4, int(round(points * length / total)))
         s = (np.arange(n) + rng.random(n) * 0.6) / n
         size = np.where(rng.random(n) < 0.3, rng.uniform(1.0, 1.5, n), rng.uniform(0.6, 0.99, n))
         fixed = np.tile([x, y, side, length], (n, 1))
-        out.append(np.column_stack([fixed, s, np.full(n, phase), size, np.tile([ax, ay, droop], (n, 1))]))
+        out.append(np.column_stack([fixed, s, np.full(n, phase), size, np.tile([ax, ay, droop, bend], (n, 1))]))
     return np.vstack(out).astype(np.float32)
+
+
+def asset_hair(asset, spacing: float) -> np.ndarray:
+    """The hair layout for a face asset, with scalp hair if its artwork's channels are marked."""
+    scalp = SCALP_CHANNELS.get(asset.build.get("inputs", {}).get("image_sha256"), ())
+    return hair_layout(lit_points(asset.xy, asset.colour), asset.verts, spacing, scalp=scalp)
 
 
 def mouth_points(verts: np.ndarray, per_gap: int = 6, seed: int = 3) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -541,11 +709,11 @@ class FaceRenderer:
         self.hair_prog = self.hair_vbo = self.hair_vao = self.pulse_tex = None
         if hair:
             self.hair_prog = ctx.program(vertex_shader=HAIR_VERTEX, fragment_shader=DOT_FRAGMENT)
-            layout = hair_layout(lit_points(asset.xy, asset.colour), asset.verts, self.spacing)
+            layout = asset_hair(asset, self.spacing)
             self.hair_vbo = ctx.buffer(layout.tobytes())
             self.hair_vao = ctx.vertex_array(self.hair_prog, [
-                (self.hair_vbo, "2f 1f 1f 1f 1f 1f 2f 1f", "root", "side", "len", "s", "phase", "size",
-                 "aim", "droop")])
+                (self.hair_vbo, "2f 1f 1f 1f 1f 1f 2f 1f 1f", "root", "side", "len", "s", "phase", "size",
+                 "aim", "droop", "bend")])
             self.hair_points = len(layout)
             self.pulse_tex = ctx.texture((HAIR_PULSE_SAMPLES, 1), 4, dtype="f4")
             self.pulse_tex.filter = moderngl.NEAREST, moderngl.NEAREST
@@ -582,7 +750,7 @@ class FaceRenderer:
                                 "hair_wave": self.wave.advance(p.get("hair_phase", 0.0), frame.ripple),
                                 "swirl": frame.swirl, "ripple": frame.ripple, "ring": frame.ring,
                                 "ring_amp": frame.ring_amp, "glow": frame.base_glow, "pulse": 1,
-                                "pulse_head": self.pulse.head,
+                                "pulse_head": self.pulse.head, "face_h": self.geo["face_h"], "hair_wind_amount": HAIR_WIND,
                                 "pulse_per_px": HAIR_PULSE_HZ / (HAIR_PULSE_SPEED * self.geo["face_h"]),
                                 "colour": tuple(frame.colour)}.items():
                 self._set(self.hair_prog, name, value)

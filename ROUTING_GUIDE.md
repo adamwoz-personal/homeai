@@ -1858,3 +1858,19 @@ Speech now reaches the aura hair through a ring buffer, delayed by distance alon
   gained from 0.3 to 0.6 s separates it: ratio 1.31 clean, 0.90 with the bug.
 - **`build_face.py` blur changes the face itself.** `blur_sigma 2.0` smears the art's own dots into soft shading;
   v1 still rebuilds byte-identically from the JPG. See AVATAR_PLAN Phase 4b.
+
+## Hair that looks natural (2026-11-05)
+
+- **Measure a visual theory before fixing it.** Adam suspected a hard change in gravity. `tools/avatar/probe_hair_fall.py`
+  showed gravity was smooth; length and lift were what stepped at the brows (3.22 to 1.04 face heights). Temple hair
+  fell after 0.05 face heights; 0.17 now. Lifting it to 0.43 overcorrected: sideways hair and a wedge at the jaw.
+- **Many strands aimed at one point make a bright ridge.** The "cat ears" came from every crown strand landing on one
+  line. A first guess (strands folding over each other) was wrong; the render showed it. Fan width 1.0 flattened the
+  top into a mane; 0.5 kept the rise and fall.
+- **Don't detect what you can mark.** Finding scalp channels from dot density failed on v1 and on the crisper build,
+  because stippling evens density out. Five hand-marked quads keyed by the art's sha256 (`SCALP_CHANNELS`) are exact,
+  survive rebuilds, and Adam approves them by eye anyway.
+- **Tests calibrated on a whole render break with the layout.** The pulse brightness ratio failed twice as hair
+  changed, and an always-failing test makes mutants look killed. It now reads the shader's colour at fixed points.
+- **Read shader output to prove a CPU copy.** Transform feedback (`varyings`) compares `hair_rest`/`hair_wind` with
+  real vertex positions; golden tolerance missed that bug. An unbound sampler reads w=1: bind a texture.

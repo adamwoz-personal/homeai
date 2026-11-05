@@ -240,6 +240,62 @@ def render_face(asset, poses=FACE_TOUR, size: tuple[int, int] = (360, 360), hair
         ctx.release()
 
 
+def wind_coherence(rest, face_h: float, centre_x: float, phase_span: float, samples: int = 240,
+                   pairs: int = 200, seed: int = 1) -> dict:
+    """How the breeze moves the hair over ``phase_span`` rad: {"neighbours", "mirror"}, mean correlations.
+
+    ``neighbours``: sideways motion of a point and one 0.1 face heights away. ``mirror``:
+    a point's sideways motion against the reflection of its opposite point's. 1 is a perfect mirror.
+    """
+    import numpy as np
+
+    from .facegl import hair_wind
+
+    q = np.asarray(rest, dtype=np.float64) / face_h
+    rng = np.random.default_rng(seed)
+    pick = q[rng.choice(len(q), pairs)]
+    cx = centre_x / face_h
+    times = np.linspace(0.0, phase_span, samples)
+
+    def motion(points):
+        return np.stack([hair_wind(points, t)[:, 0] for t in times], axis=1)
+
+    def corr(a, b):
+        a, b = a - a.mean(axis=1, keepdims=True), b - b.mean(axis=1, keepdims=True)
+        return float(((a * b).sum(axis=1) / (np.linalg.norm(a, axis=1) * np.linalg.norm(b, axis=1))).mean())
+
+    here = motion(pick)
+    mirrored = pick * (-1.0, 1.0) + (2.0 * cx, 0.0)
+    return {"neighbours": round(corr(here, motion(pick + (0.1, 0.0))), 3),
+            "mirror": round(corr(here, -motion(mirrored)), 3)}
+
+
+def render_wind(asset, seconds, size: tuple[int, int] = (360, 360), speed: float = 0.6):
+    """RGB frames of the idle hair ``seconds`` into a breeze blowing at ``speed`` rad/s."""
+    import dataclasses
+
+    import numpy as np
+
+    from . import gl
+    from .facegl import FaceRenderer
+
+    ctx, fbo = gl.headless(size)
+    renderer = FaceRenderer(ctx, asset)
+    scene, t = staged("idle")
+    frame = scene.frame(t)
+    out = []
+    try:
+        for s in seconds:
+            params = {**frame.params, "hair_phase": frame.params["hair_phase"] + speed * s}
+            renderer.draw(dataclasses.replace(frame, params=params), t, size)
+            rgb = np.frombuffer(fbo.read(components=3), dtype=np.uint8).reshape(size[1], size[0], 3)
+            out.append(np.flipud(rgb).copy())
+        return out
+    finally:
+        renderer.release()
+        ctx.release()
+
+
 def render_pulse(asset, delays, size: tuple[int, int] = (360, 360), low: float = 1.0):
     """``(silent rgb, {delay: rgb}, hair rest px, arc in face heights)``: the idle face with no
     speech, then ``delay`` s after a burst."""
@@ -265,7 +321,7 @@ def render_pulse(asset, delays, size: tuple[int, int] = (360, 360), low: float =
         for delay in delays:
             speech_burst(renderer.pulse, t, delay, low=low)
             out[delay] = shot()
-        layout = facegl.hair_layout(facegl.lit_points(asset.xy, asset.colour), asset.verts, renderer.spacing)
+        layout = facegl.asset_hair(asset, renderer.spacing)
         rest = facegl.to_pixels(facegl.hair_rest(layout), renderer.side, size, zoom=renderer.zoom)
         return silent, out, rest, layout[:, 3] * layout[:, 4] / renderer.geo["face_h"]
     finally:

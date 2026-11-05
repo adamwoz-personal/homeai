@@ -56,16 +56,16 @@ def _neck(verts):
 def test_hair_hangs_from_the_sides_and_down_the_neck(verts):
     xy = _neck(verts)
     spacing = facegl.point_spacing(verts)
-    a = facegl.hair_layout(xy, verts, spacing, strands=20, crown=0, points=400, seed=2)
-    assert a.shape[1] == 10 and len(a) >= 400 * 0.9
-    np.testing.assert_array_equal(a, facegl.hair_layout(xy, verts, spacing, strands=20, crown=0, points=400, seed=2))
+    a = facegl.hair_layout(xy, verts, spacing, strands=20, crown=0, points=400, seed=2, ears=0)
+    assert a.shape[1] == 11 and len(a) >= 400 * 0.9
+    np.testing.assert_array_equal(a, facegl.hair_layout(xy, verts, spacing, strands=20, crown=0, points=400, seed=2, ears=0))
     h = rig.face_height(verts)
     top, jaw = min(verts[105, 1], verts[334, 1]), max(verts[172, 1], verts[397, 1])
     assert (a[:, 1] >= top - 1e-3).all()                    # crown=0: nothing above the brows
     assert a[:, 1].max() > jaw + 0.6 * h                    # all the way down the neck
     assert set(np.unique(a[:, 2])) == {-1.0, 1.0}
     np.testing.assert_array_equal(a[:, 7], a[:, 2])         # side strands aim straight out
-    assert (a[:, 8] == 0).all()
+    assert (a[:, 8] <= 0).all() and (a[a[:, 1] > jaw, 8] == 0).all()   # lift fades out down the head
     order = np.argsort(a[:, 1])                            # less gravity up high: frames the face
     assert (np.diff(a[order, 9]) >= -1e-6).all() and a[order[0], 9] < 0.7
     assert (a[a[:, 1] > jaw, 9] == 1.0).all()
@@ -81,7 +81,7 @@ def test_hair_hangs_from_the_sides_and_down_the_neck(verts):
     above = strands[strands[:, 0] < jaw]
     third = len(above) // 3
     by_y = above[np.argsort(above[:, 0])]
-    assert by_y[-third:, 1].mean() > 3 * by_y[:third, 1].mean()   # short above the ears, long below
+    assert by_y[-third:, 1].mean() > 1.25 * by_y[:third, 1].mean()   # shorter above the ears, longer below
     near_jaw = strands[np.abs(strands[:, 0] - jaw) < 0.15 * h, 1].mean()
     neck_end = strands[strands[:, 0] > jaw + 0.6 * h, 1].mean()
     assert neck_end < 0.7 * near_jaw                       # shorter low on the neck: the rest is off screen
@@ -92,13 +92,13 @@ def test_crown_hair_is_long_falls_beside_the_face_and_meets_the_sides(verts):
     xy = head_with_skull(verts)                            # the head alone, without the mesh's frame ring
     spacing = facegl.point_spacing(xy)
     h = rig.face_height(verts)
-    a = facegl.hair_layout(xy, verts, spacing, strands=20, crown=40, seed=2)
+    a = facegl.hair_layout(xy, verts, spacing, strands=20, crown=40, seed=2, ears=0)
     top = min(verts[105, 1], verts[334, 1])
     origin = np.array([verts[list(rig.REGIONS["jaw"] + rig.REGIONS["forehead"]), 0].mean(), top])
     is_crown = a[:, 1] < top - 1e-3
     crown = np.unique(a[is_crown][:, [0, 1, 3]], axis=0)
     assert len(crown) > 30
-    assert crown[:, 2].mean() > 1.5 * h                    # longer than the side hair, not tufts
+    assert crown[:, 2].mean() > 2.4 * h                    # longer than the side hair, not tufts
     out = crown[:, :2] - origin
     for row in out:                                        # roots just outside the skull's outline
         d = np.linalg.norm(row)
@@ -235,7 +235,7 @@ def test_hair_pulse_swell_rises_slowly():
 
 
 def test_hair_pulse_ring_outlasts_the_longest_strand():
-    delay = facegl.HAIR_CROWN_LEN[1] / facegl.HAIR_PULSE_SPEED * facegl.HAIR_PULSE_HZ
+    delay = facegl.HAIR_LENGTH * facegl.HAIR_CROWN_LEN[1] / facegl.HAIR_PULSE_SPEED * facegl.HAIR_PULSE_HZ
     assert delay < facegl.HAIR_PULSE_SAMPLES - 2
 
 
@@ -249,3 +249,193 @@ def test_view_sits_the_image_on_the_window_bottom():
 def test_point_spacing_of_a_grid():
     g = np.stack(np.meshgrid(np.arange(30) * 4.0, np.arange(30) * 4.0), -1).reshape(-1, 2)
     assert facegl.point_spacing(g) == pytest.approx(4.0)
+
+
+def test_breeze_is_connected_but_not_mirrored():
+    """Adam: a gentle breeze, connected, not a uniform mirror left and right."""
+    from homeai.avatar import tour
+
+    rng = np.random.default_rng(3)
+    rest = rng.uniform((-1.5, -0.5), (1.5, 2.0), (500, 2))
+    result = tour.wind_coherence(rest, 1.0, 0.0, 36.0)
+    assert result["neighbours"] > 0.9
+    assert result["mirror"] < 0.3
+
+
+def test_breeze_is_gentle():
+    q = np.random.default_rng(4).uniform(-2, 2, (400, 2))
+    step = 0.01
+    speed = np.abs(facegl.hair_wind(q, 50.0 + step) - facegl.hair_wind(q, 50.0)).max() / step
+    assert speed < 0.8                                      # per rad of hair_phase
+    assert np.abs(facegl.hair_wind(q, 50.0)).max() < 1.2
+
+
+def test_breeze_wraps_seamlessly():
+    from homeai.avatar.face import HAIR_PHASE_WRAP
+
+    q = np.random.default_rng(5).uniform(-2, 2, (50, 2))
+    np.testing.assert_allclose(facegl.hair_wind(q, 3.0), facegl.hair_wind(q, 3.0 + HAIR_PHASE_WRAP), atol=1e-6)
+
+
+def test_shader_uses_the_wind_table():
+    for term in facegl.HAIR_WIND_X + facegl.HAIR_WIND_Y:
+        assert f"{term[3]:.3f} * t" in facegl.HAIR_VERTEX
+
+
+def test_sides_curl_differently():
+    assert facegl.HAIR_SIDE_SHIFT > 0.5
+
+
+def test_crown_rise_peaks_where_asked():
+    s = np.linspace(0, 1, 513)
+    for peak in (0.05, 0.1, 0.2):
+        rise = facegl.crown_rise(peak)
+        y = rise * (1 - (1 - s) ** 2) - facegl.HAIR_DROP * facegl.HAIR_HIGH_DROOP * (
+            (1 - facegl.HAIR_GRAVITY) * s + facegl.HAIR_GRAVITY * s * s)
+        assert y.max() == pytest.approx(peak, abs=0.005)
+
+
+def _crown(verts, **kwargs):
+    xy = head_with_skull(verts)
+    spacing = facegl.point_spacing(xy)
+    a = facegl.hair_layout(xy, verts, spacing, strands=20, crown=120, seed=2, ears=0, **kwargs)
+    top = min(verts[105, 1], verts[334, 1])
+    origin_x = verts[list(rig.REGIONS["jaw"] + rig.REGIONS["forehead"]), 0].mean()
+    return a[a[:, 1] < top - 1e-3], origin_x, rig.face_height(verts)
+
+
+def test_crown_hair_grows_up_then_falls(verts):
+    """Adam: the hair should grow up, but fall due to gravity."""
+    a, origin_x, h = _crown(verts)
+    near_top = np.abs(a[:, 0] - origin_x) < 0.15 * h
+    rest = facegl.hair_rest(a[near_top])
+    rise = a[near_top, 1] - rest[:, 1]
+    assert rise.max() > 0.15 * h                            # it goes up
+    tips = a[near_top, 4] > 0.95
+    assert (rise[tips] < 0).all()                           # and ends below its root
+    early = (a[near_top, 4] > 0.15) & (a[near_top, 4] < 0.25)
+    up = (a[near_top, 1] - rest[:, 1])[early]
+    across = np.abs(rest[:, 0] - a[near_top, 0])[early]
+    assert np.median(up) > np.median(across)                # up first, sideways later
+
+
+def test_crown_has_no_hard_part_line(verts):
+    a, origin_x, h = _crown(verts)
+    for sign in (-1, 1):                                    # just off centre, some strands cross over
+        here = a[(a[:, 0] - origin_x) * sign > 0]
+        here = here[np.abs(here[:, 0] - origin_x) < 0.12 * h]
+        assert set(np.unique(here[:, 2])) == {-1.0, 1.0}
+
+
+def test_more_hair_around_the_ears(verts):
+    xy = head_with_skull(verts)
+    spacing = facegl.point_spacing(xy)
+    top, jaw = min(verts[105, 1], verts[334, 1]), max(verts[172, 1], verts[397, 1])
+    h = rig.face_height(verts)
+
+    def strands(ears):
+        a = facegl.hair_layout(xy, verts, spacing, strands=20, crown=0, seed=2, ears=ears)
+        return np.unique(a[:, [0, 1, 3]], axis=0)
+
+    base, more = strands(0), strands(facegl.HAIR_EAR)
+    added = len(more) - len(base)
+    assert added > 0.8 * facegl.HAIR_EAR
+    new = more[~np.isin(more[:, 2], base[:, 2])]
+    assert (new[:, 1] >= top).all() and (new[:, 1] <= top + 0.75 * (jaw - top)).all()
+    assert new[:, 2].min() >= 0.55 * h
+
+
+def test_scalp_spots_fill_their_quads_by_area():
+    quads = (((0, 0), (10, 0), (10, 10), (0, 10)), ((100, 0), (130, 0), (130, 10), (100, 10)))
+    p = facegl.scalp_spots(quads, 2000)
+    first = p[:, 0] < 50
+    assert p[first, 0].min() >= 0 and p[first, 0].max() <= 10 and p[first, 1].max() <= 10
+    assert p[~first, 0].min() >= 100 and p[~first, 0].max() <= 130
+    assert p[first, 0].std() > 2.5 and p[first, 1].std() > 2.5     # spread out, not at a corner
+    assert 0.2 < first.mean() < 0.3                                # 1 part in 4 by area
+    assert len(facegl.scalp_spots((), 10)) == 0
+
+
+def test_every_marked_artwork_has_five_scalp_areas():
+    assert all(len(quads) == 5 for quads in facegl.SCALP_CHANNELS.values())
+
+
+def _scalp_layout(verts):
+    xy = head_with_skull(verts)
+    spacing = facegl.point_spacing(xy)
+    h = rig.face_height(verts)
+    cx, top = verts[list(rig.REGIONS["jaw"] + rig.REGIONS["forehead"]), 0].mean(), verts[10, 1]
+    quad = ((cx - 0.1 * h, top - 0.1 * h), (cx + 0.1 * h, top - 0.1 * h), (cx + 0.1 * h, top), (cx - 0.1 * h, top))
+    a = facegl.hair_layout(xy, verts, spacing, strands=20, crown=0, ears=0, seed=2, scalp=(quad,), scalp_strands=40)
+    return a[a[:, 1] <= top + 1e-3], cx, top, h
+
+
+def test_scalp_hair_roots_in_the_channel_and_grows_up(verts):
+    a, cx, top, h = _scalp_layout(verts)
+    assert len(np.unique(a[:, [0, 1]], axis=0)) >= 39
+    assert (np.abs(a[:, 0] - cx) <= 0.1 * h + 1e-3).all() and (a[:, 1] >= top - 0.1 * h - 1e-3).all()
+    rise = a[:, 1] - facegl.hair_rest(a)[:, 1]
+    assert rise.max() > 0.15 * h and rise[a[:, 4] > 0.95].max() < 0
+
+
+def test_asset_hair_uses_the_arts_marked_channels(verts):
+    from types import SimpleNamespace
+
+    xy = head_with_skull(verts)
+    art = next(iter(facegl.SCALP_CHANNELS))
+
+    def strands(sha):
+        asset = SimpleNamespace(xy=xy, colour=np.ones((len(xy), 3)), verts=verts,
+                                build={"inputs": {"image_sha256": sha}})
+        a = facegl.asset_hair(asset, facegl.point_spacing(xy))
+        return len(np.unique(a[:, [0, 1]], axis=0))
+
+    assert strands(art) >= strands("other art") + facegl.HAIR_SCALP - 1
+
+
+def test_hair_is_long_everywhere(verts):
+    xy = head_with_skull(verts)
+    spacing = facegl.point_spacing(xy)
+    a = facegl.hair_layout(xy, verts, spacing, strands=20, crown=40, seed=2)
+    assert a[:, 3].max() > 3.5 * rig.face_height(verts)
+
+
+def test_hair_changes_smoothly_round_the_head(verts):
+    """Adam: no visible step between regions. Length and lift used to jump 3x at the brows."""
+    xy = head_with_skull(verts)
+    a = facegl.hair_layout(xy, verts, facegl.point_spacing(xy), seed=2)
+    top = min(verts[105, 1], verts[334, 1])
+    cx = verts[list(rig.REGIONS["jaw"] + rig.REGIONS["forehead"]), 0].mean()
+    strands = np.unique(a[:, [0, 1, 3, 8]], axis=0)
+    turn = np.degrees(np.arctan2(np.abs(strands[:, 0] - cx), top - strands[:, 1]))
+    bands = [strands[(turn >= lo) & (turn < lo + 20)] for lo in range(40, 140, 20)]
+    length = [np.median(b[:, 2]) for b in bands if len(b) > 5]
+    lift = [np.median(b[:, 3]) for b in bands if len(b) > 5]
+    assert len(length) >= 4
+    assert max(max(p, q) / min(p, q) for p, q in zip(length, length[1:])) < 1.6
+    assert max(abs(p - q) for p, q in zip(lift, lift[1:])) < 0.45
+
+
+def test_lift_fades_smoothly_down_the_head():
+    h, length = 100.0, 200.0
+    lifts = [-facegl.lift_at(float(x), h, length) for x in range(0, 135, 5)]
+    assert all(p >= q - 1e-6 for p, q in zip(lifts, lifts[1:]))
+    assert lifts[18] > 0.1 and lifts[-1] == 0.0             # still lifting at the brows, none by the cheek
+    assert max(p - q for p, q in zip(lifts, lifts[1:])) < 0.25
+
+
+def test_crown_strands_land_across_a_width(verts):
+    """All aimed at one line, they piled into a bright ridge: Adam's "cat ears"."""
+    a, origin_x, h = _crown(verts)
+    tips = facegl.hair_rest(a)[a[:, 4] > 0.97]
+    for side in (-1, 1):
+        x = tips[(tips[:, 0] - origin_x) * side > 0, 0]
+        assert x.std() > 0.25 * h
+    xy = head_with_skull(verts)
+    rows = np.linspace(min(verts[105, 1], verts[334, 1]), max(verts[172, 1], verts[397, 1]), 12)
+    widest = max(abs(facegl.silhouette_edge(xy, y, s, 2 * facegl.point_spacing(xy), centre=origin_x,
+                                            gap=facegl.HAIR_GAP * h) - origin_x) for y in rows for s in (-1, 1))
+    side = np.sign(a[:, 7])
+    reach = np.abs(a[:, 7]) * facegl.HAIR_SPREAD * a[:, 3] / facegl.HAIR_LENGTH
+    landing = reach + (a[:, 0] - origin_x) * side           # clears the head's widest point, every strand
+    assert landing[reach > 0].min() > 0.9 * widest + facegl.HAIR_CROWN_CLEAR * h
