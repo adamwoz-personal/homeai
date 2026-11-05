@@ -80,6 +80,7 @@ shipped copy is `deploy/zeroclaw/SOUL.md`. After editing it, measure with
 | Symptom | Check | Usual fix |
 |---|---|---|
 | Never wakes | Logs show `wake detector`? The right mic? | `HOMEAI_INPUT_DEVICE`, or lower the wake threshold |
+| Jarvis not responding, no wake at all | Logs show `microphone silent` or `microphone stalled, giving up`? The watchdog reopens a silent mic after 5 s, three tries, then exits so systemd restarts it | If restarts hit the limit (5 in 5 min), replug the webcam, then `systemctl --user reset-failed homeai` and `systemctl --user start homeai` |
 | Wakes, then "Something went wrong" | `journalctl --user -u homeai -n 50` | `ollama ps`: the model isn't loaded. `ollama run llama31-voice ""` |
 | Slow replies (over 5 s) | `ollama ps` shows a CPU % | Something else is using the VRAM (the coder's llama-server); see below |
 | Repeats itself or recites lists | `tools/inspect_zc_memory.py`, `tools/probe_agent_prompt.py`, `tools/eval_repeat_followup.py`; journal "dropped N sentence(s) repeating" | Make sure `memory_recall` is not in the voice profile's `allowed_tools`. Restated sentences are filtered (`dialogue.drop_repeated_sentences`, `REPEAT_OVERLAP` 0.6); "say that again" bypasses it |

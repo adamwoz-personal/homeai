@@ -8,12 +8,18 @@ The capture thread must never block and never die. It writes into a fixed-size
 ring buffer; consumers copy out what they need. If the device disappears (the
 webcam is unplugged) the thread reports unhealthy and retries rather than
 raising into the main loop.
+
+A device can also stop delivering audio with no error at all: the webcam mic did
+on 2026-11-05 and Jarvis went deaf until a manual restart. ``MicWatchdog`` notices
+that the callbacks stopped, reopens the stream, and asks to exit if that fails.
 """
 
 from __future__ import annotations
 
 import logging
 import threading
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -192,6 +198,7 @@ class Microphone:
         self._paused = threading.Event()
         self._healthy = threading.Event()
         self.device: DeviceInfo | None = None
+        self.callbacks = 0  # the device's heartbeat: counts on while paused, unlike buffer.total_written
 
     @property
     def healthy(self) -> bool:
@@ -211,6 +218,7 @@ class Microphone:
         self._paused.clear()
 
     def _callback(self, indata, frames, time_info, status) -> None:  # noqa: ANN001
+        self.callbacks += 1
         if status:
             log.debug("audio callback status: %s", status)
         if self._paused.is_set():
@@ -257,3 +265,92 @@ class Microphone:
                 log.exception("error closing audio stream")
             finally:
                 self._stream = None
+
+    def reopen(self) -> tuple[bool, str]:
+        """Close the stream and open a new one. The ring buffer and its cursors carry on."""
+        self.stop()
+        return self.start()
+
+
+class MicWatchdog:
+    """Reopens a microphone whose callbacks have stopped; calls ``on_give_up`` if that doesn't help.
+
+    Closing a wedged device can block forever, so each reopen runs on its own
+    thread and a reopen that overruns ``reopen_timeout_s`` counts as giving up.
+    """
+
+    def __init__(self, mic: Microphone, on_give_up: Callable[[], None], stall_s: float = 5.0, check_s: float = 1.0,
+                 max_reopens: int = 3, reopen_timeout_s: float = 10.0,
+                 clock: Callable[[], float] = time.monotonic) -> None:
+        self._mic = mic
+        self._on_give_up = on_give_up
+        self._stall_s = stall_s
+        self._check_s = check_s
+        self._max_reopens = max_reopens
+        self._reopen_timeout_s = reopen_timeout_s
+        self._clock = clock
+        self._seen = mic.callbacks
+        self._alive_at = clock()
+        self._reopens = 0
+        self._gave_up = False
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def check(self) -> None:
+        """One look at the heartbeat."""
+        if self._gave_up:
+            return
+        now = self._clock()
+        beats = self._mic.callbacks
+        if beats != self._seen:
+            self._seen, self._alive_at, self._reopens = beats, now, 0
+            return
+        quiet = now - self._alive_at
+        if quiet < self._stall_s:
+            return
+        if self._reopens >= self._max_reopens:
+            self._give_up(f"no audio after {self._reopens} reopens")
+            return
+        self._reopens += 1
+        log.warning("microphone silent for %.1f s: reopening (try %d of %d)", quiet, self._reopens, self._max_reopens)
+        if not self._reopen():
+            self._give_up(f"reopen did not finish in {self._reopen_timeout_s:.0f} s")
+            return
+        self._alive_at = self._clock()         # a fresh stream gets a full stall_s to start
+
+    def _reopen(self) -> bool:
+        """False if the reopen is still stuck after the timeout. A failed open is left to the next check."""
+        def attempt() -> None:
+            try:
+                ok, problem = self._mic.reopen()
+                if not ok:
+                    log.warning("microphone reopen failed: %s", problem)
+            except Exception:  # noqa: BLE001 - PortAudio raises broadly
+                log.exception("microphone reopen failed")
+
+        worker = threading.Thread(target=attempt, name="mic-reopen", daemon=True)
+        worker.start()
+        worker.join(self._reopen_timeout_s)
+        return not worker.is_alive()
+
+    def _give_up(self, why: str) -> None:
+        self._gave_up = True
+        log.error("microphone stalled, giving up: %s", why)
+        self._on_give_up()
+
+    def _run(self) -> None:
+        while not self._stop.wait(self._check_s):
+            try:
+                self.check()
+            except Exception:  # noqa: BLE001 - the watchdog must outlive what it watches
+                log.exception("microphone watchdog check failed")
+
+    def start(self) -> None:
+        self._seen, self._alive_at = self._mic.callbacks, self._clock()
+        self._thread = threading.Thread(target=self._run, name="mic-watchdog", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None and self._thread is not threading.current_thread():
+            self._thread.join(timeout=self._reopen_timeout_s + 1)

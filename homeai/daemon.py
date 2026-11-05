@@ -22,6 +22,7 @@ from __future__ import annotations
 import collections
 import concurrent.futures
 import logging
+import os
 import queue
 import signal
 import sys
@@ -33,7 +34,7 @@ import numpy as np
 
 from .agent_cli import build_agent_client
 from .memory import ConversationMemory
-from .audio import Microphone
+from .audio import Microphone, MicWatchdog
 from .avatar.presence import Presence
 from .config import Config, load
 from .safety import Verdict, check_utterance, sanitise_for_speech
@@ -102,12 +103,15 @@ HOME_PENDING_S = 30.0
 # Pause between the end of a reply and opening a follow-up window, so the
 # capture does not start on the acoustic tail of Jarvis's own voice.
 FOLLOWUP_SETTLE_S = 0.25
+FORCED_EXIT_S = 15.0    # a wedged device can hang shutdown; systemd must still get its restart
 
 
 class VoiceAssistant:
     def __init__(self, cfg: Config | None = None) -> None:
         self.cfg = cfg or load()
         self.mic = Microphone(self.cfg.audio)
+        self.mic_watchdog = MicWatchdog(self.mic, self._mic_gave_up)
+        self._exit_code = 0
         self.stt = Transcriber(self.cfg.stt)
         self.tts = Speaker(self.cfg.tts, self.cfg.audio.output_device)
         # Avatar event feed; a no-op (no socket) when HOMEAI_AVATAR=0.
@@ -902,6 +906,7 @@ class VoiceAssistant:
         if not ok:
             log.error("microphone: %s", problem)
             return False
+        self.mic_watchdog.start()
 
         self._detector, description = build_detector(self.cfg.wake)
         log.info("wake detector: %s", description)
@@ -961,9 +966,18 @@ class VoiceAssistant:
             log.warning("long-term memory disabled: %s", exc)
             return None
 
+    def _mic_gave_up(self) -> None:
+        """Exit non-zero so systemd restarts the service; a new process can reach a device this one can't."""
+        self._exit_code = 1
+        self._stop.set()
+        forced = threading.Timer(FORCED_EXIT_S, os._exit, (1,))
+        forced.daemon = True
+        forced.start()
+
     def stop(self) -> None:
         log.info("shutting down")
         self._stop.set()
+        self.mic_watchdog.stop()        # first: a closing stream is not a stalled one
         for thread in self._threads:
             thread.join(timeout=3)
         self.mic.stop()
@@ -988,7 +1002,7 @@ class VoiceAssistant:
             pass
         finally:
             self.stop()
-        return 0
+        return self._exit_code
 
 
 def main(argv: list[str] | None = None) -> int:

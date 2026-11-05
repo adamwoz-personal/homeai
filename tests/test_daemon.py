@@ -936,3 +936,66 @@ def test_goodnight_is_answered_even_without_a_conversation(quick) -> None:
     quick.memory.clear() if hasattr(quick.memory, "clear") else None
     _, spoken = _closing(quick, "Sleep well, Adam.", heard="Hey Jarvis, good night.")
     assert spoken == ["Sleep well, Adam."]
+
+
+class TestMicStall:
+    def _assistant(self):
+        from homeai.config import Config
+        from homeai.daemon import VoiceAssistant
+
+        return VoiceAssistant(Config())
+
+    def test_giving_up_ends_the_run_with_a_failure_so_systemd_restarts_it(self, monkeypatch) -> None:
+        import homeai.daemon as daemon
+
+        va = self._assistant()
+        started = []
+        monkeypatch.setattr(va, "start", lambda: True)
+        monkeypatch.setattr(va, "stop", lambda: None)
+        timer = _NoTimer()
+        monkeypatch.setattr(daemon.threading, "Timer", lambda *a: started.append(a) or timer)
+        monkeypatch.setattr(daemon.signal, "signal", lambda *a: None)
+        va._mic_gave_up()
+        assert va.run_forever() == 1
+        assert started == [(daemon.FORCED_EXIT_S, daemon.os._exit, (1,))]
+        assert timer.running and timer.daemon
+
+    def test_a_clean_stop_exits_zero(self, monkeypatch) -> None:
+        import homeai.daemon as daemon
+
+        va = self._assistant()
+        monkeypatch.setattr(va, "start", lambda: True)
+        monkeypatch.setattr(va, "stop", lambda: None)
+        monkeypatch.setattr(daemon.signal, "signal", lambda *a: None)
+        va._stop.set()
+        assert va.run_forever() == 0
+
+    def test_shutdown_stops_the_watchdog_before_the_microphone(self, monkeypatch) -> None:
+        va = self._assistant()
+        order = []
+        monkeypatch.setattr(va.mic_watchdog, "stop", lambda: order.append("watchdog"))
+        monkeypatch.setattr(va.mic, "stop", lambda: order.append("mic"))
+        monkeypatch.setattr(va.presence, "stop", lambda: None)
+        va.stop()
+        assert order == ["watchdog", "mic"]
+
+    def test_starting_the_microphone_starts_the_watchdog(self, monkeypatch) -> None:
+        va = self._assistant()
+        started = []
+        monkeypatch.setattr(va, "preflight", lambda: [])
+        monkeypatch.setattr(va.mic, "start", lambda: (False, "stop here"))
+        monkeypatch.setattr(va.mic_watchdog, "start", lambda: started.append(True))
+        assert va.start() is False and not started     # no microphone, nothing to watch
+        monkeypatch.setattr(va.mic, "start", lambda: (True, ""))
+        monkeypatch.setattr("homeai.daemon.build_detector", lambda cfg: (_ for _ in ()).throw(RuntimeError("enough")))
+        with pytest.raises(RuntimeError):
+            va.start()
+        assert started == [True]
+
+
+class _NoTimer:
+    daemon = False
+    running = False
+
+    def start(self) -> None:
+        self.running = True

@@ -10,10 +10,16 @@ wrap-around cases that are easy to get subtly wrong and hard to debug live.
 
 from __future__ import annotations
 
+import sys
+import threading
+import time
+import types
+
 import numpy as np
 import pytest
 
-from homeai.audio import RingBuffer, rms
+from homeai.audio import Microphone, MicWatchdog, RingBuffer, rms
+from homeai.config import AudioConfig
 
 
 class TestRingBufferBasics:
@@ -204,3 +210,162 @@ class TestReadNewCursor:
         buf = RingBuffer(5)
         buf.write(np.ones(20, dtype=np.float32))
         assert buf.total_written == 20
+
+
+class FakeStream:
+    """Stands in for sd.InputStream: delivers audio only when told to."""
+
+    opened: list["FakeStream"] = []
+
+    def __init__(self, callback, **_kwargs) -> None:
+        self.callback = callback
+        self.closed = False
+        FakeStream.opened.append(self)
+
+    def start(self) -> None:
+        pass
+
+    def stop(self) -> None:
+        pass
+
+    def close(self) -> None:
+        self.closed = True
+
+    def deliver(self) -> None:
+        self.callback(np.ones((4, 1), dtype=np.float32), 4, None, None)
+
+
+@pytest.fixture
+def mic(monkeypatch):
+    FakeStream.opened = []
+    fake = types.SimpleNamespace(InputStream=FakeStream, query_devices=lambda: [
+        {"name": "HD WEBCAM", "max_input_channels": 1, "default_samplerate": 16000}])
+    monkeypatch.setitem(sys.modules, "sounddevice", fake)
+    m = Microphone(AudioConfig(input_match="WEBCAM"))
+    assert m.start() == (True, "")
+    return m
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def watched(mic, **kwargs):
+    clock, gave_up = Clock(), []
+    return MicWatchdog(mic, lambda: gave_up.append(True), clock=clock, **kwargs), clock, gave_up
+
+
+class TestMicWatchdog:
+    def test_a_silent_stream_is_reopened_and_audio_carries_on(self, mic) -> None:
+        dog, clock, gave_up = watched(mic)
+        first = FakeStream.opened[0]
+        first.deliver()
+        dog.check()
+        cursor = mic.buffer.total_written
+        clock.now = 5.0
+        dog.check()
+        assert first.closed and len(FakeStream.opened) == 2 and not gave_up
+        FakeStream.opened[1].deliver()
+        assert mic.buffer.total_written > cursor        # same buffer: readers' cursors stay valid
+
+    def test_a_short_gap_is_left_alone(self, mic) -> None:
+        dog, clock, _ = watched(mic)
+        clock.now = 4.9
+        dog.check()
+        assert len(FakeStream.opened) == 1
+
+    def test_flowing_audio_is_left_alone(self, mic) -> None:
+        dog, clock, _ = watched(mic)
+        for second in range(1, 20):
+            FakeStream.opened[0].deliver()
+            clock.now = float(second)
+            dog.check()
+        assert len(FakeStream.opened) == 1
+
+    def test_pausing_for_speech_is_not_a_stall(self, mic) -> None:
+        """While Jarvis talks nothing reaches the buffer, but the device is fine."""
+        dog, clock, _ = watched(mic)
+        mic.pause()
+        for second in range(1, 20):
+            FakeStream.opened[0].deliver()
+            clock.now = float(second)
+            dog.check()
+        assert mic.buffer.total_written == 0 and len(FakeStream.opened) == 1
+
+    def test_gives_up_once_after_the_reopens_run_out(self, mic) -> None:
+        dog, clock, gave_up = watched(mic, max_reopens=3)
+        for _ in range(3):
+            clock.now += 5.0
+            dog.check()
+        assert len(FakeStream.opened) == 4 and not gave_up
+        clock.now += 5.0
+        dog.check()
+        clock.now += 5.0
+        dog.check()
+        assert gave_up == [True] and len(FakeStream.opened) == 4
+
+    def test_each_new_stream_gets_a_full_stall_period(self, mic) -> None:
+        dog, clock, _ = watched(mic)
+        clock.now = 5.0
+        dog.check()
+        clock.now = 9.9
+        dog.check()
+        assert len(FakeStream.opened) == 2
+
+    def test_recovery_earns_back_the_reopens(self, mic) -> None:
+        dog, clock, gave_up = watched(mic, max_reopens=1)
+        for _ in range(3):
+            clock.now += 5.0
+            dog.check()                                 # silent: one reopen
+            FakeStream.opened[-1].deliver()
+            clock.now += 1.0
+            dog.check()                                 # audio came back
+        assert not gave_up and len(FakeStream.opened) == 4
+
+    def test_a_failed_open_is_retried(self, mic, monkeypatch) -> None:
+        dog, clock, gave_up = watched(mic)
+        monkeypatch.setattr(mic, "reopen", lambda: (False, "no device"))
+        clock.now = 5.0
+        dog.check()
+        assert not gave_up
+        calls = []
+        monkeypatch.setattr(mic, "reopen", lambda: (calls.append(1), (True, ""))[1])
+        clock.now = 10.0
+        dog.check()
+        assert calls == [1]
+
+    def test_a_reopen_that_raises_does_not_stop_the_watch(self, mic, monkeypatch) -> None:
+        def boom():
+            raise OSError("PortAudio")
+
+        dog, clock, gave_up = watched(mic)
+        monkeypatch.setattr(mic, "reopen", boom)
+        clock.now = 5.0
+        dog.check()
+        assert not gave_up
+
+    def test_a_reopen_stuck_on_a_wedged_device_gives_up_without_hanging(self, mic, monkeypatch) -> None:
+        release = threading.Event()
+        monkeypatch.setattr(mic, "reopen", lambda: release.wait(5) and (True, ""))
+        dog, clock, gave_up = watched(mic, reopen_timeout_s=0.05)
+        clock.now = 5.0
+        started = time.monotonic()
+        dog.check()
+        release.set()
+        assert gave_up == [True] and time.monotonic() - started < 1.0
+
+    def test_runs_on_its_own_thread_until_stopped(self, mic) -> None:
+        dog = MicWatchdog(mic, lambda: None, stall_s=0.02, check_s=0.005, max_reopens=10_000, reopen_timeout_s=0.1)
+        dog.start()
+        deadline = time.monotonic() + 2.0
+        while len(FakeStream.opened) < 2 and time.monotonic() < deadline:
+            time.sleep(0.005)
+        dog.stop()
+        settled = len(FakeStream.opened)
+        assert settled >= 2
+        time.sleep(0.05)
+        assert len(FakeStream.opened) == settled

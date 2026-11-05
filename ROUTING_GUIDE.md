@@ -1885,3 +1885,14 @@ Speech now reaches the aura hair through a ring buffer, delayed by distance alon
 - Transform feedback reading only `gl_Position` lets GLSL drop unused inputs, and `vertex_array` then raises
   KeyError on them. Also capture `c` to keep every input live.
 - A test that fails for that reason still "kills" mutants. Get the test green before trusting its mutant run.
+
+## A heartbeat has to count on while the mic is paused (2026-11-05)
+
+- The planned stall signal was `buffer.total_written`, but the callback returns before writing while Jarvis
+  speaks, so a long reply would have looked like a dead mic. `Microphone.callbacks` counts every callback
+  instead.
+- Closing a wedged device can block forever, so a reopen runs on its own thread with a timeout, and giving up
+  starts a 15 s forced exit in case shutdown hangs on the same device.
+- Measure before building on an idea from a plan: the ether layer added 0.02 of 255 to the dark half of the
+  720x720 window because the longer hair had already filled it. Adam dropped it.
+
