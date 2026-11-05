@@ -283,7 +283,7 @@ class FaceMotion:
         out["grey"] = self._step("grey", sf.grey, dt)
         out["eye_tint"] = self._step("eye_tint", sf.eye_tint, dt)
         speed, hamp = sf.hair
-        out["hair_amp"] = self._step("hair_amp", hamp + 0.8 * low, dt)
+        out["hair_amp"] = self._step("hair_amp", hamp, dt)
         self._hair_phase = (self._hair_phase + self._step("hair_speed", speed, dt) * dt) % HAIR_PHASE_WRAP
         out["hair_phase"] = self._hair_phase
         out["glow"] = clamp(0.4 * level + 0.6 * out["jaw_open"], 0.0, 1.0)

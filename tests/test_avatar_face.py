@@ -238,3 +238,13 @@ def test_sphere_look_never_loads_the_face():
     from homeai.avatar import app
 
     assert app.choose_look("sphere", _broken) == ("sphere", None, "asked for the sphere")
+
+
+def test_speech_does_not_swell_the_whole_hair():
+    """The sway swell travels down the strands with the pulse (facegl.HairPulse)."""
+    quiet, loud = face.FaceMotion(), face.FaceMotion()
+    for i in range(60):
+        t = i / 60
+        a = quiet.update(t, 1 / 60, "speaking", (), 0.0, 0.0)
+        b = loud.update(t, 1 / 60, "speaking", (), 0.0, 1.0)
+    assert a["hair_amp"] == b["hair_amp"]

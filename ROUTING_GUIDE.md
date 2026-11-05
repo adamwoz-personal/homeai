@@ -4,7 +4,7 @@
 with Claude (paid). Updated as evidence accumulates. Every rule here comes from an
 observed outcome on this box, not from theory.
 
-Last updated: 2026-11-04
+Last updated: 2026-11-05
 
 ---
 
@@ -1843,3 +1843,18 @@ words are ≥60 % from one earlier reply (keeps short ones; never empties a
 reply; skipped for "say that again"). `tools/eval_repeat_followup.py`
 reproduced it in 3/6 follow-ups and the filter removed every one. Also
 seen: a reply wrapped in quotes, now `unwrap_quotes`.
+
+## Measuring a travelling hair pulse (2026-11-05)
+
+Speech now reaches the aura hair through a ring buffer, delayed by distance along each strand
+(`facegl.HairPulse`). Lessons from proving it:
+- **Check that a metric can show the effect before believing it.** Distance from the image centre rose and fell
+  (0.39, 0.43, 0.40, 0.38, 0.35) although the shader was right: roots run down the whole silhouette, so a pulse
+  starts at every radius. Measuring along the strand gave 0.22, 0.70 and 1.26 face heights at 0.1, 0.3 and 0.6 s
+  (2 runs, identical), matching `HAIR_PULSE_SPEED` 2.6. See `tools/avatar/probe_hair_pulse.py`.
+- **A mutant killed by an always-failing test proves nothing.** `av4b-poses-inherit-speech` showed as killed while
+  its test failed on clean code, because `HairWave` carries state between poses. Run the suite clean first.
+- **Golden tolerance hides brightness bugs.** The pulse-fade mutant passed the golden and a pixel-share check. Light
+  gained from 0.3 to 0.6 s separates it: ratio 1.31 clean, 0.90 with the bug.
+- **`build_face.py` blur changes the face itself.** `blur_sigma 2.0` smears the art's own dots into soft shading;
+  v1 still rebuilds byte-identically from the JPG. See AVATAR_PLAN Phase 4b.

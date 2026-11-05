@@ -114,3 +114,56 @@ def test_eyes_take_the_states_colour(face_renders):
     rest, _ = _eye_box(out["rest"])                                       # staged speaking: cyan
     thinking, _ = _eye_box(out["thinking"])
     assert thinking[0] / thinking[1] > rest[0] / rest[1] + 0.05           # thinking's lavender
+
+
+@pytest.fixture(scope="module")
+def pulse_asset():
+    pytest.importorskip("moderngl")
+    return tour.golden_asset()
+
+
+def _shots(asset, delays, low=0.0):
+    try:
+        return tour.render_pulse(asset, delays, tour.FACE_GOLDEN_SIZE, low=low)
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"no headless GL: {exc}")
+
+
+def test_speech_pulse_travels_down_the_hair(pulse_asset):
+    """Adam: flash the roots and let it travel, not the whole hair at once."""
+    delays = (0.1, 0.3, 0.6)
+    silent, lit, rest, arc = _shots(pulse_asset, delays)
+    places = [tour.pulse_arc(lit[d], silent, rest, arc)[0] for d in delays]
+    assert places[0] < places[1] < places[2]
+    assert places[2] > 3 * places[0]
+
+
+def test_speech_pulse_finishes_and_leaves_the_hair_quiet(pulse_asset):
+    silent, lit, rest, arc = _shots(pulse_asset, (3.0,), low=1.0)
+    assert tour.pulse_arc(lit[3.0], silent, rest, arc)[1] == 0.0
+
+
+def test_speech_pulse_stays_bright_far_down_the_strands(pulse_asset):
+    """The strand's own fade must not swallow the pulse before it gets anywhere."""
+    delays = (0.3, 0.6)
+    silent, lit, rest, arc = _shots(pulse_asset, delays)
+    near, far = (tour.pulse_light(lit[d], silent) for d in delays)
+    assert far > 1.1 * near
+
+
+def test_face_poses_do_not_inherit_speech(pulse_asset, monkeypatch):
+    from homeai.avatar import facegl
+
+    heard = []
+    draw = facegl.FaceRenderer.draw
+
+    def spy(self, frame, *args, **kwargs):
+        heard.append(bool(self.pulse.ring.any()))
+        return draw(self, frame, *args, **kwargs)
+
+    monkeypatch.setattr(facegl.FaceRenderer, "draw", spy)
+    try:
+        list(tour.render_face(pulse_asset, ("pulse", "rest"), tour.FACE_GOLDEN_SIZE))
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"no headless GL: {exc}")
+    assert heard == [True, False]

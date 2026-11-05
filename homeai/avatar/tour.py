@@ -62,7 +62,9 @@ def staged(state: str, t0: float = 100.0, settle: bool = True) -> tuple[Scene, f
 
 
 FACE_VISEMES = ("rest", "PP", "FF", "TH", "DD", "SH", "RR", "KK", "OU", "AA", "EH", "IH")
-FACE_TOUR = FACE_VISEMES + ("blink", "sleep", "listening", "thinking", "offline")
+FACE_TOUR = FACE_VISEMES + ("blink", "sleep", "listening", "thinking", "offline", "pulse")
+PULSE_BURST_S = 0.12        # one loud syllable
+PULSE_POSE_DELAY_S = 0.35   # the "pulse" pose: this long after the burst began
 
 
 def held_viseme(start: float, cls: str, seconds: float = 1.0, hz: int = 60) -> dict:
@@ -83,7 +85,7 @@ def staged_face(name: str, t0: float = 100.0) -> tuple[Scene, float]:
         scene.apply(held_viseme(t, name))
         end = t + 0.5
     else:
-        scene, t = staged("idle" if name == "blink" else name, t0=t0)
+        scene, t = staged("idle" if name in ("blink", "pulse") else name, t0=t0)
         end = t + (BLINK_CLOSE_S + 0.01 if name == "blink" else 0.0)
         if name == "blink":
             scene.face.blink_now(t)
@@ -91,6 +93,44 @@ def staged_face(name: str, t0: float = 100.0) -> tuple[Scene, float]:
         t = min(end, t + 1 / 60)
         scene.frame(t)
     return scene, t
+
+
+def speech_burst(pulse, t: float, delay: float, length: float = PULSE_BURST_S, low: float = 1.0) -> None:
+    """Give a HairPulse the history of one loud burst that began ``delay`` s before ``t``.
+
+    ``low=0`` leaves brightness alone: no sway or dot growth to confuse a measurement.
+    """
+    pulse.reset()
+    start, step = t - delay, 1 / 60
+    for i in range(int(round(delay / step))):
+        u = start + i * step
+        loud = 1.0 if u < start + length else 0.0
+        pulse.advance(u, low * loud, loud, loud)
+
+
+def pulse_arc(rgb, silent, rest_px, arc, threshold: int = 24) -> tuple[float, float]:
+    """Where a pulse is: median ``arc`` of the hair points nearest the changed pixels, and their share.
+
+    ``rest_px`` is each hair point's resting pixel and ``arc`` its distance along
+    its strand. Distance from the image centre won't do: roots run down the whole
+    silhouette, so a pulse starts at every radius.
+    """
+    import numpy as np
+    from scipy.spatial import cKDTree
+
+    diff = np.abs(rgb.astype(np.int16) - silent.astype(np.int16)).max(axis=2)
+    ys, xs = np.nonzero(diff > threshold)
+    if not len(xs):
+        return 0.0, 0.0
+    near = cKDTree(rest_px).query(np.column_stack([xs, ys]))[1]
+    return float(np.median(arc[near])), float(len(xs) / diff.size)
+
+
+def pulse_light(rgb, silent) -> float:
+    """How much light a pulse adds: mean brightness gain over the frame."""
+    import numpy as np
+
+    return float((rgb.astype(np.float64) - silent.astype(np.float64)).clip(min=0).mean())
 
 
 def tour_index(elapsed: float, per_state: float, count: int = len(TOUR)) -> int | None:
@@ -150,8 +190,8 @@ def render_states(states=TOUR, size: tuple[int, int] = (360, 360), points: int =
         ctx.release()
 
 
-def render_face_golden(poses=FACE_TOUR, fixture=None):
-    """Yield ``(pose, rgb)`` of the synthetic test face (tests/fixtures/avatar landmarks)."""
+def golden_asset(fixture=None):
+    """The synthetic test face (tests/fixtures/avatar landmarks)."""
     import json
     import tempfile
     from pathlib import Path
@@ -165,8 +205,12 @@ def render_face_golden(poses=FACE_TOUR, fixture=None):
     with tempfile.TemporaryDirectory() as tmp:
         facebuild.synthetic_face(np.array(data["landmarks"]), int(data["image_size"][0]), Path(tmp) / "v1",
                                  points=FACE_GOLDEN_POINTS)
-        asset = assets.load(Path(tmp) / "v1")
-    yield from render_face(asset, poses, FACE_GOLDEN_SIZE)
+        return assets.load(Path(tmp) / "v1")
+
+
+def render_face_golden(poses=FACE_TOUR, fixture=None):
+    """Yield ``(pose, rgb)`` of the synthetic test face."""
+    yield from render_face(golden_asset(fixture), poses, FACE_GOLDEN_SIZE)
 
 
 def render_face(asset, poses=FACE_TOUR, size: tuple[int, int] = (360, 360), hair: bool = True,
@@ -185,9 +229,45 @@ def render_face(asset, poses=FACE_TOUR, size: tuple[int, int] = (360, 360), hair
         for name in poses:
             scene, t = staged_face(name)
             frame = scene.frame(t)
+            renderer.pulse.reset()                          # poses don't inherit each other's speech
+            if name == "pulse":
+                speech_burst(renderer.pulse, t, PULSE_POSE_DELAY_S)
             renderer.draw(frame, t, size, captions=raster.image(frame.captions, size) if captions else None)
             rgb = np.frombuffer(fbo.read(components=3), dtype=np.uint8).reshape(size[1], size[0], 3)
             yield name, np.flipud(rgb).copy()
+    finally:
+        renderer.release()
+        ctx.release()
+
+
+def render_pulse(asset, delays, size: tuple[int, int] = (360, 360), low: float = 1.0):
+    """``(silent rgb, {delay: rgb}, hair rest px, arc in face heights)``: the idle face with no
+    speech, then ``delay`` s after a burst."""
+    import numpy as np
+
+    from . import gl
+    from . import facegl
+
+    ctx, fbo = gl.headless(size)
+    renderer = facegl.FaceRenderer(ctx, asset)
+    scene, t = staged("idle")
+    frame = scene.frame(t)
+
+    def shot():
+        renderer.draw(frame, t, size)
+        rgb = np.frombuffer(fbo.read(components=3), dtype=np.uint8).reshape(size[1], size[0], 3)
+        return np.flipud(rgb).copy()
+
+    try:
+        renderer.pulse.reset()
+        silent = shot()
+        out = {}
+        for delay in delays:
+            speech_burst(renderer.pulse, t, delay, low=low)
+            out[delay] = shot()
+        layout = facegl.hair_layout(facegl.lit_points(asset.xy, asset.colour), asset.verts, renderer.spacing)
+        rest = facegl.to_pixels(facegl.hair_rest(layout), renderer.side, size, zoom=renderer.zoom)
+        return silent, out, rest, layout[:, 3] * layout[:, 4] / renderer.geo["face_h"]
     finally:
         renderer.release()
         ctx.release()

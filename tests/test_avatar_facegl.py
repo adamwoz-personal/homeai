@@ -194,6 +194,51 @@ def test_hair_wave_never_jumps_when_listening_starts_or_wraps():
     assert moves[0] > 0 and moves[45] < 0                   # outward, then toward the head
 
 
+def test_hair_pulse_keeps_speech_in_time_order():
+    p = facegl.HairPulse()
+    assert p.advance(10.0, 0.2, 0.3, 0.4)
+    first = p.head
+    assert p.advance(10.0 + 1 / 60, 0.5, 0.6, 0.7)
+    assert p.head == first + 1
+    np.testing.assert_allclose(p.ring[first, :3], (0.2, 0.3, 0.4))
+    np.testing.assert_allclose(p.ring[p.head, :3], (0.5, 0.6, 0.7))
+
+
+def test_hair_pulse_runs_on_time_not_frames():
+    """The window drops to low fps in some states: a slow frame still moves speech
+    the right distance, and a fast one adds nothing."""
+    p = facegl.HairPulse()
+    p.advance(10.0, 0.0, 0.0, 0.0)
+    start = p.head
+    assert p.advance(10.1, 1.0, 1.0, 1.0)
+    assert p.head - start == 6
+    np.testing.assert_allclose(p.ring[start + 1:p.head + 1, 0], 1.0)
+    assert not p.advance(10.1001, 0.0, 0.0, 0.0)
+    assert p.ring[p.head, 0] == 1.0
+
+
+def test_hair_pulse_clears_when_time_goes_backwards():
+    p = facegl.HairPulse()
+    p.advance(10.0, 1.0, 1.0, 1.0)
+    p.advance(5.0, 0.0, 0.0, 0.0)
+    assert not p.ring.any()
+
+
+def test_hair_pulse_swell_rises_slowly():
+    """Sway follows speech gently: Adam dislikes fast or jumpy hair."""
+    p = facegl.HairPulse()
+    p.advance(10.0, 1.0, 0.0, 0.0)
+    assert 0.0 < p.ring[p.head, 3] < 0.1
+    for i in range(1, 121):
+        p.advance(10.0 + i / 60, 1.0, 0.0, 0.0)
+    assert p.ring[p.head, 3] > 0.99
+
+
+def test_hair_pulse_ring_outlasts_the_longest_strand():
+    delay = facegl.HAIR_CROWN_LEN[1] / facegl.HAIR_PULSE_SPEED * facegl.HAIR_PULSE_HZ
+    assert delay < facegl.HAIR_PULSE_SAMPLES - 2
+
+
 def test_view_sits_the_image_on_the_window_bottom():
     side = 1000.0
     px = facegl.to_pixels(np.array([[0, 0], [side, side]]), side, (800, 800), zoom=0.8)

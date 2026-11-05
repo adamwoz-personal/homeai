@@ -15,7 +15,8 @@ face.FaceMotion). Works on a window or a headless EGL context.
   points bound between the inner lips, visible only as the lips part.
 - Aura hair: strands rooted on an ellipse around the skull, flowing outward
   and down, coloured and moved by the state like the sphere (colour, glow,
-  ripple = waves run inward, swirl, ring, speech bands).
+  ripple = waves run inward, swirl, ring). Speech starts at the roots and
+  travels down each strand (HairPulse), so no point flashes all at once.
 """
 from __future__ import annotations
 
@@ -40,6 +41,10 @@ HAIR_SPREAD = 0.38          # Adam 2026-11-04: drift wider, less gravity (was 0.
 HAIR_DROP = 0.85
 HAIR_GRAVITY = 0.45
 HAIR_LOCKS = 9.0            # rad of wave phase from the top root to the bottom one
+HAIR_PULSE_HZ = 60          # speech history samples per second
+HAIR_PULSE_SAMPLES = 128    # ring length: must outlast the slowest strand (2.1 s)
+HAIR_PULSE_SPEED = 2.6      # face heights per second: about 1 s to the longest crown tip (Adam: travel, not flash)
+HAIR_SWELL_OMEGA = 4.0      # rad/s: the travelling sway follows speech this slowly (Adam dislikes jumpy hair)
 HEAD_DEPTH = 0.25           # head pose shift, share of the face height
 ZOOM = 0.86                 # the image's height as a share of the window: room for the aura
 LUMA = (0.299, 0.587, 0.114)
@@ -106,8 +111,9 @@ uniform float swirl;
 uniform float ripple;
 uniform float ring;
 uniform float ring_amp;
-uniform float low;
-uniform float high;
+uniform sampler2D pulse;    // recent speech (HairPulse): x low, y high, z openness, w swell
+uniform int pulse_head;     // newest sample
+uniform float pulse_per_px; // samples of delay per image px along a strand
 uniform float glow;
 uniform vec3 colour;
 uniform float spread;       // outward drift at the tip, x strand length
@@ -122,11 +128,20 @@ in float size;
 in vec2 aim;        // outward direction x reach: (side, 0) at the sides, up and over on the crown
 in float droop;     // how much of the fall applies: 1 at the sides, less on the crown
 out vec3 c;
+vec4 speech(float delay) {  // the ring ``delay`` samples ago, blended between samples
+    int n = textureSize(pulse, 0).x;
+    float d = min(delay, float(n - 2));
+    int back = int(d);
+    vec4 a = texelFetch(pulse, ivec2((pulse_head - back + n) % n, 0), 0);
+    vec4 b = texelFetch(pulse, ivec2((pulse_head - back - 1 + n) % n, 0), 0);
+    return mix(a, b, d - float(back));
+}
 void main() {
+    vec4 sp = speech(s * len * pulse_per_px);
     float sway = 0.05 * sin(swirl + phase);             // thinking: strands swing as a whole
     float curl = 0.11 * sin(7.0 * s + phase) * s;          // resting wave: wavy even when still
     float wv = (sin(8.0 * s - hair_wave + phase) * 0.10
-              + sin(3.5 * s - 0.6 * hair_phase + phase * 1.7) * 0.07) * hair_amp * s + curl;
+              + sin(3.5 * s - 0.6 * hair_phase + phase * 1.7) * 0.07) * (hair_amp + 0.8 * sp.w) * s + curl;
     // Out from the head, then drifting down: light gravity, felt most at the tips.
     float out_ = spread * (1.0 - (1.0 - s) * (1.0 - s));
     float fall = (1.0 - gravity) * s + gravity * s * s;
@@ -135,8 +150,10 @@ void main() {
     float fade = pow(1.0 - s, 1.1) * smoothstep(0.0, 0.05, s);
     float hit = ring < 0.0 ? 0.0 : 1.0 - smoothstep(0.0, 0.08, abs(s - ring));
     float small = 1.0 - step(1.0, size);
-    c = colour * (0.35 + 0.65 * glow) * fade * (1.0 + 2.0 * ring_amp * hit + 1.5 * high * small) * 1.2;
-    gl_PointSize = point_px * size * (1.0 + 0.6 * low * (1.0 - small));
+    float base = 0.35 + 0.65 * glow;
+    float carry = pow(1.0 - s, 0.35) * smoothstep(0.0, 0.05, s);   // pulses outlast the strand's own fade
+    c = colour * (base * fade * (1.0 + 2.0 * ring_amp * hit) + carry * (0.2 * sp.z + 1.5 * base * sp.y * small)) * 1.2;
+    gl_PointSize = point_px * size * (1.0 + 0.6 * sp.x * (1.0 - small));
 }
 """
 DOT_FRAGMENT = """
@@ -467,6 +484,40 @@ class HairWave:
         return self.wave
 
 
+class HairPulse:
+    """Recent speech as a ring buffer, so the hair can show it with a delay along each strand.
+
+    Rows are low, high, openness and a smoothed low (swell, for the sway). Samples
+    are by time, not by frame, because the window's fps changes with the state; a
+    skipped sample holds the latest values. Time going backwards clears the history.
+    """
+
+    def __init__(self) -> None:
+        self.ring = np.zeros((HAIR_PULSE_SAMPLES, 4), dtype=np.float32)
+        self.reset()
+
+    def reset(self) -> None:
+        self.ring[:] = 0.0
+        self.head = 0
+        self._tick: int | None = None
+        self._swell = 0.0
+
+    def advance(self, t: float, low: float, high: float, openness: float) -> bool:
+        """Record speech up to ``t``; True if the ring changed."""
+        tick = int(t * HAIR_PULSE_HZ)
+        if self._tick is None or tick < self._tick:
+            self.reset()
+            self._tick = tick - 1
+        steps = min(tick - self._tick, HAIR_PULSE_SAMPLES)
+        self._tick = tick
+        k = 1.0 - float(np.exp(-HAIR_SWELL_OMEGA / HAIR_PULSE_HZ))
+        for _ in range(steps):
+            self._swell += (low - self._swell) * k
+            self.head = (self.head + 1) % HAIR_PULSE_SAMPLES
+            self.ring[self.head] = (low, high, openness, self._swell)
+        return steps > 0
+
+
 class FaceRenderer:
     def __init__(self, ctx, asset, hair: bool = True, zoom: float = ZOOM) -> None:
         import moderngl
@@ -487,7 +538,7 @@ class FaceRenderer:
         self.face_vao = ctx.vertex_array(self.face_prog, [
             (self.face_idx, "3i", "idx"),
             (self.face_attrs, "3f 3f 1f 1f 1f", "w", "col", "size", "phase", "layer")])
-        self.hair_prog = self.hair_vbo = self.hair_vao = None
+        self.hair_prog = self.hair_vbo = self.hair_vao = self.pulse_tex = None
         if hair:
             self.hair_prog = ctx.program(vertex_shader=HAIR_VERTEX, fragment_shader=DOT_FRAGMENT)
             layout = hair_layout(lit_points(asset.xy, asset.colour), asset.verts, self.spacing)
@@ -496,8 +547,11 @@ class FaceRenderer:
                 (self.hair_vbo, "2f 1f 1f 1f 1f 1f 2f 1f", "root", "side", "len", "s", "phase", "size",
                  "aim", "droop")])
             self.hair_points = len(layout)
+            self.pulse_tex = ctx.texture((HAIR_PULSE_SAMPLES, 1), 4, dtype="f4")
+            self.pulse_tex.filter = moderngl.NEAREST, moderngl.NEAREST
         self.overlay = Overlay(ctx)
         self.wave = HairWave()
+        self.pulse = HairPulse()
         self.points = len(idx) + (self.hair_points if hair else 0)
 
     @staticmethod
@@ -519,12 +573,17 @@ class FaceRenderer:
                   "head": (p.get("head_yaw", 0.0), p.get("head_pitch", 0.0), p.get("head_roll", 0.0)),
                   "view": view(self.side, size, self.zoom), "low": frame.low, "high": frame.high}
         if self.hair_vao is not None:
+            if self.pulse.advance(t, frame.low, frame.high, frame.openness):
+                self.pulse_tex.write(self.pulse.ring.tobytes())
+            self.pulse_tex.use(1)
             for name, value in {**common, "spread": HAIR_SPREAD, "drop": HAIR_DROP, "gravity": HAIR_GRAVITY,
                                 "point_px": max(1.5, 1.6 * px_per_img * self.spacing),
                                 "hair_phase": p.get("hair_phase", 0.0), "hair_amp": p.get("hair_amp", 1.0),
                                 "hair_wave": self.wave.advance(p.get("hair_phase", 0.0), frame.ripple),
                                 "swirl": frame.swirl, "ripple": frame.ripple, "ring": frame.ring,
-                                "ring_amp": frame.ring_amp, "glow": frame.glow,
+                                "ring_amp": frame.ring_amp, "glow": frame.base_glow, "pulse": 1,
+                                "pulse_head": self.pulse.head,
+                                "pulse_per_px": HAIR_PULSE_HZ / (HAIR_PULSE_SPEED * self.geo["face_h"]),
                                 "colour": tuple(frame.colour)}.items():
                 self._set(self.hair_prog, name, value)
             self.hair_vao.render(self._mgl.POINTS)
@@ -543,7 +602,7 @@ class FaceRenderer:
 
     def release(self) -> None:
         for obj in (self.face_vao, self.face_idx, self.face_attrs, self.face_prog, self.verts_tex,
-                    self.hair_vao, self.hair_vbo, self.hair_prog):
+                    self.hair_vao, self.hair_vbo, self.hair_prog, self.pulse_tex):
             if obj is not None:
                 obj.release()
         self.overlay.release()

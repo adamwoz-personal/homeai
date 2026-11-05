@@ -133,6 +133,7 @@ class Frame:
     ring_amp: float = 0.0
     low: float = 0.0            # speech bands 0-1
     high: float = 0.0
+    base_glow: float = 0.0      # glow without speech: the hair shows speech as a travelling pulse
     captions: list[tuple[str, str, float]] = field(default_factory=list)  # (who, text, alpha)
     params: dict[str, float] = field(default_factory=dict)   # face rig values (face.FaceMotion)
 
@@ -309,4 +310,4 @@ class Scene:
                      glow=min(1.0, self._glow + 0.3 * openness), spin=spin, angle=self._angle,
                      fps=self.fps(now), ripple=ripple, swirl=self._swirl,
                      ring=(now % RING_PERIOD_S) / RING_PERIOD_S if ring_amp > 0.01 else -1.0,
-                     ring_amp=ring_amp, low=low, high=high, captions=self.captions(now, shown))
+                     ring_amp=ring_amp, low=low, high=high, base_glow=self._glow, captions=self.captions(now, shown))
