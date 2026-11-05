@@ -102,6 +102,9 @@ def strip_wake_words(text: str, wake_words: Iterable[str]) -> str:
 # fixed strings are ever sent to Alexa to run a routine; add new ones here.
 ROUTINES = ("all clear", "condition red", "condition yellow", "it's movie time", "it's business time")
 
+# Other ways of asking, now the voice model can't map a mood to a routine.
+ROUTINE_ALIASES = {"red alert": "condition red", "lights back to normal": "all clear"}
+
 _ROUTINE_LEAD = re.compile(r"^(?:(?:run|start|do|trigger|activate|go|set|engage|initiate|begin)\s+"
                            r"(?:(?:to|the|my|our)\s+)*)?")
 _ROUTINE_TAIL = re.compile(r"\s+(?:routine|scene|mode|protocol)$")
@@ -120,7 +123,7 @@ def find_routine(text: str) -> str | None:
         key = routine_key(phrase)
         if t in (key, re.sub(r"^its ", "", key)):
             return phrase
-    return None
+    return ROUTINE_ALIASES.get(t)
 
 
 def format_duration(seconds: float) -> str:

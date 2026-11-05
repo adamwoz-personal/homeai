@@ -209,3 +209,9 @@ def test_not_a_routine(text):
     intent = parse(text)
     assert intent is None or intent.kind != "routine"
 
+
+@pytest.mark.parametrize("text,name", [("red alert", "condition red"), ("Red alert!", "condition red"),
+                                       ("lights back to normal", "all clear")])
+def test_routine_aliases(text, name):
+    assert parse(text) == HomeIntent("routine", {"name": name})
+

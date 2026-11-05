@@ -548,7 +548,7 @@ agent, and keep the garage out of Assist exposure.
   work). Jarvis asks the default Echo to run them by phrase; the routines
   themselves live in the Alexa app. Add or rename one: edit `ROUTINES` in
   `homeai/home.py` (the exact phrase Alexa answers to), run the tests,
-  restart homeai and zeroclaw (the MCP `routine` tool lists them).
+  restart homeai and zeroclaw (`home.ROUTINES`, matched from the words; the voice model has no routine, lights or music tool).
 - Announcements only by phrase: "announce ...", "make an announcement ...",
   "tell everyone ...", "let everyone know ...". The model has no announce tool
   (it once announced "Hello!" on every Echo for "say hello").

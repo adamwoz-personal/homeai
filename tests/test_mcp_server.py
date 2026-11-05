@@ -285,7 +285,7 @@ def test_unexpected_tool_exception_is_error_result_and_loop_continues(
 from homeai.home import EchoQuiet, Home, TimerLedger  # noqa: E402
 from tests.fake_ha import FakeHA  # noqa: E402
 
-HOME_TOOL_NAMES = {"lights", "timer", "music", "door", "routine"}
+HOME_TOOL_NAMES = {"timer", "door"}
 
 
 @pytest.fixture
@@ -312,15 +312,9 @@ def test_home_tools_listed_with_a_house(monkeypatch):
 
 def test_home_tool_without_a_house_is_a_clean_error(monkeypatch):
     monkeypatch.setattr(mcp, "_HOME", None)
-    response = _call_tool("lights", {"target": "foyer", "action": "off"})
+    response = _call_tool("timer", {"action": "status"})
     assert response["result"]["isError"] is True
     assert "isn't set up" in _text(response)
-
-
-def test_lights_tool(house):
-    response = _call_tool("lights", {"target": "foyer", "action": "off"})
-    assert _text(response) == "Foyer off."
-    assert house.calls[-1] == ("light", "turn_off", {"entity_id": ["light.foyer_foyer"]})
 
 
 def test_timer_tool_minutes(house):
@@ -348,17 +342,16 @@ def test_model_cannot_announce(monkeypatch, house):
     assert house.calls == []
 
 
-def test_music_tool(house):
-    assert _text(_call_tool("music", {"action": "play", "request": "jazz"})) == \
-        "Playing jazz on the Kitchen alexa."
-
-
-def test_routine_tool(house):
-    assert _text(_call_tool("routine", {"name": "condition red"})) == "Condition red."
-    assert house.alexa_commands() == [("dev-kitchen_alexa", "condition red")]
-    response = _call_tool("routine", {"name": "order pizza"})
-    assert response["result"]["isError"] is True
-    assert len(house.alexa_commands()) == 1
+@pytest.mark.parametrize("tool,args", [("routine", {"name": "condition red"}),
+                                       ("lights", {"target": "foyer", "action": "off"}),
+                                       ("music", {"action": "play", "request": "jazz"})])
+def test_model_cannot_act_on_the_house(monkeypatch, house, tool, args):
+    """Asked "tell me about yourself", the 8B model ran "condition red" (2026-11-05).
+    These only come from the fast path, i.e. when the words ask for them."""
+    monkeypatch.setenv("HA_TOKEN", "tok")
+    assert tool not in _tool_names(mcp.handle_message(_request("tools/list")))
+    assert _call_tool(tool, args)["result"]["isError"] is True
+    assert house.calls == [] and house.alexa_commands() == []
 
 
 def test_door_tool(monkeypatch, tmp_path):
@@ -368,9 +361,3 @@ def test_door_tool(monkeypatch, tmp_path):
                                            quiet=EchoQuiet(tmp_path / "q")))
     assert "39 percent" in _text(_call_tool("door", {"question": "battery"}))
     assert "No activity" in _text(_call_tool("door", {}))
-
-
-def test_music_tool_refuses_purchases(house):
-    response = _call_tool("music", {"action": "play", "request": "buy it"})
-    assert response["result"]["isError"] is True
-    assert house.alexa_commands() == []

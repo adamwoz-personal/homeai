@@ -40,7 +40,7 @@ import sys
 from typing import Any, Callable
 
 from .ha_client import HAError, is_configured
-from .home import ROUTINES, HomeError, build_home, run_intent
+from .home import HomeError, build_home, run_intent
 from .research import research_prompt
 from .weather import WeatherError, get_weather
 from .wake_verify import _name_words
@@ -119,12 +119,6 @@ def _home():
     return _HOME
 
 
-def _tool_lights(arguments: dict[str, Any]) -> str:
-    return run_intent(_home(), "lights", {
-        "target": arguments.get("target"), "action": arguments.get("action", ""),
-        "brightness": arguments.get("brightness")})
-
-
 def _tool_timer(arguments: dict[str, Any]) -> str:
     action = str(arguments.get("action") or "").lower()
     label = arguments.get("label")
@@ -141,36 +135,15 @@ def _tool_timer(arguments: dict[str, Any]) -> str:
     raise HomeError("The timer action must be set, cancel or status.")
 
 
-def _tool_music(arguments: dict[str, Any]) -> str:
-    return run_intent(_home(), "music", {"action": arguments.get("action", "play"),
-                                         "request": arguments.get("request"),
-                                         "where": arguments.get("where")})
-
-
 def _tool_door(arguments: dict[str, Any]) -> str:
     return run_intent(_home(), "door_battery" if arguments.get("question") == "battery" else "door",
                       {"where": arguments.get("where")})
 
 
-def _tool_routine(arguments: dict[str, Any]) -> str:
-    return run_intent(_home(), "routine", {"name": arguments.get("name")})
-
-
+# Nothing here may act on the house if the model calls it by mistake, and it does: "condition red" on "tell me about
+# yourself" (2026-11-05), jazz and an all-Echo announcement on "say hello" (2026-11-04). Lights, music, routines and
+# announcements are matched from the words in home_intents.py, so the model never gets to choose them.
 HOME_TOOLS: list[dict[str, Any]] = [
-    {
-        "name": "routine",
-        "description": (
-            "Run one of the user's lighting routines (scenes) on Alexa. Use it "
-            "when they say one of these phrases or ask for that mood, e.g. "
-            "'red alert' -> 'condition red', 'lights back to normal' -> "
-            "'all clear'. Say what the tool returns."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {"name": {"type": "string", "enum": list(ROUTINES)}},
-            "required": ["name"],
-        },
-    },
     {
         "name": "door",
         "description": (
@@ -189,25 +162,6 @@ HOME_TOOLS: list[dict[str, Any]] = [
         },
     },
     {
-        "name": "lights",
-        "description": (
-            "Turn the house lights on or off, dim, brighten, or set brightness. "
-            "Rooms include foyer, den fan, den lamp, kitchen cabinets, "
-            "breakfast nook, fireplace spots, fireplace strips, can lights, "
-            "living room fan, playroom, utility room. Use target 'all' for "
-            "every light. Say what the tool returns."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "target": {"type": "string", "description": "Room or light name, or 'all'."},
-                "action": {"type": "string", "enum": ["on", "off", "dim", "brighten", "set"]},
-                "brightness": {"type": "integer", "description": "Percent, 1-100, for 'set'."},
-            },
-            "required": ["target", "action"],
-        },
-    },
-    {
         "name": "timer",
         "description": (
             "Kitchen timers on the Echo. action 'set' needs minutes (fractions "
@@ -220,23 +174,6 @@ HOME_TOOLS: list[dict[str, Any]] = [
                 "action": {"type": "string", "enum": ["set", "cancel", "status"]},
                 "minutes": {"type": "number"},
                 "label": {"type": "string", "description": "One or two words, e.g. 'pasta'."},
-            },
-            "required": ["action"],
-        },
-    },
-    {
-        "name": "music",
-        "description": (
-            "Play music on an Echo (Amazon Music) or control playback. "
-            "request is what to play, e.g. 'jazz' or 'songs by Adele'. "
-            "Defaults to the kitchen; where 'everywhere' plays in every room."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "action": {"type": "string", "enum": ["play", "stop", "pause", "resume", "next"]},
-                "request": {"type": "string"},
-                "where": {"type": "string"},
             },
             "required": ["action"],
         },
@@ -307,11 +244,8 @@ TOOLS: list[dict[str, Any]] = [
 HANDLERS: dict[str, Callable[[dict[str, Any]], str]] = {
     "weather": _tool_weather,
     "research": _tool_research,
-    "lights": _tool_lights,
     "timer": _tool_timer,
-    "music": _tool_music,
     "door": _tool_door,
-    "routine": _tool_routine,
 }
 
 

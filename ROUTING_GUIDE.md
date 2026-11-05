@@ -1908,3 +1908,14 @@ Speech now reaches the aura hair through a ring buffer, delayed by distance alon
 - `pgrep -f` matches its own shell when the pattern is in the command, and `.` matches `/` in a path. Bracket tricks
   don't cover that second case. `pkill -f` killed its own command this way.
 
+## "Tell me about yourself" ran condition red (2026-11-05)
+
+- The 8B model called `routine` with `condition red` on an unrelated question, and the phrase went to the Kitchen Echo
+  as a text command. Found in `runtime-trace.jsonl` (tool_call_start, arguments). Same fault as `announce` on 2026-11-04.
+  The routine did not run (Adam), though Alexa spoke at that moment and it sounded to him like an answer to his question.
+  What Alexa actually heard is unverified; the Alexa app's voice history would show it. It also suggests a text command
+  may not trigger a routine at all, the open question from 2026-11-04.
+- A tool description can't stop this. Adam's call: `routine`, `lights` and `music` all left `HOME_TOOLS`, so the voice
+  model has nothing left that acts on the house. They are matched from the words in `home_intents.py`, with
+  `ROUTINE_ALIASES` for the mood phrases the model used to map. Cost: looser wordings the matcher misses no longer work.
+
