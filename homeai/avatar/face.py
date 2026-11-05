@@ -75,6 +75,9 @@ DOUBLE_BLINK = 0.15         # share of blinks followed by a second one
 
 GAZE_LIMIT = 1.0
 HEAD_LIMIT = 0.2            # rad
+FOLLOW_STATES = frozenset({"idle", "listening", "speaking", "followup"})   # thinking keeps looking away
+FOLLOW_JITTER = 0.3         # her own glances, while looking at someone
+FOLLOW_HEAD = (0.06, 0.04)  # rad of yaw, pitch at full gaze: the head turns a little toward them
 
 # Per shown state. eyes: lid target (1 closed, <0 wide). gaze: (centre x, centre y,
 # jitter x, jitter y, seconds between saccades lo, hi); thinking's centre x
@@ -207,6 +210,7 @@ class FaceMotion:
     _side: float = 1.0
     _hair_phase: float = 0.0
     _state: str | None = None
+    look_at: tuple[float, float] | None = None      # gaze toward someone the camera sees (eyes.EyeFollow)
 
     def __post_init__(self) -> None:
         self._rng = random.Random(self.seed)
@@ -262,6 +266,10 @@ class FaceMotion:
         out["blink_l"] = out["blink_r"] = clamp(lids, -0.3, 1.0)
 
         gx, gy = self._gaze(now, sf, changed)
+        look = self.look_at if state in FOLLOW_STATES else None
+        if look is not None:
+            gx = look[0] + FOLLOW_JITTER * (gx - sf.gaze[0])
+            gy = look[1] + FOLLOW_JITTER * (gy - sf.gaze[1])
         out["gaze_x"] = clamp(self._step("gaze_x", gx, dt), -GAZE_LIMIT, GAZE_LIMIT)
         out["gaze_y"] = clamp(self._step("gaze_y", gy, dt), -GAZE_LIMIT, GAZE_LIMIT)
 
@@ -270,6 +278,9 @@ class FaceMotion:
         out["brow_frown"] = self._step("brow_frown", frown, dt)
 
         yaw, pitch, roll = sf.head
+        if look is not None:
+            yaw += FOLLOW_HEAD[0] * look[0]
+            pitch -= FOLLOW_HEAD[1] * look[1]             # +gaze is up, +pitch is down
         d = sf.drift
         amp, period = sf.breathe
         sway = (0.035 * math.sin(0.23 * now) + 0.015 * math.sin(0.61 * now + 1.0),

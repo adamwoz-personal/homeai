@@ -397,6 +397,8 @@ class AvatarConfig:
     # "HH:MM-HH:MM" quiet hours (sleeps 30 s after any activity). Adam 2026-11-04.
     sleep_min: float = field(default_factory=lambda: _env_float("HOMEAI_AVATAR_SLEEP_MIN", 5.0))
     quiet_hours: str = field(default_factory=lambda: _env_str("HOMEAI_AVATAR_QUIET_HOURS", ""))
+    # The eyes follow whoever the webcam sees, while awake (homeai/avatar/eyes.py). Off unless opted in.
+    eye_follow: bool = field(default_factory=lambda: _env_bool("HOMEAI_EYE_FOLLOW", False))
 
 
 @dataclass(frozen=True)

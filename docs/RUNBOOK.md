@@ -446,6 +446,11 @@ sphere; `--look face` refuses to start without a usable face.
   them in ~0.3 s; while the lids are shut the eye dots are hidden, so a closed eye
   reads as shut rather than as a glowing slit. The irises take the state's colour
   (cyan listening, lavender thinking, none asleep; `StateFace.eye_tint`).
+- Eye-follow: with `HOMEAI_EYE_FOLLOW=1` in `.env` the eyes and head turn toward the biggest face the webcam sees. The
+  window starts `python -m homeai.avatar.eyes` while awake and ends it for sleep, offline, muted, busy, mode switching or
+  a minimised window, so the camera is open only while that process lives. Frames are never saved or sent; only a
+  position leaves the process; nobody is recognised. To turn it off: remove the line and restart `homeai-avatar`. The
+  webcam also carries the mic: `tools/avatar/probe_camera.py` measures the mic rate with the camera off and on.
 - The aura "hair" hangs from just outside the head's silhouette on both sides, from
   brow height (above the ears) past the jaw to the bottom of the neck (shortening
   low on the neck), plus long strands from the skull's outline, parted in the middle,

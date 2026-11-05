@@ -226,6 +226,7 @@ def run(args) -> int:
     if not args.tour:
         client.start()
     scene = build_scene()
+    eyes = eye_follow(look, args.tour)
     captions = Rasteriser()
     dropin, lock = mode_paths()
     next_mode_poll = 0.0
@@ -263,6 +264,8 @@ def run(args) -> int:
                 log.error("daemon speaks another protocol: %s", client.version_error)
                 return 3
             if minimised:
+                if eyes is not None:
+                    eyes.stop()                 # nobody to look at
                 pygame.event.wait(250)          # draw nothing while hidden (§4.3)
                 continue
             now = time.monotonic()
@@ -279,6 +282,8 @@ def run(args) -> int:
                 scene.local_mode = local_mode(dropin, lock)
                 next_mode_poll = now + MODE_POLL_S
             frame = scene.frame(now)
+            if eyes is not None:
+                scene.face.look_at = eyes.update(now, frame.state)
             size = pygame.display.get_window_size()
             renderer.draw(frame, now, size, captions.image(frame.captions, size))
             pygame.display.flip()
@@ -290,12 +295,22 @@ def run(args) -> int:
                 geo["size"] = list(window.size)
                 geo["position"] = position_to_save(list(window.position), requested, landed)
     finally:
+        if eyes is not None:
+            eyes.stop()
         client.stop()
         if not args.tour:                       # a tour window must not move the real one
             save_geometry(geo, args.geometry)
         renderer.release()
         pygame.quit()
     return 0
+
+
+def eye_follow(look: str, tour: float):
+    """An EyeFollow if it's opted in and there is a face to do it; else None."""
+    from ..config import AvatarConfig
+    from .eyes import EyeFollow
+
+    return EyeFollow() if look == "face" and not tour and AvatarConfig().eye_follow else None
 
 
 def check() -> list[str]:
