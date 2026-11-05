@@ -100,10 +100,10 @@ def strip_wake_words(text: str, wake_words: Iterable[str]) -> str:
 
 # Adam's Alexa routines (2026-11-04), by their exact trigger phrase. Only these
 # fixed strings are ever sent to Alexa to run a routine; add new ones here.
-ROUTINES = ("all clear", "condition red", "condition yellow", "it's movie time", "it's business time")
+ROUTINES = ("all clear", "red alert", "condition yellow", "it's movie time", "it's business time")
 
 # Other ways of asking, now the voice model can't map a mood to a routine.
-ROUTINE_ALIASES = {"red alert": "condition red", "lights back to normal": "all clear"}
+ROUTINE_ALIASES = {"lights back to normal": "all clear"}
 
 _ROUTINE_LEAD = re.compile(r"^(?:(?:run|start|do|trigger|activate|go|set|engage|initiate|begin)\s+"
                            r"(?:(?:to|the|my|our)\s+)*)?")
@@ -117,7 +117,7 @@ def routine_key(text: str) -> str:
 
 
 def find_routine(text: str) -> str | None:
-    """The ROUTINES phrase ``text`` asks for ('run the movie time routine', 'Condition red!'), or None."""
+    """The ROUTINES phrase ``text`` asks for ('run the movie time routine', 'Red alert!'), or None."""
     t = _ROUTINE_TAIL.sub("", _ROUTINE_LEAD.sub("", routine_key(text)))
     for phrase in ROUTINES:
         key = routine_key(phrase)

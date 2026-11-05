@@ -342,7 +342,7 @@ def test_model_cannot_announce(monkeypatch, house):
     assert house.calls == []
 
 
-@pytest.mark.parametrize("tool,args", [("routine", {"name": "condition red"}),
+@pytest.mark.parametrize("tool,args", [("routine", {"name": "red alert"}),
                                        ("lights", {"target": "foyer", "action": "off"}),
                                        ("music", {"action": "play", "request": "jazz"})])
 def test_model_cannot_act_on_the_house(monkeypatch, house, tool, args):

@@ -1912,9 +1912,10 @@ Speech now reaches the aura hair through a ring buffer, delayed by distance alon
 
 - The 8B model called `routine` with `condition red` on an unrelated question, and the phrase went to the Kitchen Echo
   as a text command. Found in `runtime-trace.jsonl` (tool_call_start, arguments). Same fault as `announce` on 2026-11-04.
-  The routine did not run (Adam), though Alexa spoke at that moment and it sounded to him like an answer to his question.
-  What Alexa actually heard is unverified; the Alexa app's voice history would show it. It also suggests a text command
-  may not trigger a routine at all, the open question from 2026-11-04.
+  Alexa's voice history showed "condition red" arrived, so text commands do reach her. The routine didn't run because
+  no such routine exists: the real one is "red alert" (Adam had mixed up the names). Whether a text command fires a real
+  routine is still unverified. I first told Adam it had run and his lights might be red, from the tool's "success" alone:
+  a tool result only says the command was sent.
 - A tool description can't stop this. Adam's call: `routine`, `lights` and `music` all left `HOME_TOOLS`, so the voice
   model has nothing left that acts on the house. They are matched from the words in `home_intents.py`, with
   `ROUTINE_ALIASES` for the mood phrases the model used to map. Cost: looser wordings the matcher misses no longer work.

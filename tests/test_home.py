@@ -230,8 +230,8 @@ def test_echo_ignores_non_alexa_devices(home):
 # -- Alexa routines -------------------------------------------------------------
 
 @pytest.mark.parametrize("text,phrase", [
-    ("condition red", "condition red"),
-    ("Condition Red!", "condition red"),
+    ("red alert", "red alert"),
+    ("Red Alert!", "red alert"),
     ("run the movie time routine", "it's movie time"),
     ("it is movie time", "it's movie time"),
     ("its business time", "it's business time"),
@@ -243,7 +243,7 @@ def test_find_routine(text, phrase):
 
 
 @pytest.mark.parametrize("text", ["condition", "red", "clear", "movie", "condition blue", "all clear the timers",
-                                  "buy condition red", "it's time"])
+                                  "buy red alert", "condition red", "it's time"])
 def test_find_routine_rejects(text):
     assert find_routine(text) is None
 
@@ -254,7 +254,7 @@ def test_routine_sends_only_the_fixed_phrase_to_the_kitchen_echo(home, ha):
 
 
 def test_unknown_routine_lists_the_known_ones_and_sends_nothing(home, ha):
-    with pytest.raises(HomeError, match="condition red"):
+    with pytest.raises(HomeError, match="red alert"):
         home.routine("buy a sofa")
     assert ha.alexa_commands() == []
 

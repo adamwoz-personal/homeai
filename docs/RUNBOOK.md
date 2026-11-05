@@ -543,8 +543,8 @@ agent, and keep the garage out of Assist exposure.
   rings are also pushed to it (`HOMEAI_DOORBELL_PHONE=0` stops that); the push
   is not silenced by quiet hours. A garage-left-open alert waits on
   `garage-hardware`.
-- Alexa routines: "all clear", "condition red", "condition yellow", "it's
-  movie time", "it's business time" ("run condition red", "movie time" also
+- Alexa routines: "all clear", "red alert", "condition yellow", "it's
+  movie time", "it's business time" ("run red alert", "movie time" also
   work). Jarvis asks the default Echo to run them by phrase; the routines
   themselves live in the Alexa app. Add or rename one: edit `ROUTINES` in
   `homeai/home.py` (the exact phrase Alexa answers to), run the tests,
