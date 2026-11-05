@@ -21,6 +21,7 @@ ROOT = Path.home() / ".local/share/homeai/comfyui"
 URL = "http://127.0.0.1:8188"
 OLLAMA = "http://127.0.0.1:11434"
 MODELS = ("klein", "zimage", "sdxl")
+VOICE = "llama31-voice"
 MEMORY_CAP = "18G"
 NEGATIVE = "blurry, low quality, watermark, text artefacts, deformed"
 
@@ -67,10 +68,10 @@ def workflow(model: str, prompt: str, seed: int, width: int = 1024, height: int 
 
 
 def comfy_command(extra: tuple[str, ...] = ()) -> list[str]:
-    """ComfyUI, capped: its own scope, no swap, nothing cached between prompts."""
+    """ComfyUI, capped: its own scope and no swap. No --cache-none: it reloads the model for every image."""
     return ["systemd-run", "--user", "--scope", "--quiet", "-p", f"MemoryMax={MEMORY_CAP}", "-p", "MemorySwapMax=0",
             str(ROOT / "venv/bin/python"), "main.py", "--listen", "127.0.0.1", "--port", "8188",
-            "--disable-auto-launch", "--cache-none", "--disable-pinned-memory", *extra]
+            "--disable-auto-launch", "--disable-pinned-memory", *extra]
 
 
 def http(url: str, payload: dict | None = None, timeout: float = 30.0) -> dict:
@@ -176,6 +177,30 @@ def coder_idle() -> bool:
         return True
 
 
+def voice_on_gpu() -> bool:
+    """True if the voice model is loaded and wholly on the GPU."""
+    models = http(f"{OLLAMA}/api/ps").get("models", [])
+    return any(m["name"].startswith(VOICE) and m.get("size_vram") == m.get("size") for m in models)
+
+
+def restore_voice() -> bool:
+    """Reload the voice model once the coder is up, the order homeai-mode uses: image jobs can push it partly onto the
+    CPU (13% on 2026-11-05), which slows Jarvis until it is reloaded."""
+    end = time.monotonic() + 180
+    while time.monotonic() < end:
+        try:
+            http("http://127.0.0.1:8080/health", timeout=3)
+            break
+        except (urllib.error.URLError, OSError, ValueError):
+            time.sleep(2)
+    http(f"{OLLAMA}/api/generate", {"model": VOICE, "keep_alive": 0}, timeout=30)
+    time.sleep(3)
+    http(f"{OLLAMA}/api/generate", {"model": VOICE, "keep_alive": -1}, timeout=120)
+    ok = voice_on_gpu()
+    print("voice model", "back on the GPU" if ok else "NOT fully on the GPU: check `ollama ps`", flush=True)
+    return ok
+
+
 class CoderStopped:
     """llama-server stopped for the ``with`` block and started again after. Refuses if the coder is busy."""
 
@@ -187,3 +212,4 @@ class CoderStopped:
 
     def __exit__(self, *exc) -> None:
         subprocess.run(["systemctl", "--user", "start", "llama-server"], check=True)
+        restore_voice()

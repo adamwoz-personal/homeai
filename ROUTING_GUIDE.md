@@ -1927,4 +1927,9 @@ Speech now reaches the aura hair through a ring buffer, delayed by distance alon
   stopped, because a killed process runs no `finally`. Check for that first after any crash.
 - A heavy child needs its own cgroup and a cap (`systemd-run --user --scope -p MemoryMax=...`), then the kernel kills
   only it. Plan's `homeai-comfyui.service` must carry the same limit. One server per model keeps RAM bounded.
+- Second look (same day): the 90 s later kill of the resumed session was systemd finishing the first one (scope marked
+  `oom-kill`, then SIGKILL to what was left in that tab), not new memory pressure. The cap then proved itself: Z-Image
+  bf16 went over 18 GB and the kernel killed ComfyUI alone (`CONSTRAINT_MEMCG`).
+- A benchmark that looks too good is wrong until shown otherwise: a 0.012 s first token was Ollama's prompt cache, and a
+  5 s window landed in model loading. `--cache-none` also reloads the model per image, 10x slower on klein.
 
