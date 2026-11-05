@@ -460,3 +460,21 @@ def test_neck_hair_roots_in_its_slot_and_hangs(verts):
     assert (np.sign(extra[:, 0] - cx) == extra[:, 2]).all()
     drop = facegl.hair_rest(extra)[:, 1] - extra[:, 1]
     assert drop[extra[:, 4] > 0.9].min() > 0.2 * h          # it hangs
+
+
+def test_points_in_a_ring_share_one_anchor_at_fixed_offsets():
+    xy = np.array([[10, 10], [12, 10], [10, 14], [30, 10]], dtype=np.float32)
+    tri = np.array([0, 1, 2, 3])
+    bary = np.eye(3, dtype=np.float32)[[0, 1, 2, 0]]
+    got_tri, got_bary, offset = facegl.bind_rings(xy, tri, bary, (((10.0, 10.0), (3.0, 5.0)),))
+    assert got_tri.tolist() == [0, 0, 0, 3]                 # the point outside keeps its own place
+    np.testing.assert_array_equal(got_bary[:3], np.tile(bary[0], (3, 1)))
+    np.testing.assert_array_equal(offset, [[0, 0], [2, 0], [0, 4], [0, 0]])
+    assert tri.tolist() == [0, 1, 2, 3]                     # the asset's arrays stay as loaded
+
+
+def test_a_ring_with_no_points_changes_nothing():
+    xy = np.array([[10, 10]], dtype=np.float32)
+    tri, bary, offset = facegl.bind_rings(xy, np.array([4]), np.eye(3, dtype=np.float32)[:1],
+                                          (((90.0, 90.0), (3.0, 3.0)),))
+    assert tri.tolist() == [4] and not offset.any()

@@ -234,3 +234,55 @@ def test_hair_shader_matches_its_cpu_path(pulse_asset):
     want = rest + ln * wind * amp * s ** 1.5 * facegl.hair_wind(rest / face_h, phase)
     want[:, :1] += ln * 0.05 * np.sin(swirl + strand) * s
     np.testing.assert_allclose(got, want, atol=0.05)
+
+
+def _opened(asset, monkeypatch, rings):
+    """Face points (shader's positions, CPU's positions) with the jaw open, and at rest, with ``rings`` marked."""
+    import moderngl
+
+    from homeai.avatar import facegl, gl, rig
+
+    monkeypatch.setattr(facegl, "MOUTH_RINGS", {None: rings})
+    idx, attrs = facegl.face_buffers(asset)
+    rest = np.asarray(asset.verts, dtype=np.float32)
+    opened = rig.deform(rest, rig.default_fields(rest), {"jaw_open": 1.0}).astype(np.float32)
+    try:
+        ctx, _ = gl.headless((8, 8))
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"no headless GL: {exc}")
+    prog = ctx.program(vertex_shader=facegl.FACE_VERTEX, varyings=["gl_Position", "c"])     # c keeps every input live
+    for name, value in {"view": (1.0, 1.0, 0.0, 0.0), "pivot": (0.0, 0.0), "depth": 0.0, "head": (0.0, 0.0, 0.0),
+                        "shimmer": 0.0, "verts": 0}.items():
+        facegl.FaceRenderer._set(prog, name, value)
+    tex = ctx.texture((len(rest), 1), 2, opened.tobytes(), dtype="f4")
+    tex.filter = moderngl.NEAREST, moderngl.NEAREST
+    tex.use(0)
+    vao = ctx.vertex_array(prog, [(ctx.buffer(idx.tobytes()), "3i", "idx"),
+                                  (ctx.buffer(attrs.tobytes()), "3f 3f 1f 1f 1f 2f", "w", "col", "size", "phase",
+                                   "layer", "rigid")])
+    out = ctx.buffer(reserve=len(idx) * 28)
+    vao.transform(out, moderngl.POINTS)
+    got = np.frombuffer(out.read(), dtype=np.float32).reshape(-1, 7)[:, :2] * (1.0, -1.0)
+    ctx.release()
+    return got, facegl.face_positions(idx, attrs, opened), facegl.face_positions(idx, attrs, rest)
+
+
+def test_mouth_rings_keep_their_shape_as_the_jaw_opens(pulse_asset, monkeypatch):
+    """Adam: the open mouth stretches the circles beside it. Read back from the shader: a marked
+    ring only moves, and the same dots unmarked do stretch, so the check can fail."""
+    from homeai.avatar import rig
+
+    v = np.asarray(pulse_asset.verts, dtype=np.float64)
+    h = rig.face_height(v)
+    centre, radii = (float(v[61, 0] - 0.06 * h), float(v[61, 1])), (0.05 * h, 0.05 * h)
+    n = len(pulse_asset.xy)
+    ring = ((pulse_asset.xy - centre) ** 2).sum(axis=1) <= radii[0] ** 2
+    assert ring.sum() > 10
+
+    got, cpu, rest = _opened(pulse_asset, monkeypatch, ((centre, radii),))
+    np.testing.assert_allclose(got, cpu, atol=0.05)
+    np.testing.assert_allclose(rest[:n], pulse_asset.xy, atol=0.05)     # marking a ring doesn't move it at rest
+    assert np.ptp((got[:n] - rest[:n])[ring], axis=0).max() < 0.05
+
+    loose, _, rest = _opened(pulse_asset, monkeypatch, ())
+    assert np.ptp((loose[:n] - rest[:n])[ring], axis=0).max() > 0.02 * rig.face_height(v)

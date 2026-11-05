@@ -62,6 +62,14 @@ NECK_CHANNELS = {
     ),
 }
 HAIR_NECK_LEN = (0.4, 0.9)  # x face height
+# The hard rings beside the mouth, as ((centre x, y), (radius x, y)) in crop px, marked by hand on the art.
+# Bound to the mesh dot by dot they stretch as the jaw opens (Adam: they must stay as drawn).
+MOUTH_RINGS = {
+    "afe7fb9676533ae8daf8770bc06a85d474874e9103ff6d896821adaa84833f5c": (
+        ((281.5, 550.0), (15.0, 19.0)),
+        ((480.0, 549.0), (16.0, 21.0)),
+    ),
+}
 HAIR_EAR = 240              # extra strands around the ears (Adam: more there)
 HAIR_EAR_LEN = (0.6, 1.3)   # x face height
 HAIR_HIGH_DROOP = 0.6       # (Adam: lower, twice) gravity on hair rooted up high (crown, brows), rising to 1 at the jaw: frames the face
@@ -133,10 +141,11 @@ in vec3 col;
 in float size;
 in float phase;
 in float layer;
+in vec2 rigid;              // offset from the anchor the mesh moves: hard parts keep their shape
 out vec3 c;
 vec2 V(int i) { return texelFetch(verts, ivec2(i, 0), 0).xy; }
 void main() {
-    vec2 p = w.x * V(idx.x) + w.y * V(idx.y) + w.z * V(idx.z);
+    vec2 p = w.x * V(idx.x) + w.y * V(idx.y) + w.z * V(idx.z) + rigid;
     p += shimmer * vec2(sin(t * 1.9 + phase), cos(t * 1.6 + phase * 1.7));
     gl_Position = to_clip(pose(p));
     float small = 1.0 - step(1.0, size);
@@ -605,20 +614,41 @@ def eye_layers(points: np.ndarray, verts: np.ndarray) -> np.ndarray:
     return out
 
 
+def bind_rings(xy: np.ndarray, tri: np.ndarray, bary: np.ndarray, rings) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """(tri, bary, offset (N, 2)): every point inside a ring follows the point nearest its centre, at a fixed offset.
+
+    ``rings`` holds ((x, y), (rx, ry)) ellipses. The mesh then only moves each ring, it can't reshape it.
+    """
+    tri, bary = tri.copy(), bary.copy()
+    offset = np.zeros((len(xy), 2), np.float32)
+    for centre, radii in rings:
+        d = xy - np.asarray(centre, dtype=np.float32)
+        inside = np.flatnonzero(((d / np.asarray(radii, dtype=np.float32)) ** 2).sum(axis=1) <= 1.0)
+        if not len(inside):
+            continue
+        anchor = inside[np.argmin((d[inside] ** 2).sum(axis=1))]
+        offset[inside] = xy[inside] - xy[anchor]
+        tri[inside], bary[inside] = tri[anchor], bary[anchor]
+    return tri, bary, offset
+
+
 def face_buffers(asset, seed: int = 11) -> tuple[np.ndarray, np.ndarray]:
-    """(idx (N, 3) int32, attrs (N, 9) float32: w3, colour3, size, phase, layer) for face + teeth."""
+    """(idx (N, 3) int32, attrs (N, 11) float32: w3, colour3, size, phase, layer, rigid2) for face + teeth."""
     rng = np.random.default_rng(seed)
-    idx = asset.triangles[asset.tri].astype(np.int32)
+    art = asset.build.get("inputs", {}).get("image_sha256")
+    tri, bary, offset = bind_rings(asset.xy, asset.tri, asset.bary, MOUTH_RINGS.get(art, ()))
+    idx = asset.triangles[tri].astype(np.int32)
     n = len(idx)
-    attrs = np.empty((n, 9), np.float32)
-    attrs[:, 0:3] = asset.bary
+    attrs = np.empty((n, 11), np.float32)
+    attrs[:, 0:3] = bary
     attrs[:, 3:6] = asset.colour
     attrs[:, 6] = asset.size
     attrs[:, 7] = rng.uniform(0, 2 * np.pi, n)
     attrs[:, 8] = eye_layers(asset.xy, asset.verts)
+    attrs[:, 9:11] = offset
     t_idx, t_w, t_layer = mouth_points(asset.verts)
     m = len(t_idx)
-    teeth = np.empty((m, 9), np.float32)
+    teeth = np.zeros((m, 11), np.float32)
     teeth[:, 0:3] = t_w
     lip = asset.colour[np.isin(idx, list(rig._LIPS_UPPER_INNER)).any(axis=1)]
     tint = lip.mean(axis=0) if len(lip) else np.array([0.5, 0.5, 0.5])
@@ -627,6 +657,11 @@ def face_buffers(asset, seed: int = 11) -> tuple[np.ndarray, np.ndarray]:
     teeth[:, 7] = rng.uniform(0, 2 * np.pi, m)
     teeth[:, 8] = t_layer
     return np.vstack([idx, t_idx]), np.vstack([attrs, teeth])
+
+
+def face_positions(idx: np.ndarray, attrs: np.ndarray, verts: np.ndarray) -> np.ndarray:
+    """(N, 2) image px of face_buffers' points on ``verts``: FACE_VERTEX's path without shimmer or head pose."""
+    return np.einsum("nk,nkd->nd", attrs[:, 0:3], np.asarray(verts)[idx]) + attrs[:, 9:11]
 
 
 def view(side: float, size: tuple[int, int], zoom: float = 1.0) -> tuple[float, float, float, float]:
@@ -729,7 +764,7 @@ class FaceRenderer:
         self.face_attrs = ctx.buffer(attrs.tobytes())
         self.face_vao = ctx.vertex_array(self.face_prog, [
             (self.face_idx, "3i", "idx"),
-            (self.face_attrs, "3f 3f 1f 1f 1f", "w", "col", "size", "phase", "layer")])
+            (self.face_attrs, "3f 3f 1f 1f 1f 2f", "w", "col", "size", "phase", "layer", "rigid")])
         self.hair_prog = self.hair_vbo = self.hair_vao = self.pulse_tex = None
         if hair:
             self.hair_prog = ctx.program(vertex_shader=HAIR_VERTEX, fragment_shader=DOT_FRAGMENT)

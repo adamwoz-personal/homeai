@@ -1874,3 +1874,14 @@ Speech now reaches the aura hair through a ring buffer, delayed by distance alon
   changed, and an always-failing test makes mutants look killed. It now reads the shader's colour at fixed points.
 - **Read shader output to prove a CPU copy.** Transform feedback (`varyings`) compares `hair_rest`/`hair_wind` with
   real vertex positions; golden tolerance missed that bug. An unbound sampler reads w=1: bind a texture.
+
+## Rigid parts on a stretching mesh (2026-11-05)
+
+- The rings beside the mouth went from 33 to 74 px tall at full jaw. They sit in the jaw field's ramp, so
+  their tops stayed still while their bottoms followed the chin. Per-dot barycentric binding can't hold a
+  shape across a gradient.
+- Fix: every dot in a hard part follows one anchor at a fixed offset (`bind_rings`, `rigid` shader input).
+  No affine blend of mesh vertices can do this, so the shader needs the offset as its own input.
+- Transform feedback reading only `gl_Position` lets GLSL drop unused inputs, and `vertex_array` then raises
+  KeyError on them. Also capture `c` to keep every input live.
+- A test that fails for that reason still "kills" mutants. Get the test green before trusting its mutant run.
