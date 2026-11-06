@@ -1944,3 +1944,6 @@ Bake-off and routines (2026-11-06):
 - Steady-state contention, images back to back, 60 s (2026-11-06): quiet 0.57 s first token, 109 tok/s; klein 1.66 s, 27 tok/s;
   klein 9B distilled 2.29 s (worst 3.38), 24 tok/s. The earlier klein 0.78 s, 89 tok/s came from `--cache-none` runs, which
   spent most of their time loading. Trust these.
+- A prompt feature needs a run that should change the result, not only one that looks right. `handedness` "worked" with
+  `right` (16 of 18 swords on the correct side), and I told Adam so; `left` showed that was the model's habit and the field did
+  nothing. Test the opposite value before reporting a control as working.
