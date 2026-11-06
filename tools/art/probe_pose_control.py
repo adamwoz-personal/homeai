@@ -32,7 +32,7 @@ FRAMING = {"full-body": "The whole figure is in frame from the top of the head t
 PROMPT = ("Redraw this figure as {who}, a {gender} character, in clean {style} style: a real person with natural skin, "
           "a real face and modest, age-appropriate clothes covering the body, with no wood, no ball joints and no mannequin "
           "parts anywhere. Natural {style} body proportions, about seven heads tall, with long legs. Match the figure's pose "
-          "exactly. {pose} {feeling} Add nothing to the hands and carry nothing that the description doesn't name. "
+          "exactly. {pose} {feeling} {face} Add nothing to the hands and carry nothing that the description doesn't name. "
           "{held} Shoes that suit the outfit, unless the description says barefoot. "
           "{framing} {style} illustration, clean line art, {background}.")
 BONES = (("head", "neckTop"), ("neckTop", "chestTop"), ("shoulderL", "shoulderR"), ("shoulderL", "elbowL"),
@@ -95,6 +95,12 @@ def feeling_words(spec: dict) -> str:
             f"as an anime character would show it, and so must her whole posture.")
 
 
+def face_words(spec: dict) -> str:
+    """Ani's optional hint about the face, as guidance. Left out, the feeling alone sets the face."""
+    face = spec.get("face")
+    return f"Her face: {face}." if face else ""
+
+
 def held_words(handedness: str, turn: int = 0) -> str:
     """Which hand holds things. Facing the viewer, the figure's own right hand is on the left of the picture."""
     hand = "left" if handedness == "left" else "right"
@@ -110,7 +116,7 @@ def prompt_for(spec: dict, template: str = PROMPT, who: str | None = None) -> st
     framing = FRAMING.get(fields.pop("framing"), FRAMING[DEFAULTS["framing"]])
     held = held_words(fields.pop("handedness"), spec.get("turn", 0))
     return template.format(who=who or spec["description"], framing=framing, held=held, pose=pose_words(spec),
-                           feeling=feeling_words(spec), **fields)
+                           feeling=feeling_words(spec), face=face_words(spec), **fields)
 
 
 def klein_reference(unet: str, clip: str, image: str, prompt: str, seed: int, width: int, height: int, prefix: str) -> dict:

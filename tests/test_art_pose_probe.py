@@ -137,6 +137,15 @@ def test_props_come_only_from_the_description():
     assert "carry nothing that the description doesn't name" in probe.prompt_for(spec())
 
 
+def test_face_hint_reaches_the_prompt():
+    text = probe.prompt_for(spec(face="a big cheeky grin"))
+    assert "Her face: a big cheeky grin." in text
+
+
+def test_no_face_hint_no_words():
+    assert "Her face:" not in probe.prompt_for(spec())
+
+
 def test_who_replaces_the_description():
     assert "a pirate" in probe.prompt_for(spec(), who="a pirate")
 

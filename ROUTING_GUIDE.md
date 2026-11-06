@@ -1947,3 +1947,5 @@ Bake-off and routines (2026-11-06):
 - A prompt feature needs a run that should change the result, not only one that looks right. `handedness` "worked" with
   `right` (16 of 18 swords on the correct side), and I told Adam so; `left` showed that was the model's habit and the field did
   nothing. Test the opposite value before reporting a control as working.
+  Same day: the contract called `face` "always used" while the probe never read it. A field listed as working needs a
+  test that reaches a picture, with and without it (run 153559: 6 of 6 against 0 of 6).

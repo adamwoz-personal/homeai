@@ -490,6 +490,8 @@ MUTANTS=(
   "art-pose-lean-swapped|tools/art/probe_pose_control.py|s/if lean > 0 else/if lean < 0 else/|tests/test_art_pose_probe.py"
   "art-pose-lean-always|tools/art/probe_pose_control.py|s/if abs(lean) > 15:/if True:/|tests/test_art_pose_probe.py"
   "art-pose-hand-side-same|tools/art/probe_pose_control.py|s/other = \"right\" if hand == \"left\" else \"left\"/other = hand/|tests/test_art_pose_probe.py"
+  "art-pose-face-ignored|tools/art/probe_pose_control.py|s/face=face_words(spec), //|tests/test_art_pose_probe.py"
+  "art-pose-face-always|tools/art/probe_pose_control.py|s/if face else \"\"/if True else \"\"/|tests/test_art_pose_probe.py"
   "art-pose-turn-ignored|tools/art/probe_pose_control.py|s/^    if turn:/    if False:/|tests/test_art_pose_probe.py"
   "art-report-busy-blank|tools/art/report_bakeoff.py|s/ >= FLAT_SHARE)/ >= 0.0)/|tests/test_art_report.py"
 )
