@@ -141,6 +141,31 @@ def test_who_replaces_the_description():
     assert "a pirate" in probe.prompt_for(spec(), who="a pirate")
 
 
+def test_lean_side():
+    assert "leans toward the right" in probe.pose_words(joints(chestTop={"x": 225, "y": 200}))
+    assert "leans toward the left" in probe.pose_words(joints(chestTop={"x": 175, "y": 200}))
+
+
+def test_upright_body_has_no_lean():
+    assert "leans" not in probe.pose_words(joints())
+
+
+def test_shoes_by_default():
+    assert "Shoes that suit the outfit, unless the description says barefoot" in probe.prompt_for(spec())
+
+
+def test_right_handed_by_default():
+    assert "own right hand, the hand on the left of the picture" in probe.prompt_for(spec())
+
+
+def test_left_handed():
+    assert "own left hand, the hand on the right of the picture" in probe.prompt_for(spec(handedness="left"))
+
+
+def test_turned_figure_names_no_picture_side():
+    assert "of the picture" not in probe.held_words("right", 90)
+
+
 def test_fixture_same(tmp_path):
     a, b = tmp_path / "a", tmp_path / "b"
     a.write_text("x")

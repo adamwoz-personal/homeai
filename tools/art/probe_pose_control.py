@@ -26,13 +26,14 @@ from comfy_common import ROOT, Comfy, CoderStopped  # noqa: E402
 
 EXPORTS = Path.home() / "ani/pose-exports/2026-11-06"
 # What home assumes when the spec leaves a field out (contract: "Fields at a glance").
-DEFAULTS = {"gender": "female", "style": "anime", "background": "plain soft background", "framing": "full-body"}
+DEFAULTS = {"gender": "female", "handedness": "right", "style": "anime", "background": "plain soft background", "framing": "full-body"}
 FRAMING = {"full-body": "The whole figure is in frame from the top of the head to the soles of the feet, with space around it.",
            "waist-up": "Show the figure from the waist up.", "portrait": "Show the head and shoulders."}
 PROMPT = ("Redraw this figure as {who}, a {gender} character, in clean {style} style: a real person with natural skin, "
           "a real face and modest, age-appropriate clothes covering the body, with no wood, no ball joints and no mannequin "
           "parts anywhere. Natural {style} body proportions, about seven heads tall, with long legs. Match the figure's pose "
           "exactly. {pose} {feeling} Add nothing to the hands and carry nothing that the description doesn't name. "
+          "{held} Shoes that suit the outfit, unless the description says barefoot. "
           "{framing} {style} illustration, clean line art, {background}.")
 BONES = (("head", "neckTop"), ("neckTop", "chestTop"), ("shoulderL", "shoulderR"), ("shoulderL", "elbowL"),
          ("elbowL", "handL"), ("shoulderR", "elbowR"), ("elbowR", "handR"), ("chestTop", "hips"), ("hipL", "hipR"),
@@ -73,6 +74,10 @@ def pose_words(spec: dict) -> str:
     j = spec["joints"]
     words = [arm_words("left", j["handL"], j["elbowL"], j["shoulderL"], j["head"], j["hips"], j["chestTop"]),
              arm_words("right", j["handR"], j["elbowR"], j["shoulderR"], j["head"], j["hips"], j["chestTop"])]
+    lean = j["chestTop"]["x"] - j["hips"]["x"]
+    if abs(lean) > 15:
+        words.append(f"The upper body leans toward the {'right' if lean > 0 else 'left'} of the picture from the waist, "
+                     "while the hips stay level and centred over both feet.")
     tilt = j["head"]["x"] - j["neckTop"]["x"]
     if abs(tilt) > 6:
         words.append(f"The head tilts toward the {'right' if tilt > 0 else 'left'} of the picture.")
@@ -90,11 +95,21 @@ def feeling_words(spec: dict) -> str:
             f"as an anime character would show it, and so must her whole posture.")
 
 
+def held_words(handedness: str, turn: int = 0) -> str:
+    """Which hand holds things. Facing the viewer, the figure's own right hand is on the left of the picture."""
+    hand = "left" if handedness == "left" else "right"
+    if turn:
+        return f"Anything held is in the character's own {hand} hand."
+    other = "right" if hand == "left" else "left"
+    return f"Anything held is in the character's own {hand} hand, the hand on the {other} of the picture, gripped firmly."
+
+
 def prompt_for(spec: dict, template: str = PROMPT, who: str | None = None) -> str:
     """The prompt for ``spec``, with each left-out field taking its default."""
     fields = {**DEFAULTS, **{k: spec[k] for k in DEFAULTS if spec.get(k)}}
     framing = FRAMING.get(fields.pop("framing"), FRAMING[DEFAULTS["framing"]])
-    return template.format(who=who or spec["description"], framing=framing, pose=pose_words(spec),
+    held = held_words(fields.pop("handedness"), spec.get("turn", 0))
+    return template.format(who=who or spec["description"], framing=framing, held=held, pose=pose_words(spec),
                            feeling=feeling_words(spec), **fields)
 
 

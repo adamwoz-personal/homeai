@@ -487,6 +487,10 @@ MUTANTS=(
   "art-pose-hanging-arm-is-bent|tools/art/probe_pose_control.py|s/if elbow_angle(shoulder, elbow, hand) > 130:/if False:/|tests/test_art_pose_probe.py"
   "art-pose-spec-fields-ignored|tools/art/probe_pose_control.py|s/fields = {\*\*DEFAULTS, \*\*{k: spec\[k\] for k in DEFAULTS if spec.get(k)}}/fields = {**DEFAULTS}/|tests/test_art_pose_probe.py"
   "art-pose-who-ignored|tools/art/probe_pose_control.py|s/who=who or spec\[\"description\"\]/who=spec[\"description\"]/|tests/test_art_pose_probe.py"
+  "art-pose-lean-swapped|tools/art/probe_pose_control.py|s/if lean > 0 else/if lean < 0 else/|tests/test_art_pose_probe.py"
+  "art-pose-lean-always|tools/art/probe_pose_control.py|s/if abs(lean) > 15:/if True:/|tests/test_art_pose_probe.py"
+  "art-pose-hand-side-same|tools/art/probe_pose_control.py|s/other = \"right\" if hand == \"left\" else \"left\"/other = hand/|tests/test_art_pose_probe.py"
+  "art-pose-turn-ignored|tools/art/probe_pose_control.py|s/^    if turn:/    if False:/|tests/test_art_pose_probe.py"
   "art-report-busy-blank|tools/art/report_bakeoff.py|s/ >= FLAT_SHARE)/ >= 0.0)/|tests/test_art_report.py"
 )
 
