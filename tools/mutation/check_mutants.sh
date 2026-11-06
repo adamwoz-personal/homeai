@@ -479,6 +479,12 @@ MUTANTS=(
   "art-pose-fit-no-shrink|tools/art/probe_pose_control.py|s/shrink = width \/ fit\[\"imageWidth\"\]/shrink = 1/|tests/test_art_pose_probe.py"
   "art-fixture-differ-passes|tools/art/check_pose_fixture.py|s/return 1, f\"differ/return 0, f\"differ/|tests/test_art_pose_probe.py"
   "art-fixture-missing-fails|tools/art/check_pose_fixture.py|s/return 0, f\"skipped/return 1, f\"skipped/|tests/test_art_pose_probe.py"
+  "art-pose-raised-unnamed|tools/art/probe_pose_control.py|s/if hand\[\"y\"\] < head\[\"y\"\]:/if False:/|tests/test_art_pose_probe.py"
+  "art-pose-tilt-swapped|tools/art/probe_pose_control.py|s/if tilt > 0 else/if tilt < 0 else/|tests/test_art_pose_probe.py"
+  "art-pose-sides-swapped|tools/art/probe_pose_control.py|s/arm_words(\"left\", j\[\"handL\"\]/arm_words(\"right\", j[\"handL\"]/|tests/test_art_pose_probe.py"
+  "art-pose-waist-unnamed|tools/art/probe_pose_control.py|s/if near(hand, hips, 75):/if False:/|tests/test_art_pose_probe.py"
+  "art-pose-feeling-always-very|tools/art/probe_pose_control.py|s/how = \"a little\" if strength < 75 else/how = \"very\" if strength < 75 else/|tests/test_art_pose_probe.py"
+  "art-pose-hanging-arm-is-bent|tools/art/probe_pose_control.py|s/if elbow_angle(shoulder, elbow, hand) > 130:/if False:/|tests/test_art_pose_probe.py"
   "art-report-busy-blank|tools/art/report_bakeoff.py|s/ >= FLAT_SHARE)/ >= 0.0)/|tests/test_art_report.py"
 )
 

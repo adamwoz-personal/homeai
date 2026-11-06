@@ -8,12 +8,13 @@ each seed) and overlay.png (the spec's true joints drawn on each result, to judg
 limb by limb) to ~/homeai-bench/pose-probe-<time>/. The coder is stopped meanwhile.
 
 Usage:
-    .venv/bin/python tools/art/probe_pose_control.py [--exports DIR] [--model klein9] [--seeds 3] [--prompt TEXT]
+    .venv/bin/python tools/art/probe_pose_control.py [--exports DIR] [--model klein9] [--seeds 3] [--prompt TEXT] [--gender female]
 """
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import shutil
 import sys
 from datetime import datetime
@@ -24,11 +25,63 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from comfy_common import ROOT, Comfy, CoderStopped  # noqa: E402
 
 EXPORTS = Path.home() / "ani/pose-exports/2026-11-06"
-PROMPT = ("Turn the wooden mannequin into {who}, full body, keeping exactly the same pose: the same head tilt, "
-          "arm positions, elbow bends and leg stance. Fantasy storybook illustration, plain soft background.")
+PROMPT = ("Redraw this figure as {who}, a {gender} character, in clean anime style: a real person with natural skin, "
+          "a real face and clothes covering the body, with no wood, no ball joints and no mannequin parts anywhere. "
+          "Match the figure's pose exactly. {pose} {feeling} Anime illustration, clean line art, plain soft background.")
 BONES = (("head", "neckTop"), ("neckTop", "chestTop"), ("shoulderL", "shoulderR"), ("shoulderL", "elbowL"),
          ("elbowL", "handL"), ("shoulderR", "elbowR"), ("elbowR", "handR"), ("chestTop", "hips"), ("hipL", "hipR"),
          ("hipL", "kneeL"), ("kneeL", "ankleL"), ("hipR", "kneeR"), ("kneeR", "ankleR"))
+
+
+def near(a: dict, b: dict, reach: float) -> bool:
+    return (a["x"] - b["x"]) ** 2 + (a["y"] - b["y"]) ** 2 < reach ** 2
+
+
+def elbow_angle(shoulder: dict, elbow: dict, hand: dict) -> float:
+    """Degrees at the elbow: 180 is a straight arm."""
+    ux, uy = shoulder["x"] - elbow["x"], shoulder["y"] - elbow["y"]
+    vx, vy = hand["x"] - elbow["x"], hand["y"] - elbow["y"]
+    return abs(math.degrees(math.atan2(ux * vy - uy * vx, ux * vx + uy * vy)))
+
+
+def arm_words(side: str, hand: dict, elbow: dict, shoulder: dict, head: dict, hips: dict, chest: dict) -> str:
+    """What one arm is doing, or "" when it's nothing a model tends to lose."""
+    if hand["y"] < head["y"]:
+        return f"The arm on the {side} of the picture is raised straight up, the hand above the head."
+    if abs(hand["y"] - shoulder["y"]) < 30 and abs(hand["x"] - shoulder["x"]) > 80:
+        return f"The arm on the {side} of the picture is stretched straight out to the side."
+    if elbow_angle(shoulder, elbow, hand) > 130:          # a hanging arm also ends near the hips
+        return ""
+    if near(hand, hips, 75):
+        return f"The arm on the {side} of the picture is bent sharply, the elbow out and the hand at the waist."
+    if near(hand, chest, 90):
+        return f"The arm on the {side} of the picture is bent sharply, the hand up in front of the chest."
+    return ""
+
+
+def pose_words(spec: dict) -> str:
+    """The parts of a pose that a picture alone doesn't hold, in words, from the spec's joints.
+
+    Her rig 1 is ``mirror``, so ``L`` is the left of the picture in the front view.
+    """
+    j = spec["joints"]
+    words = [arm_words("left", j["handL"], j["elbowL"], j["shoulderL"], j["head"], j["hips"], j["chestTop"]),
+             arm_words("right", j["handR"], j["elbowR"], j["shoulderR"], j["head"], j["hips"], j["chestTop"])]
+    tilt = j["head"]["x"] - j["neckTop"]["x"]
+    if abs(tilt) > 6:
+        words.append(f"The head tilts toward the {'right' if tilt > 0 else 'left'} of the picture.")
+    return " ".join(w for w in words if w)
+
+
+def feeling_words(spec: dict) -> str:
+    """The spec's feeling as an instruction, so the face shows it and not only the limbs."""
+    feeling = spec.get("feeling")
+    if not feeling:
+        return ""
+    strength = spec.get("strength", 100)
+    how = "a little" if strength < 75 else "very" if strength <= 110 else "overwhelmingly"
+    return (f"The character is {how} {feeling}: her face, eyes, eyebrows and mouth must clearly show that she is {feeling}, "
+            f"as an anime character would show it, and so must her whole posture.")
 
 
 def klein_reference(unet: str, clip: str, image: str, prompt: str, seed: int, width: int, height: int, prefix: str) -> dict:
@@ -104,6 +157,7 @@ def main() -> int:
     ap.add_argument("--model", choices=MODELS, default="klein9")
     ap.add_argument("--seeds", type=int, default=3)
     ap.add_argument("--prompt", default=PROMPT)
+    ap.add_argument("--gender", default="female", help="used when the spec has none")
     args = ap.parse_args()
     out = Path.home() / "homeai-bench" / f"pose-probe-{datetime.now():%Y%m%d-%H%M%S}"
     out.mkdir(parents=True)
@@ -114,7 +168,9 @@ def main() -> int:
             shutil.copy(args.exports / f"{name}.png", ROOT / "app/input" / f"pose-{name}.png")
             spec = json.loads((args.exports / f"{name}.json").read_text())
             fit = json.loads((args.exports / f"{name}.fit.json").read_text())
-            prompt = args.prompt.format(who=spec["description"])
+            prompt = args.prompt.format(who=spec["description"], gender=spec.get("gender", args.gender), pose=pose_words(spec),
+                                        feeling=feeling_words(spec))
+            print(name, "|", pose_words(spec), feeling_words(spec)[:40], flush=True)
             mannequin = Image.open(args.exports / f"{name}.png")
             row, row_marked = [mannequin], [overlay(mannequin, spec, fit)]
             for seed in range(args.seeds):

@@ -61,6 +61,56 @@ def test_bones_name_real_joints():
     assert {name for bone in probe.BONES for name in bone} <= set(example["joints"])
 
 
+def joints(**moved):
+    base = {"head": {"x": 200, "y": 160}, "neckTop": {"x": 200, "y": 195}, "shoulderL": {"x": 160, "y": 215},
+            "shoulderR": {"x": 240, "y": 215}, "handL": {"x": 150, "y": 330}, "handR": {"x": 250, "y": 330}, "hips": {"x": 200, "y": 325},
+            "chestTop": {"x": 200, "y": 200},
+            "elbowL": {"x": 155, "y": 272}, "elbowR": {"x": 245, "y": 272}}
+    return {"joints": {**base, **moved}}
+
+
+def test_resting_pose_needs_no_words():
+    assert probe.pose_words(joints()) == ""
+
+
+def test_raised_arm_is_named_on_its_side():
+    words = probe.pose_words(joints(handL={"x": 150, "y": 40}))
+    assert "left of the picture is raised" in words
+    assert "right of the picture" not in words
+
+
+def test_arm_straight_out_is_named():
+    assert "right of the picture is stretched" in probe.pose_words(joints(handR={"x": 360, "y": 220}))
+
+
+def test_head_tilt_side():
+    assert "tilts toward the right" in probe.pose_words(joints(head={"x": 215, "y": 160}))
+    assert "tilts toward the left" in probe.pose_words(joints(head={"x": 185, "y": 160}))
+
+
+def test_bent_arms_are_named():
+    assert "hand at the waist" in probe.pose_words(joints(elbowL={"x": 110, "y": 270}, handL={"x": 170, "y": 320}))
+    assert "front of the chest" in probe.pose_words(joints(elbowR={"x": 290, "y": 270}, handR={"x": 215, "y": 240}))
+
+
+def test_straight_arm_angle():
+    assert round(probe.elbow_angle({"x": 0, "y": 0}, {"x": 0, "y": 10}, {"x": 0, "y": 20})) == 180
+
+
+def test_right_angle_elbow():
+    assert round(probe.elbow_angle({"x": 0, "y": 0}, {"x": 0, "y": 10}, {"x": 10, "y": 10})) == 90
+
+
+def test_feeling_strength_words():
+    assert "a little sad" in probe.feeling_words({"feeling": "sad", "strength": 50})
+    assert "very sad" in probe.feeling_words({"feeling": "sad", "strength": 100})
+    assert "overwhelmingly sad" in probe.feeling_words({"feeling": "sad", "strength": 150})
+
+
+def test_no_feeling_no_words():
+    assert probe.feeling_words({}) == ""
+
+
 def test_fixture_same(tmp_path):
     a, b = tmp_path / "a", tmp_path / "b"
     a.write_text("x")
