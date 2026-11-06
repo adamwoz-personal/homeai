@@ -4,7 +4,7 @@
 with Claude (paid). Updated as evidence accumulates. Every rule here comes from an
 observed outcome on this box, not from theory.
 
-Last updated: 2026-11-05
+Last updated: 2026-11-06
 
 ---
 
@@ -1933,3 +1933,11 @@ Speech now reaches the aura hair through a ring buffer, delayed by distance alon
 - A benchmark that looks too good is wrong until shown otherwise: a 0.012 s first token was Ollama's prompt cache, and a
   5 s window landed in model loading. `--cache-none` also reloads the model per image, 10x slower on klein.
 
+
+Bake-off and routines (2026-11-06):
+- A blanked image counts as a success in results.json. Ideogram returned "Image blocked by safety filter" cards for 39 of
+  60 ordinary prompts (kids' dragons, a shop sign), at normal speed. Timings hid it; `tools/art/report_bakeoff.py` counts it.
+- First real text command to a real routine: Adam said "all clear" at 06:25, Jarvis sent `send_text_command` to the Kitchen
+  Echo, HA returned success and Jarvis said "All clear.", and the lights didn't change. Adam ran it by voice on Alexa
+  instead. One sample, and whether the phrase reached Alexa that time is unverified. Jarvis's confirmation means only that
+  the call was sent. Fix belongs to the lights and music todo, which Adam wants discussed first.

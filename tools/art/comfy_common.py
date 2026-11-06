@@ -22,7 +22,9 @@ URL = "http://127.0.0.1:8188"
 OLLAMA = "http://127.0.0.1:11434"
 MODELS = ("klein", "klein_base", "zimage", "sdxl", "dreamshaper", "qwen", "qwen_turbo", "krea", "ernie", "hidream", "chroma",
           "moss", "boogu", "flux3", "klein9", "klein9_base", "ideogram", "animagine", "noobai")
-RETIRED = ("sdxl",)     # Adam 2026-11-05: out; DreamShaper stands in to test whether fine-tunes rescue SDXL
+# Adam 2026-11-05: SDXL out. 2026-11-06, after the bake-off: Ideogram blanked 39 of 60 ordinary prompts with a safety
+# card; FLUX 3 garbled; klein base lost to klein; the anime models missed their prompts.
+RETIRED = ("sdxl", "ideogram", "flux3", "klein_base", "animagine", "noobai")
 CHROMA_NEGATIVE = ("This low quality greyscale unfinished sketch is inaccurate and flawed. The image is very blurred "
                    "and lacks detail with excessive chromatic aberrations and artifacts.")
 ANIME = {"animagine": "animagine-xl-4.0.safetensors", "noobai": "NoobAI-XL-v1.1.safetensors"}

@@ -467,6 +467,13 @@ MUTANTS=(
   "home-goodnight-does-nothing|homeai/home.py|s/            self.lights(\"all\", \"off\")/            pass/|tests/test_doorbell.py -k goodnight"
   "home-cancel-right-after-set|homeai/home.py|s/            if wait > 0:/            if False:/|tests/test_home.py -k right_after_set"
   "enrol-no-name-not-asked|homeai/daemon.py|s/            reply, listen = vid.MSG_ENROL_NO_NAME, True/            reply, listen = vid.MSG_ENROL_NO_NAME, False/|tests/test_daemon.py -k without_a_name"
+  "art-report-any-colour-blank|tools/art/report_bakeoff.py|s/grey = middle.max() - middle.min() <= NEAR and/grey = True and/|tests/test_art_report.py"
+  "art-report-white-blank|tools/art/report_bakeoff.py|s/40 <= middle.mean() <= 200/middle.mean() >= 40/|tests/test_art_report.py"
+  "art-report-dark-blank|tools/art/report_bakeoff.py|s/40 <= middle.mean() <= 200/middle.mean() <= 200/|tests/test_art_report.py"
+  "art-report-first-is-warm|tools/art/report_bakeoff.py|s/if model in seen:/if True:/|tests/test_art_report.py"
+  "art-report-seen-across-runs|tools/art/report_bakeoff.py|/^    for run in runs:/{n;s/seen = set()/seen = globals().setdefault(\"S\", set())/}|tests/test_art_report.py"
+  "art-report-errors-uncounted|tools/art/report_bakeoff.py|s/row\[\"failed\"\] += 1/pass/|tests/test_art_report.py"
+  "art-report-busy-blank|tools/art/report_bakeoff.py|s/ >= FLAT_SHARE)/ >= 0.0)/|tests/test_art_report.py"
 )
 
 filter="${1:-}"
