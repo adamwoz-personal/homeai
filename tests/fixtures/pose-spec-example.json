@@ -1,0 +1,107 @@
+{
+  "schema": "pose-spec/1",
+  "rig": "mannequin-2d/1",
+  "name": "Sad on a bench",
+  "description": "a tired knight sitting after a long day",
+  "feeling": "sad",
+  "strength": 50,
+  "view": "front",
+  "sides": "mirror",
+  "canvas": {
+    "width": 400,
+    "height": 520
+  },
+  "pose": {
+    "shoulders": -2,
+    "headTilt": 5,
+    "bodyLean": 3,
+    "armsOut": 16,
+    "elbows": -33,
+    "legsApart": 7,
+    "knees": 5
+  },
+  "joints": {
+    "hips": {
+      "x": 200,
+      "y": 325.91
+    },
+    "hipL": {
+      "x": 178,
+      "y": 325.91
+    },
+    "kneeL": {
+      "x": 160.33,
+      "y": 409.05
+    },
+    "ankleL": {
+      "x": 157.36,
+      "y": 494
+    },
+    "hipR": {
+      "x": 222,
+      "y": 325.91
+    },
+    "kneeR": {
+      "x": 239.67,
+      "y": 409.05
+    },
+    "ankleR": {
+      "x": 242.64,
+      "y": 494
+    },
+    "belly": {
+      "x": 201.88,
+      "y": 289.96
+    },
+    "chestTop": {
+      "x": 206.28,
+      "y": 206.07
+    },
+    "ribL": {
+      "x": 174.97,
+      "y": 268.52
+    },
+    "ribR": {
+      "x": 230.89,
+      "y": 271.45
+    },
+    "shoulderL": {
+      "x": 159.92,
+      "y": 211.66
+    },
+    "elbowL": {
+      "x": 142.84,
+      "y": 271.25
+    },
+    "handL": {
+      "x": 159.79,
+      "y": 326.72
+    },
+    "shoulderR": {
+      "x": 251.8,
+      "y": 216.47
+    },
+    "elbowR": {
+      "x": 268.89,
+      "y": 276.07
+    },
+    "handR": {
+      "x": 251.93,
+      "y": 331.53
+    },
+    "neckTop": {
+      "x": 208.01,
+      "y": 188.16
+    },
+    "head": {
+      "x": 211.35,
+      "y": 164.39
+    }
+  },
+  "shapes": {
+    "handL": "fist",
+    "handR": "open"
+  },
+  "face": "eyebrows pinched up in the middle",
+  "extra": {}
+}

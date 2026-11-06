@@ -474,6 +474,11 @@ MUTANTS=(
   "art-report-seen-across-runs|tools/art/report_bakeoff.py|/^    for run in runs:/{n;s/seen = set()/seen = globals().setdefault(\"S\", set())/}|tests/test_art_report.py"
   "art-report-errors-uncounted|tools/art/report_bakeoff.py|s/row\[\"failed\"\] += 1/pass/|tests/test_art_report.py"
   "art-sheet-seeds-overlap|tools/art/one_model_sheet.py|s/page.paste(cell, (x \* CELL, y))/page.paste(cell, (0, y))/|tests/test_art_one_model_sheet.py"
+  "art-pose-no-ref-neg|tools/art/probe_pose_control.py|s/\"negative\": \[\"ref_neg\", 0\]/\"negative\": [\"zero\", 0]/|tests/test_art_pose_probe.py"
+  "art-pose-fit-ignores-offset|tools/art/probe_pose_control.py|s/fit\[\"scale\"\] + fit\[\"offsetX\"\]/fit[\"scale\"]/|tests/test_art_pose_probe.py"
+  "art-pose-fit-no-shrink|tools/art/probe_pose_control.py|s/shrink = width \/ fit\[\"imageWidth\"\]/shrink = 1/|tests/test_art_pose_probe.py"
+  "art-fixture-differ-passes|tools/art/check_pose_fixture.py|s/return 1, f\"differ/return 0, f\"differ/|tests/test_art_pose_probe.py"
+  "art-fixture-missing-fails|tools/art/check_pose_fixture.py|s/return 0, f\"skipped/return 1, f\"skipped/|tests/test_art_pose_probe.py"
   "art-report-busy-blank|tools/art/report_bakeoff.py|s/ >= FLAT_SHARE)/ >= 0.0)/|tests/test_art_report.py"
 )
 
