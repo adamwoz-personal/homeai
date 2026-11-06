@@ -111,6 +111,36 @@ def test_no_feeling_no_words():
     assert probe.feeling_words({}) == ""
 
 
+def spec(**extra):
+    return {**joints(), "description": "a knight", **extra}
+
+
+def test_left_out_fields_take_their_defaults():
+    text = probe.prompt_for(spec())
+    assert "a female character" in text
+    assert "clean anime style" in text
+    assert "plain soft background" in text
+    assert probe.FRAMING["full-body"] in text
+
+
+def test_given_fields_win():
+    text = probe.prompt_for(spec(gender="male", style="watercolour", background="a forest", framing="portrait"))
+    assert "a male character" in text and "clean watercolour style" in text
+    assert "a forest" in text and probe.FRAMING["portrait"] in text
+
+
+def test_unknown_framing_falls_back():
+    assert probe.FRAMING["full-body"] in probe.prompt_for(spec(framing="sideways"))
+
+
+def test_props_come_only_from_the_description():
+    assert "carry nothing that the description doesn't name" in probe.prompt_for(spec())
+
+
+def test_who_replaces_the_description():
+    assert "a pirate" in probe.prompt_for(spec(), who="a pirate")
+
+
 def test_fixture_same(tmp_path):
     a, b = tmp_path / "a", tmp_path / "b"
     a.write_text("x")

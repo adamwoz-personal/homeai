@@ -8,7 +8,7 @@ each seed) and overlay.png (the spec's true joints drawn on each result, to judg
 limb by limb) to ~/homeai-bench/pose-probe-<time>/. The coder is stopped meanwhile.
 
 Usage:
-    .venv/bin/python tools/art/probe_pose_control.py [--exports DIR] [--model klein9] [--seeds 3] [--prompt TEXT] [--gender female]
+    .venv/bin/python tools/art/probe_pose_control.py [--exports DIR] [--model klein9] [--seeds 3] [--prompt TEXT] [--who TEXT]
 """
 from __future__ import annotations
 
@@ -25,9 +25,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from comfy_common import ROOT, Comfy, CoderStopped  # noqa: E402
 
 EXPORTS = Path.home() / "ani/pose-exports/2026-11-06"
-PROMPT = ("Redraw this figure as {who}, a {gender} character, in clean anime style: a real person with natural skin, "
-          "a real face and clothes covering the body, with no wood, no ball joints and no mannequin parts anywhere. "
-          "Match the figure's pose exactly. {pose} {feeling} Anime illustration, clean line art, plain soft background.")
+# What home assumes when the spec leaves a field out (contract: "Fields at a glance").
+DEFAULTS = {"gender": "female", "style": "anime", "background": "plain soft background", "framing": "full-body"}
+FRAMING = {"full-body": "The whole figure is in frame from the top of the head to the soles of the feet, with space around it.",
+           "waist-up": "Show the figure from the waist up.", "portrait": "Show the head and shoulders."}
+PROMPT = ("Redraw this figure as {who}, a {gender} character, in clean {style} style: a real person with natural skin, "
+          "a real face and modest, age-appropriate clothes covering the body, with no wood, no ball joints and no mannequin "
+          "parts anywhere. Natural {style} body proportions, about seven heads tall, with long legs. Match the figure's pose "
+          "exactly. {pose} {feeling} Add nothing to the hands and carry nothing that the description doesn't name. "
+          "{framing} {style} illustration, clean line art, {background}.")
 BONES = (("head", "neckTop"), ("neckTop", "chestTop"), ("shoulderL", "shoulderR"), ("shoulderL", "elbowL"),
          ("elbowL", "handL"), ("shoulderR", "elbowR"), ("elbowR", "handR"), ("chestTop", "hips"), ("hipL", "hipR"),
          ("hipL", "kneeL"), ("kneeL", "ankleL"), ("hipR", "kneeR"), ("kneeR", "ankleR"))
@@ -82,6 +88,14 @@ def feeling_words(spec: dict) -> str:
     how = "a little" if strength < 75 else "very" if strength <= 110 else "overwhelmingly"
     return (f"The character is {how} {feeling}: her face, eyes, eyebrows and mouth must clearly show that she is {feeling}, "
             f"as an anime character would show it, and so must her whole posture.")
+
+
+def prompt_for(spec: dict, template: str = PROMPT, who: str | None = None) -> str:
+    """The prompt for ``spec``, with each left-out field taking its default."""
+    fields = {**DEFAULTS, **{k: spec[k] for k in DEFAULTS if spec.get(k)}}
+    framing = FRAMING.get(fields.pop("framing"), FRAMING[DEFAULTS["framing"]])
+    return template.format(who=who or spec["description"], framing=framing, pose=pose_words(spec),
+                           feeling=feeling_words(spec), **fields)
 
 
 def klein_reference(unet: str, clip: str, image: str, prompt: str, seed: int, width: int, height: int, prefix: str) -> dict:
@@ -157,7 +171,7 @@ def main() -> int:
     ap.add_argument("--model", choices=MODELS, default="klein9")
     ap.add_argument("--seeds", type=int, default=3)
     ap.add_argument("--prompt", default=PROMPT)
-    ap.add_argument("--gender", default="female", help="used when the spec has none")
+    ap.add_argument("--who", help="use this description instead of the spec's")
     args = ap.parse_args()
     out = Path.home() / "homeai-bench" / f"pose-probe-{datetime.now():%Y%m%d-%H%M%S}"
     out.mkdir(parents=True)
@@ -168,9 +182,7 @@ def main() -> int:
             shutil.copy(args.exports / f"{name}.png", ROOT / "app/input" / f"pose-{name}.png")
             spec = json.loads((args.exports / f"{name}.json").read_text())
             fit = json.loads((args.exports / f"{name}.fit.json").read_text())
-            prompt = args.prompt.format(who=spec["description"], gender=spec.get("gender", args.gender), pose=pose_words(spec),
-                                        feeling=feeling_words(spec))
-            print(name, "|", pose_words(spec), feeling_words(spec)[:40], flush=True)
+            prompt = prompt_for(spec, args.prompt, args.who)
             mannequin = Image.open(args.exports / f"{name}.png")
             row, row_marked = [mannequin], [overlay(mannequin, spec, fit)]
             for seed in range(args.seeds):

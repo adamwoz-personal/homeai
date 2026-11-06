@@ -485,6 +485,8 @@ MUTANTS=(
   "art-pose-waist-unnamed|tools/art/probe_pose_control.py|s/if near(hand, hips, 75):/if False:/|tests/test_art_pose_probe.py"
   "art-pose-feeling-always-very|tools/art/probe_pose_control.py|s/how = \"a little\" if strength < 75 else/how = \"very\" if strength < 75 else/|tests/test_art_pose_probe.py"
   "art-pose-hanging-arm-is-bent|tools/art/probe_pose_control.py|s/if elbow_angle(shoulder, elbow, hand) > 130:/if False:/|tests/test_art_pose_probe.py"
+  "art-pose-spec-fields-ignored|tools/art/probe_pose_control.py|s/fields = {\*\*DEFAULTS, \*\*{k: spec\[k\] for k in DEFAULTS if spec.get(k)}}/fields = {**DEFAULTS}/|tests/test_art_pose_probe.py"
+  "art-pose-who-ignored|tools/art/probe_pose_control.py|s/who=who or spec\[\"description\"\]/who=spec[\"description\"]/|tests/test_art_pose_probe.py"
   "art-report-busy-blank|tools/art/report_bakeoff.py|s/ >= FLAT_SHARE)/ >= 0.0)/|tests/test_art_report.py"
 )
 
