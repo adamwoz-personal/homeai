@@ -473,6 +473,7 @@ MUTANTS=(
   "art-report-first-is-warm|tools/art/report_bakeoff.py|s/if model in seen:/if True:/|tests/test_art_report.py"
   "art-report-seen-across-runs|tools/art/report_bakeoff.py|/^    for run in runs:/{n;s/seen = set()/seen = globals().setdefault(\"S\", set())/}|tests/test_art_report.py"
   "art-report-errors-uncounted|tools/art/report_bakeoff.py|s/row\[\"failed\"\] += 1/pass/|tests/test_art_report.py"
+  "art-sheet-seeds-overlap|tools/art/one_model_sheet.py|s/page.paste(cell, (x \* CELL, y))/page.paste(cell, (0, y))/|tests/test_art_one_model_sheet.py"
   "art-report-busy-blank|tools/art/report_bakeoff.py|s/ >= FLAT_SHARE)/ >= 0.0)/|tests/test_art_report.py"
 )
 

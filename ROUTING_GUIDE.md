@@ -1941,3 +1941,6 @@ Bake-off and routines (2026-11-06):
   Echo, HA returned success and Jarvis said "All clear.", and the lights didn't change. Adam ran it by voice on Alexa
   instead. One sample, and whether the phrase reached Alexa that time is unverified. Jarvis's confirmation means only that
   the call was sent. Fix belongs to the lights and music todo, which Adam wants discussed first.
+- Steady-state contention, images back to back, 60 s (2026-11-06): quiet 0.57 s first token, 109 tok/s; klein 1.66 s, 27 tok/s;
+  klein 9B distilled 2.29 s (worst 3.38), 24 tok/s. The earlier klein 0.78 s, 89 tok/s came from `--cache-none` runs, which
+  spent most of their time loading. Trust these.
