@@ -33,7 +33,6 @@ MUTANTS=(
   "worker-dies-on-apology|homeai/daemon.py|s/^                except Exception:  # noqa: BLE001$/                except ZeroDivisionError:/|tests/test_daemon.py -k worker"
   "mic-left-muted|homeai/daemon.py|s/                self.mic.resume()/                pass/|tests/test_daemon.py -k mic"
   "listener-left-running|homeai/daemon.py|s/                listener.stop()/                pass/|tests/test_daemon.py -k listener"
-  "no-progress-cue|homeai/daemon.py|s/                self._speak(MSG_WORKING)/                pass/|tests/test_daemon.py -k slow_answer"
   "detector-not-reset|homeai/daemon.py|s/                self._detector.reset()/                pass/|tests/test_daemon.py -k detector_is_reset"
   "research-not-speakable|homeai/research.py|s/will be spoken aloud/will be shown/|tests/test_research.py"
   "mcp-unknown-tool-crashes|homeai/mcp_server.py|s/if handler is None:/if False and handler is None:/|tests/test_mcp_server.py -k unknown_tool"

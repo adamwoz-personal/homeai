@@ -517,30 +517,18 @@ def test_detector_is_reset_after_speaking(quick) -> None:
     quick._detector.reset.assert_called_once()
 
 
-# -- _ask_with_progress ----------------------------------------------------------
+# -- no spoken cue while the agent works ------------------------------------------
 
 
-def test_fast_answer_has_no_progress_announcement(quick, monkeypatch) -> None:
-    monkeypatch.setattr("homeai.daemon.PROGRESS_AFTER_S", 0.5)
-    quick.agent.ask.return_value = "answer"
-    assert quick._ask_with_progress("q") == "answer"
+def test_slow_answer_says_nothing_before_the_reply(quick, monkeypatch) -> None:
+    """The avatar's thinking colours show the wait; Jarvis no longer says "One moment."."""
+    monkeypatch.setattr("homeai.daemon.PROGRESS_AFTER_S", 0.05, raising=False)  # the old cue fired after this
+    slow = quick.agent.ask
+    reply = slow.return_value
+    slow.side_effect = lambda q: (time.sleep(0.3), reply)[1]
+    _answer(quick, "what is the tallest tree", "A coast redwood called Hyperion.")
     quick.tts.say_safe.assert_not_called()
-
-
-def test_slow_answer_announces_the_wait_then_returns_it(quick, monkeypatch) -> None:
-    from homeai.daemon import MSG_WORKING
-
-    monkeypatch.setattr("homeai.daemon.PROGRESS_AFTER_S", 0.05)
-    quick.agent.ask.side_effect = lambda q: (time.sleep(0.3), "answer")[1]
-    assert quick._ask_with_progress("q") == "answer"
-    quick.tts.say_safe.assert_called_once_with(MSG_WORKING)
-
-
-def test_failed_announcement_does_not_lose_the_answer(quick, monkeypatch) -> None:
-    monkeypatch.setattr("homeai.daemon.PROGRESS_AFTER_S", 0.05)
-    quick.agent.ask.side_effect = lambda q: (time.sleep(0.3), "answer")[1]
-    quick.tts.say_safe.side_effect = RuntimeError("speaker unplugged")
-    assert quick._ask_with_progress("q") == "answer"
+    assert _spoken(quick) == "A coast redwood called Hyperion."
 
 
 # -- worker loop survives failures ---------------------------------------------

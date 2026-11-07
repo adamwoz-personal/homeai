@@ -20,7 +20,6 @@ concurrent requests only produce confusing stalls.
 from __future__ import annotations
 
 import collections
-import concurrent.futures
 import logging
 import os
 import queue
@@ -90,12 +89,8 @@ CLOSING_HINT = ("(The user is thanking you, Jarvis, for your help, or saying goo
                 "a question.)")
 MSG_FRAGMENT = "Sorry, I only caught part of that. Say hey Jarvis again if you meant me."
 
-# Spoken when the agent is taking long enough that silence reads as failure.
-# The threshold sits above a normal conversational turn (~0.5-1.5s) so simple
-# questions are never padded, but below the point where a user assumes the
-# assistant did not hear them.
-MSG_WORKING = "One moment."   # was "Let me look that up.": wrong for "say hello" on a cold load (Adam)
-PROGRESS_AFTER_S = 2.5
+# No spoken cue while the agent works: the avatar's thinking colours in hair and eyes
+# say it (Adam, 2026-11-07; was "Let me look that up.", then "One moment.").
 
 # How long an unanswered "Which lights?" stays open.
 HOME_PENDING_S = 30.0
@@ -348,34 +343,6 @@ class VoiceAssistant:
 
     # -- one turn ----------------------------------------------------------
 
-    def _ask_with_progress(self, utterance: str):
-        """Ask the agent, announcing a wait if the answer is slow to arrive.
-
-        A research call reads several web pages and can take fifteen seconds.
-        Without a cue, that silence is indistinguishable from the assistant
-        having failed to hear -- the user repeats themselves, which re-triggers
-        the wake word and makes things worse.
-
-        The agent runs on a worker thread so the announcement can be spoken
-        while it is still working. Speaking is deliberately done on *this*
-        thread: ``_speak`` mutes the microphone, and two threads racing on mute
-        state would leave the mic muted after one of them finished.
-        """
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(self.agent.ask, utterance)
-            try:
-                return future.result(timeout=PROGRESS_AFTER_S)
-            except concurrent.futures.TimeoutError:
-                pass
-
-            log.info("agent slow (>%.1fs), announcing wait", PROGRESS_AFTER_S)
-            try:
-                self._speak(MSG_WORKING)
-            except Exception:  # noqa: BLE001 - a cue must never break the turn
-                log.warning("progress announcement failed", exc_info=True)
-
-            return future.result()
-
     def _speak(self, text: str, chunked: bool = False) -> float:
         """Speak with the mic muted, so we never transcribe our own voice.
 
@@ -606,7 +573,7 @@ class VoiceAssistant:
         # Snapshot before asking: the agent client adds this reply to memory.
         earlier = [] if asks_to_repeat(transcript.text) else \
             [e.assistant for e in self.memory.recent()]
-        reply = self._ask_with_progress(transcript.text)
+        reply = self.agent.ask(transcript.text)
         turn.agent_ms = stage.ms()
         turn.attempts = reply.attempts
         if not reply.ok:

@@ -4,7 +4,7 @@
 with Claude (paid). Updated as evidence accumulates. Every rule here comes from an
 observed outcome on this box, not from theory.
 
-Last updated: 2026-11-06
+Last updated: 2026-11-07
 
 ---
 
@@ -699,13 +699,11 @@ A research call takes ten to fifteen seconds. During that time the assistant
 is mute, which is indistinguishable from not having heard the wake word — so
 the user repeats themselves, re-triggering the wake word mid-turn.
 
-The daemon now says "One moment." when the agent exceeds 2.5 s (it said "Let
-me look that up." until 2026-11-04, which was wrong for "say hello" on a cold
-model load). The
-threshold sits above a normal turn (0.5–1.5 s) so simple questions are never
-padded. The announcement is spoken on the *calling* thread, not the worker:
-`_speak` mutes the microphone, and two threads racing on mute state would
-leave the mic muted forever after one of them finished.
+The daemon used to speak a cue after 2.5 s ("Let me look that up.", then
+"One moment."). Removed 2026-11-07 at Adam's request: the avatar's thinking
+colours in hair and eyes show the wait, so the spoken cue was redundant. If the
+avatar is ever off for long stretches, silence reads as failure again; bring a
+cue back only for that case.
 
 ---
 
