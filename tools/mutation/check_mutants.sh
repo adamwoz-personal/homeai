@@ -64,6 +64,19 @@ MUTANTS=(
   "comfy-error-ignored|homeai/art/comfy.py|s/if status.get(\"status_str\") == \"error\":/if False:/|tests/test_art_comfy.py"
   "comfy-400-generic|homeai/art/comfy.py|s/raise ComfyError(classify(body) if exc.code != 400 else _rejected(body), body)/raise ComfyError(classify(body), body)/|tests/test_art_comfy.py"
   "comfy-down-generic|homeai/art/comfy.py|s/raise ComfyError(MSG_NOT_RUNNING, str(exc))/raise ComfyError(MSG_FAILED, str(exc))/|tests/test_art_comfy.py"
+  "store-new-not-current|homeai/art/store.py|s/        self.info\[\"current\"\] = node.id$/        pass/|tests/test_art_store.py"
+  "store-back-off-by-one|homeai/art/store.py|s/target = chain\[max(0, len(chain) - 1 - steps)\]/target = chain[max(0, len(chain) - steps)]/|tests/test_art_store.py"
+  "store-temp-left|homeai/art/store.py|s/        Path(tmp).unlink(missing_ok=True)/        pass/|tests/test_art_store.py"
+  "store-damage-fatal|homeai/art/store.py|s/            except (ValueError, KeyError, TypeError) as exc:/            except KeyError as exc:/|tests/test_art_store.py"
+  "store-schema-unchecked|homeai/art/store.py|s/info.get(\"schema\") != SCHEMA:/False:/|tests/test_art_store.py"
+  "store-back-into-deleted|homeai/art/store.py|s/chain = \[n for n in self.lineage() if not n.deleted\]/chain = self.lineage()/|tests/test_art_store.py"
+  "store-find-oldest|homeai/art/store.py|s/return max(hits, key=lambda n: n.id)/return min(hits, key=lambda n: n.id)/|tests/test_art_store.py"
+  "store-delete-keeps-current|homeai/art/store.py|s/if node.deleted and self.current == node_id:/if False:/|tests/test_art_store.py"
+  "store-select-deleted|homeai/art/store.py|s/^        if node.deleted:$/        if False:/|tests/test_art_store.py"
+  "store-same-second-clash|homeai/art/store.py|s/        while path.exists():/        while False:/|tests/test_art_store.py"
+  "store-owner-ignored|homeai/art/store.py|s/if owner is None or info.get(\"owner\") == owner:/if True:/|tests/test_art_store.py"
+  "store-loop-forever|homeai/art/store.py|s/ and at not in seen:/:/|tests/test_art_store.py"
+  "store-bad-state-allowed|homeai/art/store.py|s/        if node.state not in STATES:/        if False:/|tests/test_art_store.py"
   "mode-jarvis-left-on|homeai/gpu_mode.py|s/self.sys.systemctl(\"stop\", VOICE_SERVICE)/pass/|tests/test_gpu_mode.py -k order"
   "mode-voice-before-coder-ready|homeai/gpu_mode.py|s/            self._restart_coder()\$/            self.sys.systemctl(\"restart\", CODER_SERVICE)/|tests/test_gpu_mode.py -k restores_default"
   "mem-no-compact|homeai/memory_privacy.py|s/^        self.be.compact()$/        pass/|tests/test_memory_privacy.py -k purge"
@@ -534,7 +547,11 @@ for entry in "${MUTANTS[@]}"; do
   else
     # bash -c so quoted selectors (-k 'a or b') stay one argument; unquoted,
     # pytest got a broken -k expression and the error counted as a kill.
-    bash -c "$PY -m pytest $selector -q -p no:warnings -x" >/dev/null 2>&1
+    # Capped: a mutant that removes a loop guard once grew a list until the
+    # whole box ran out of memory (2026-11-07). In its own scope it is killed
+    # at 4 GB (or after 300 s) instead, and that counts as a kill.
+    systemd-run --user --scope --quiet -p MemoryMax=4G -p MemorySwapMax=0 \
+      timeout 300 bash -c "$PY -m pytest $selector -q -p no:warnings -x" >/dev/null 2>&1
     rc=$?
     # Exit 5 is "no tests collected": a selector typo would otherwise count
     # as a kill and the mutant would prove nothing.
@@ -544,6 +561,8 @@ for entry in "${MUTANTS[@]}"; do
     elif [[ $rc -eq 0 ]]; then
       echo "SURVIVED $name  (tests still pass with the bug in place)"
       fail=1
+    elif [[ $rc -eq 124 || $rc -eq 137 ]]; then
+      echo "killed   $name  (runaway: stopped by the time or memory cap, rc $rc)"
     else
       echo "killed   $name"
     fi

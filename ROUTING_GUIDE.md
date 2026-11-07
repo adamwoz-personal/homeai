@@ -1950,3 +1950,6 @@ Bake-off and routines (2026-11-06):
 - 2026-11-07: a ComfyUI graph with a link to a missing node is accepted, then kills ComfyUI's job thread; HTTP keeps
   answering, so health checks pass and every later job hangs. `homeai/art/comfy.py` refuses such graphs before sending.
   Found only because the live check sent a deliberately broken graph: live checks should include a bad input.
+- 2026-11-07: a mutant that removed a loop guard (`store-loop-forever`) made a test grow a list until the box ran out
+  of memory and the session was OOM-killed. My mistake: a mutant that can loop must be bounded. Every mutant's pytest
+  now runs in its own scope capped at 4 GB and 300 s (full suite peaks at 1.2 GB), so a runaway counts as a kill.
