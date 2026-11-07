@@ -131,6 +131,25 @@ Tool-call limits for the builder agent (`[runtime_profiles.heavy_duty]` in
 Verify with `tools/probe_tool_cap.py --steps 40`. Hermes has its own limit:
 500 turns.
 
+## Art mode (ComfyUI gets the coder's place)
+
+```bash
+homeai-mode art       # coder stopped, ComfyUI on 127.0.0.1:8188, Jarvis stays on (~6.5 s)
+homeai-mode voice     # ComfyUI stopped, coder back (~7 s warm, ~27 s cold)
+```
+
+- Measured 2026-11-07 with `tools/art/mode_cycle_live.py --cycles 2`: Jarvis
+  listening throughout, nothing left behind.
+- ComfyUI runs as the transient unit `homeai-comfyui.service`, capped at 24 GB
+  RAM with no swap. A reboot forgets it and comes back in voice mode. Logs:
+  `journalctl --user -u homeai-comfyui`.
+- Refused while the coder is answering someone, and from coding mode (switch
+  to voice first). If ComfyUI does not answer within 180 s, it rolls back to
+  voice mode.
+- The art tools in `tools/art/` start their own ComfyUI on the same port, so
+  run them in voice mode, not art mode.
+- Nothing draws by voice yet: art mode only gets the GPU ready (AVATAR_PLAN 6a).
+
 ## False wakes ("it answered and nobody said Jarvis")
 
 A wake word alone isn't enough. Whisper must also hear "Jarvis" (or a close

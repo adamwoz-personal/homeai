@@ -6,6 +6,7 @@
 
     homeai-mode coding     # Jarvis offline; qwen3-coder gets the whole card
     homeai-mode voice      # back to normal: Jarvis on, coder shares the card
+    homeai-mode art        # ComfyUI replaces the coder; Jarvis stays on
     homeai-mode status
     homeai-mode memory [off|on|retention DAYS|purge]   # see memory_privacy.py
     homeai-mode speaker [on|off|fetch|remove|enrol|identify]   # see speaker_admin.py
@@ -19,6 +20,10 @@ Coding mode is runtime-only: its llama-server override lives in
 /run/user/<uid>/systemd/user, which is cleared at reboot, and homeai.service
 is stopped but not disabled. A reboot therefore always comes back in voice
 mode, with a configuration that matches.
+
+Art mode is runtime-only too: ComfyUI runs as a transient unit (systemd-run),
+which a reboot forgets. It is capped at 24 GB of RAM with no swap, because an
+uncapped image model once pushed the box into swap (tools/art, 2026-11-05).
 
 Standard library only. All side effects go through ``System`` so the
 sequencing and rollback are unit-tested without touching the machine.
@@ -44,6 +49,12 @@ VOICE_MODEL = "llama31-voice"
 OLLAMA = "http://127.0.0.1:11434"
 CODER_HEALTH = "http://127.0.0.1:8080/health"
 DROPIN_NAME = "homeai-coding-mode.conf"
+COMFY_UNIT = "homeai-comfyui.service"
+COMFY_HEALTH = "http://127.0.0.1:8188/system_stats"
+CODER_SLOTS = "http://127.0.0.1:8080/slots"
+COMFY_ROOT = Path.home() / ".local/share/homeai/comfyui"
+COMFY_MEMORY_MAX = "24G"
+COMFY_START_TIMEOUT_S = 180.0
 
 # Measured fastest with the card to itself: 131 tok/s generation, 1543 tok/s
 # prompt. q4_0 KV costs a little cache fidelity; --kv q8_0 --cpu-moe 6 gives
@@ -58,6 +69,15 @@ LOAD_ATTEMPTS = 3
 
 class ModeError(Exception):
     pass
+
+
+def comfy_command(root: Path = COMFY_ROOT) -> list[str]:
+    """ComfyUI as a transient, memory-capped user unit. No --cache-none: it reloads the model for every image."""
+    return ["systemd-run", "--user", "--quiet", "--collect", f"--unit={COMFY_UNIT}",
+            "-p", f"MemoryMax={COMFY_MEMORY_MAX}", "-p", "MemorySwapMax=0",
+            "-p", f"WorkingDirectory={root / 'app'}", "-E", "HIP_VISIBLE_DEVICES=0",
+            str(root / "venv/bin/python"), "main.py", "--listen", "127.0.0.1", "--port", "8188",
+            "--disable-auto-launch", "--disable-pinned-memory"]
 
 
 def runtime_dropin_dir(uid: int | None = None) -> Path:
@@ -113,6 +133,10 @@ class System:
     def remove_dropin(self) -> None:
         (self.dropin_dir / DROPIN_NAME).unlink(missing_ok=True)
 
+    def start_comfy(self) -> bool:
+        proc = subprocess.run(comfy_command(), capture_output=True, text=True, check=False, timeout=60)
+        return proc.returncode == 0
+
     def coder_cmdline(self) -> list[str]:
         proc = subprocess.run(["systemctl", "--user", "show", "-p", "MainPID", "--value",
                                CODER_SERVICE], capture_output=True, text=True, check=False)
@@ -148,6 +172,7 @@ class Status:
     mode: str
     jarvis: bool
     coder_up: bool
+    comfy_up: bool
     coder_kv: str
     coder_cpu_moe: str
     loaded: list[str]
@@ -160,6 +185,7 @@ class Status:
             f"jarvis:        {'running' if self.jarvis else 'stopped'} ({VOICE_SERVICE})",
             f"coder:         {'up' if self.coder_up else 'DOWN'}, KV {self.coder_kv or '?'}, "
             f"experts on CPU: {self.coder_cpu_moe or '0'}",
+            f"comfyui:       {'running' if self.comfy_up else 'stopped'} ({COMFY_UNIT})",
             f"ollama loaded: {', '.join(self.loaded) or 'nothing'}",
             f"vram:          {self.vram_used_gb:.1f} / {self.vram_total_gb:.1f} GB",
         ]
@@ -192,13 +218,32 @@ class ModeSwitcher:
         code, _ = self.sys.http(CODER_HEALTH, timeout=3)
         return code == 200
 
+    def coder_busy(self) -> bool:
+        """True while the coder is answering someone; a missing or odd answer counts as idle."""
+        code, body = self.sys.http(CODER_SLOTS, timeout=5)
+        if code != 200:
+            return False
+        try:
+            return any(slot.get("is_processing") for slot in json.loads(body))
+        except (ValueError, AttributeError, TypeError):
+            return False
+
+    def comfy_running(self) -> bool:
+        return self.sys.is_active(COMFY_UNIT)
+
+    def mode(self) -> str:
+        if self.sys.dropin_exists():
+            return "coding"
+        return "art" if self.comfy_running() else "voice"
+
     def status(self) -> Status:
         cmd = self.sys.coder_cmdline()
         total, used = self.sys.vram_gb()
         return Status(
-            mode="coding" if self.sys.dropin_exists() else "voice",
+            mode=self.mode(),
             jarvis=self.sys.is_active(VOICE_SERVICE),
             coder_up=self.coder_healthy(),
+            comfy_up=self.comfy_running(),
             coder_kv=_flag(cmd, "--cache-type-k"),
             coder_cpu_moe=_flag(cmd, "--n-cpu-moe"),
             loaded=self.loaded_models(),
@@ -250,10 +295,53 @@ class ModeSwitcher:
         raise ModeError(f"{VOICE_MODEL} did not load; Jarvis will try on the next question. "
                         "Check: ollama ps")
 
+    def _stop_comfy(self) -> None:
+        if not self.comfy_running():
+            return
+        self.log(f"stopping {COMFY_UNIT}")
+        self.sys.systemctl("stop", COMFY_UNIT)
+        if self.comfy_running():
+            raise ModeError(f"{COMFY_UNIT} would not stop; systemctl --user status {COMFY_UNIT}")
+
+    def _comfy_healthy(self) -> bool:
+        code, _ = self.sys.http(COMFY_HEALTH, timeout=3)
+        return code == 200
+
     # -- modes ---------------------------------------------------------------
+
+    def art(self) -> None:
+        """ComfyUI takes the coder's place on the card; Jarvis stays on."""
+        if self.sys.dropin_exists():
+            raise ModeError("in coding mode; run homeai-mode voice first")
+        if self.comfy_running():
+            self.log("already in art mode")
+            return
+        if self.coder_busy():
+            raise ModeError("the coder is busy; try again when it's idle")
+        self.log(f"stopping {CODER_SERVICE} (art mode needs its VRAM)")
+        self.sys.systemctl("stop", CODER_SERVICE)
+        try:
+            self.log(f"starting {COMFY_UNIT} (capped at {COMFY_MEMORY_MAX} RAM, no swap)")
+            if not self.sys.start_comfy():
+                raise ModeError(f"could not start {COMFY_UNIT}")
+            if not self._wait(self._comfy_healthy, COMFY_START_TIMEOUT_S):
+                raise ModeError(f"ComfyUI did not answer within {COMFY_START_TIMEOUT_S:.0f}s; "
+                                f"see journalctl --user -u {COMFY_UNIT}")
+        except ModeError as exc:
+            self.log(f"art mode failed: {exc}")
+            self.log("rolling back to voice mode")
+            try:
+                self.voice()            # stops ComfyUI first
+            except ModeError as rollback_exc:
+                raise ModeError(f"{exc}; rollback also failed: {rollback_exc}") from exc
+            raise ModeError(f"{exc} (rolled back to voice mode)") from exc
+        if not self.voice_loaded():
+            self.log(f"WARNING: {VOICE_MODEL} is not loaded; Jarvis loads it on the next question")
+        self.log("art mode: ComfyUI on 127.0.0.1:8188, Jarvis listening")
 
     def coding(self, kv: str = DEFAULT_KV, cpu_moe: int = DEFAULT_CPU_MOE,
                ctx: int | None = None) -> None:
+        self._stop_comfy()
         self.log(f"stopping {VOICE_SERVICE} (Jarvis is offline in coding mode)")
         self.sys.systemctl("stop", VOICE_SERVICE)
         try:
@@ -274,6 +362,7 @@ class ModeSwitcher:
                  + (f", context {ctx}" if ctx else ""))
 
     def voice(self) -> None:
+        self._stop_comfy()
         if self.sys.dropin_exists():
             self.sys.remove_dropin()
             self._restart_coder()
@@ -311,6 +400,7 @@ def main(argv: list[str] | None = None) -> int:
                    help="MoE layers kept on the CPU (q8_0 needs 6 to fit at 64K)")
     c.add_argument("--ctx", type=int, help="context tokens (default: llm-serve.sh's 65536)")
     sub.add_parser("voice", help="Jarvis back on; the coder shares the GPU")
+    sub.add_parser("art", help="ComfyUI replaces the coder for drawing; Jarvis stays on")
     sub.add_parser("status")
     m = sub.add_parser("memory", help="what ZeroClaw keeps of what is said to it")
     m.add_argument("--config-dir", type=Path, help="ZeroClaw config dir (default ~/.zeroclaw)")
@@ -340,6 +430,8 @@ def main(argv: list[str] | None = None) -> int:
         try:
             if args.cmd == "coding":
                 switcher.coding(args.kv, args.cpu_moe, args.ctx)
+            elif args.cmd == "art":
+                switcher.art()
             else:
                 switcher.voice()
         finally:

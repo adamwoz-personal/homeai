@@ -16,7 +16,8 @@ class FakeSystem:
     """Simulates systemd, Ollama and llama-server. Records every action."""
 
     def __init__(self, *, voice_loaded=True, dropin=False, coder_starts=True,
-                 voice_loads=True, voice_unloads=True, jarvis_stays_up=True):
+                 voice_loads=True, voice_unloads=True, jarvis_stays_up=True,
+                 comfy=False, comfy_starts=True, comfy_healthy=True, coder_busy=False):
         self.actions: list[str] = []
         self.voice_is_loaded = voice_loaded
         self.dropin: str | None = "x" if dropin else None
@@ -28,6 +29,11 @@ class FakeSystem:
         self.jarvis = True
         self.clock = 0.0
         self.coder_started_with: str | None = None
+        self.comfy = comfy
+        self.comfy_starts = comfy_starts
+        self.comfy_healthy = comfy_healthy
+        self.comfy_stops = True
+        self.coder_busy = coder_busy
 
     def systemctl(self, *args: str) -> bool:
         self.actions.append("systemctl " + " ".join(args))
@@ -40,13 +46,25 @@ class FakeSystem:
             self.jarvis = False
         elif verb == "start" and unit == G.VOICE_SERVICE:
             self.jarvis = self.jarvis_stays_up
+        elif verb == "stop" and unit == G.CODER_SERVICE:
+            self._coder_ready_at = None
+        elif verb == "stop" and unit == G.COMFY_UNIT:
+            self.comfy = not self.comfy_stops
         return True
+
+    def start_comfy(self) -> bool:
+        self.actions.append("start comfy")
+        assert not self.coder_up, "ComfyUI started while the coder still held its VRAM"
+        self.comfy = self.comfy_starts
+        return self.comfy_starts
 
     @property
     def coder_up(self) -> bool:
         return self._coder_ready_at is not None and self.clock >= self._coder_ready_at
 
     def is_active(self, unit: str) -> bool:
+        if unit == G.COMFY_UNIT:
+            return self.comfy
         return self.jarvis if unit == G.VOICE_SERVICE else self.coder_up
 
     def http(self, url, payload=None, timeout=10.0):
@@ -61,6 +79,10 @@ class FakeSystem:
                 assert self.coder_up, "voice loaded while llama-server was not ready"
                 self.voice_is_loaded = True
             return 200, "{}"
+        if url == G.COMFY_HEALTH:
+            return (200 if self.comfy and self.comfy_healthy else 0), ""
+        if url == G.CODER_SLOTS:
+            return 200, json.dumps([{"id": 0, "is_processing": self.coder_busy}])
         if url == G.CODER_HEALTH:
             return (200 if self.coder_up else 503), ""
         raise AssertionError(url)
@@ -201,3 +223,129 @@ class TestRealSystemFiles:
 
     def test_dropin_is_runtime_only(self):
         assert str(G.runtime_dropin_dir(1000)).startswith("/run/user/1000/systemd/user/")
+
+
+class TestCharacterisation:
+    """Behaviour pinned before art mode was added (AVATAR_PLAN 6a step 1)."""
+
+    def test_status_in_voice_mode(self):
+        st = switcher(FakeSystem()).status()
+        assert (st.mode, st.jarvis, st.coder_up) == ("voice", True, True)
+        assert st.loaded == ["llama31-voice:latest"]
+        assert "jarvis:        running (homeai.service)" in st.lines()
+
+    def test_voice_starts_a_stopped_coder_before_loading_voice(self):
+        fake = FakeSystem(voice_loaded=False)
+        fake._coder_ready_at = None
+        switcher(fake).voice()
+        assert index(fake, "systemctl start llama-server") < index(fake, "ollama keep_alive=-1")
+        assert fake.voice_is_loaded and fake.jarvis
+
+    def test_voice_carries_on_when_the_coder_will_not_come_up(self):
+        fake = FakeSystem(coder_starts=False)
+        fake._coder_ready_at = None
+        logs = []
+        G.ModeSwitcher(fake, log=logs.append).voice()
+        assert any("not healthy; continuing with Jarvis" in line for line in logs)
+        assert fake.jarvis
+
+    def test_coding_from_coding_rewrites_the_override(self):
+        fake = FakeSystem(dropin=True, voice_loaded=False)
+        fake.jarvis = False
+        switcher(fake).coding(kv="q8_0")
+        assert "Environment=KV=q8_0" in fake.coder_started_with
+
+
+class TestArt:
+    def test_coder_stops_before_comfy_starts_and_jarvis_stays(self):
+        fake = FakeSystem()
+        switcher(fake).art()
+        assert index(fake, "systemctl stop llama-server") < index(fake, "start comfy")
+        assert fake.comfy and fake.jarvis and fake.voice_is_loaded
+        assert f"systemctl stop {G.VOICE_SERVICE}" not in fake.actions
+
+    def test_status_says_art(self):
+        fake = FakeSystem()
+        sw = switcher(fake)
+        sw.art()
+        st = sw.status()
+        assert (st.mode, st.comfy_up) == ("art", True)
+        assert "comfyui:       running (homeai-comfyui.service)" in st.lines()
+
+    def test_busy_coder_is_left_alone(self):
+        fake = FakeSystem(coder_busy=True)
+        with pytest.raises(G.ModeError, match="busy"):
+            switcher(fake).art()
+        assert fake.actions == [] and fake.coder_up
+
+    def test_refused_from_coding_mode(self):
+        fake = FakeSystem(dropin=True)
+        with pytest.raises(G.ModeError, match="voice first"):
+            switcher(fake).art()
+        assert "start comfy" not in fake.actions
+
+    def test_already_in_art_does_nothing(self):
+        fake = FakeSystem(comfy=True)
+        switcher(fake).art()
+        assert fake.actions == []
+
+    def test_comfy_that_never_answers_rolls_back_to_voice(self):
+        fake = FakeSystem(comfy_healthy=False)
+        with pytest.raises(G.ModeError, match="rolled back"):
+            switcher(fake).art()
+        assert not fake.comfy, "ComfyUI must be stopped"
+        assert fake.coder_up and fake.jarvis and fake.voice_is_loaded
+
+    def test_comfy_that_will_not_start_rolls_back(self):
+        fake = FakeSystem(comfy_starts=False)
+        with pytest.raises(G.ModeError, match="could not start.*rolled back"):
+            switcher(fake).art()
+        assert fake.coder_up
+
+    def test_rollback_failure_is_reported(self):
+        fake = FakeSystem(comfy_healthy=False, coder_starts=False, voice_loaded=False, voice_loads=False)
+        with pytest.raises(G.ModeError, match="rollback also failed"):
+            switcher(fake).art()
+
+    def test_odd_slots_answer_counts_as_idle(self):
+        fake = FakeSystem()
+        real = fake.http
+        fake.http = lambda url, payload=None, timeout=10: (200, "not json") if url == G.CODER_SLOTS \
+            else real(url, payload, timeout)
+        assert switcher(fake).coder_busy() is False
+
+
+class TestLeavingArt:
+    def test_voice_stops_comfy_before_starting_the_coder(self):
+        fake = FakeSystem()
+        sw = switcher(fake)
+        sw.art()
+        fake.actions.clear()
+        sw.voice()
+        assert index(fake, "systemctl stop homeai-comfyui") < index(fake, "systemctl start llama-server")
+        assert not fake.comfy and fake.coder_up and sw.mode() == "voice"
+
+    def test_coding_stops_comfy_first(self):
+        fake = FakeSystem()
+        sw = switcher(fake)
+        sw.art()
+        fake.actions.clear()
+        sw.coding()
+        assert fake.actions[0] == f"systemctl stop {G.COMFY_UNIT}"
+        assert fake.actions.index(f"systemctl stop {G.COMFY_UNIT}") < fake.actions.index(f"systemctl stop {G.VOICE_SERVICE}")
+        assert not fake.comfy and sw.mode() == "coding"
+
+    def test_comfy_that_will_not_stop_is_an_error(self):
+        fake = FakeSystem(comfy=True)
+        fake.comfy_stops = False
+        with pytest.raises(G.ModeError, match="would not stop"):
+            switcher(fake).voice()
+
+
+class TestComfyCommand:
+    def test_capped_and_transient(self):
+        cmd = G.comfy_command(Path("/c"))
+        assert cmd[:2] == ["systemd-run", "--user"] and "--scope" not in cmd
+        assert "MemoryMax=24G" in cmd and "MemorySwapMax=0" in cmd
+        assert "--unit=homeai-comfyui.service" in cmd and "WorkingDirectory=/c/app" in cmd
+        assert cmd[cmd.index("--listen") + 1] == "127.0.0.1"
