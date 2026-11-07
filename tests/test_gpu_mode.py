@@ -349,3 +349,28 @@ class TestComfyCommand:
         assert "MemoryMax=24G" in cmd and "MemorySwapMax=0" in cmd
         assert "--unit=homeai-comfyui.service" in cmd and "WorkingDirectory=/c/app" in cmd
         assert cmd[cmd.index("--listen") + 1] == "127.0.0.1"
+
+
+class TestRestartComfy:
+    def test_stops_then_starts_and_waits(self):
+        fake = FakeSystem()
+        sw = switcher(fake)
+        sw.art()
+        fake.actions.clear()
+        sw.restart_comfy()
+        assert fake.actions[0] == f"systemctl stop {G.COMFY_UNIT}" and "start comfy" in fake.actions
+        assert fake.comfy and sw.mode() == "art"
+
+    def test_only_in_art_mode(self):
+        fake = FakeSystem()
+        with pytest.raises(G.ModeError, match="not in art mode"):
+            switcher(fake).restart_comfy()
+        assert "start comfy" not in fake.actions
+
+    def test_comfy_that_stays_dead_is_reported(self):
+        fake = FakeSystem()
+        sw = switcher(fake)
+        sw.art()
+        fake.comfy_healthy = False
+        with pytest.raises(G.ModeError, match="after a restart"):
+            sw.restart_comfy()

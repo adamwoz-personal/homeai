@@ -339,6 +339,17 @@ class ModeSwitcher:
             self.log(f"WARNING: {VOICE_MODEL} is not loaded; Jarvis loads it on the next question")
         self.log("art mode: ComfyUI on 127.0.0.1:8188, Jarvis listening")
 
+    def restart_comfy(self) -> None:
+        """A fresh ComfyUI in art mode, e.g. after a job timed out (its job thread may be dead)."""
+        if self.mode() != "art":
+            raise ModeError("not in art mode")
+        self._stop_comfy()
+        if not self.sys.start_comfy():
+            raise ModeError(f"could not start {COMFY_UNIT}")
+        if not self._wait(self._comfy_healthy, COMFY_START_TIMEOUT_S):
+            raise ModeError(f"ComfyUI did not answer within {COMFY_START_TIMEOUT_S:.0f}s after a restart")
+        self.log("ComfyUI restarted")
+
     def coding(self, kv: str = DEFAULT_KV, cpu_moe: int = DEFAULT_CPU_MOE,
                ctx: int | None = None) -> None:
         self._stop_comfy()
