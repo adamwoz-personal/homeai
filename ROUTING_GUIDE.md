@@ -1953,3 +1953,6 @@ Bake-off and routines (2026-11-06):
 - 2026-11-07: a mutant that removed a loop guard (`store-loop-forever`) made a test grow a list until the box ran out
   of memory and the session was OOM-killed. My mistake: a mutant that can loop must be bounded. Every mutant's pytest
   now runs in its own scope capped at 4 GB and 300 s (full suite peaks at 1.2 GB), so a runaway counts as a kill.
+- 2026-11-07: klein 9B's "6.6 s warm" from the bake-off holds only when the prompt repeats. With Jarvis on, the 8.3 GB
+  text encoder and the 9 GB model swap on every new sentence, so an edit is ~11 s; "again" is 7.4 s. Time the real
+  pattern of use (new text each time), not repeats.
