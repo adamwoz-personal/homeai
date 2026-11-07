@@ -1979,3 +1979,6 @@ Bake-off and routines (2026-11-06):
   kernel OOM kill: `store-loop-forever` grew a list until the mutant scope's 4 GB MemoryMax killed it (7 such kills
   today). `ulimit -v` can't replace the cap (the suite then can't start threads). Fix: the `memory_cap` fixture
   (RLIMIT_DATA for the length of one test). The next full gate had 0 OOM kills and 0 crash files.
+- 2026-11-07: a daemon test that says "draw a fox" would switch the real GPU mode once art mode is wired into the
+  daemon, because the switcher calls systemctl. conftest sets `HOMEAI_ART_VOICE=0` for every test; art tests build
+  `ArtVoice` with a fake switcher. Same rule as the house tools: tests never reach real services.

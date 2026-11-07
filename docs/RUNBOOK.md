@@ -151,7 +151,27 @@ homeai-mode voice     # ComfyUI stopped, coder back (~7 s warm, ~27 s cold)
 - If pictures stop finishing while ComfyUI still answers, its job thread has
   probably died: `homeai-mode voice && homeai-mode art` restarts it. Check with
   `tools/art/comfy_client_live.py` (from voice mode).
-- Nothing draws by voice yet: art mode only gets the GPU ready (AVATAR_PLAN 6a).
+
+### Drawing by voice
+
+- "Hey Jarvis, art mode" (or "let's draw") switches to art mode and opens a
+  separate picture window; the avatar keeps running. "Hey Jarvis, draw a ..."
+  or "make a picture of ..." switches and starts drawing in one go.
+- Outside art mode only those sentences are taken, so "make me a sandwich" still
+  goes to Jarvis. In art mode, house talk ("turn off the lights") still works.
+- In art mode: "make it night time", "again", "give me four", "the second one",
+  "go back", "keep that", "what prompt made this", "cancel that".
+  "I'm done drawing" goes back to voice mode (~25 s for the coder to reload,
+  in the background). 20 minutes with nothing said or drawing does the same.
+- Every finished picture is saved to `~/Pictures/homeai/<project>-<node>.png`
+  (the folder must exist: the service can only write there if it does).
+  Projects live in `~/.local/share/homeai/art/projects/`.
+- Only voices named in `HOMEAI_ART_USERS` (default `Adam`) may draw; anyone
+  else is told drawing isn't set up for them. Ani waits for her kid policy.
+  `HOMEAI_ART_VOICE=0` turns all of this off.
+- The window is the transient unit `homeai-art-viewer`; close it with Esc or q,
+  or `systemctl --user stop homeai-art-viewer`. Logs: `journalctl --user | grep "art:"`.
+- Live check (types sentences, no mic): `tools/art/art_voice_live.py`.
 
 ## False wakes ("it answered and nobody said Jarvis")
 

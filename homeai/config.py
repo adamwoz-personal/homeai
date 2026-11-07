@@ -402,6 +402,16 @@ class AvatarConfig:
 
 
 @dataclass(frozen=True)
+class ArtConfig:
+    """Art mode by voice (AVATAR_PLAN 6a step 8, homeai/art/voice.py)."""
+
+    voice: bool = field(default_factory=lambda: _env_bool("HOMEAI_ART_VOICE", True))
+    # Who may draw, by enrolled voice name. Ani waits for her kid policy (AVATAR_PLAN 6e).
+    users: tuple[str, ...] = field(default_factory=lambda: tuple(
+        u.strip() for u in _env_str("HOMEAI_ART_USERS", "Adam").split(",") if u.strip()))
+
+
+@dataclass(frozen=True)
 class Config:
     audio: AudioConfig = field(default_factory=AudioConfig)
     stt: SttConfig = field(default_factory=SttConfig)
@@ -413,6 +423,7 @@ class Config:
     home: HomeConfig = field(default_factory=HomeConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     avatar: AvatarConfig = field(default_factory=AvatarConfig)
+    art: ArtConfig = field(default_factory=ArtConfig)
 
     def validation_errors(self) -> list[str]:
         """Return human-readable problems. Empty list means good to start.

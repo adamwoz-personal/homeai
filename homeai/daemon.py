@@ -122,6 +122,8 @@ class VoiceAssistant:
         self.agent = build_agent_client(self.cfg.agent, memory=self.memory)
         # Who is speaking; None when turned off or the model failed to load.
         self.voice_id = vid.VoiceId(self.cfg.speaker) if self.cfg.speaker.enabled else None
+        # Art mode by voice; None when HOMEAI_ART_VOICE=0 (homeai/art/voice.py).
+        self.art = self._build_art()
         self._enrolment: vid.Enrolment | None = None
         # Home control; built in start() when HA credentials exist.
         self.home = None
@@ -538,6 +540,9 @@ class VoiceAssistant:
             self.transcript.write(turn)
             return
 
+        if self._handle_art(turn, transcript.text, ident, total):
+            return
+
         if self._handle_home(turn, transcript.text, source, total):
             return
 
@@ -817,6 +822,34 @@ class VoiceAssistant:
         log.info("enrolled %s from %.1f s of speech", enrolment.name, enrolment.speech_s)
         self._say_turn(turn, vid.MSG_ENROL_DONE.format(name=enrolment.name), total)
 
+    # -- art mode ------------------------------------------------------------
+
+    def _build_art(self):
+        if not self.cfg.art.voice:
+            return None
+        from homeai import gpu_mode
+        from homeai.art.voice import ArtVoice, build_studio
+        switcher = gpu_mode.ModeSwitcher(gpu_mode.System(), log=lambda line: log.info("mode: %s", line))
+        return ArtVoice(switcher, build_studio, self.presence.publish, users=self.cfg.art.users,
+                        on_state=self.presence.state)
+
+    def _handle_art(self, turn: Turn, text: str, ident, total: Stopwatch) -> bool:
+        """Drawing sentences, and entering or leaving art mode. False: not about art."""
+        if self.art is None:
+            return False
+        speaker = ident.name if ident is not None else None
+        try:
+            reply = self.art.handle(text, speaker)
+        except Exception:  # noqa: BLE001 - a broken art mode must not take Jarvis down
+            log.exception("art mode failed on %r", text)
+            reply = "Something went wrong in art mode."
+        if reply is None:
+            return False
+        log.info("art: %r -> %r", text, reply)
+        turn.verdict = "art"
+        self._say_turn(turn, reply, total, listen=reply.endswith("?"))
+        return True
+
     def _say_turn(self, turn: Turn, text: str, total: Stopwatch, listen: bool = False) -> None:
         """Speak a fixed reply, log the turn, and optionally listen without
         the wake word for the answer."""
@@ -967,6 +1000,8 @@ class VoiceAssistant:
         for thread in self._threads:
             thread.join(timeout=3)
         self.mic.stop()
+        if self.art is not None:
+            self.art.close()
         self.presence.stop()
         if self.ltm is not None:
             self.ltm.close()

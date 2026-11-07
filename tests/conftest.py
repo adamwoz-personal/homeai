@@ -11,6 +11,13 @@ and quiet windows would be written to the real runtime directory.
 
 from __future__ import annotations
 
+import os
+
+# Art mode by voice switches real services (stops the coder, starts ComfyUI).
+# A daemon test that says "draw a fox" must never do that; tests that want
+# art mode build an ArtVoice with a fake switcher.
+os.environ["HOMEAI_ART_VOICE"] = "0"
+
 import pytest
 
 from tests.memory_db import clean_db, mem_store, pg_dsn  # noqa: F401 - shared fixtures

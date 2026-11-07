@@ -39,7 +39,7 @@ ProtectSystem=strict
 ProtectHome=read-only
 # Writable paths needed at runtime (the transcript lives in ~/.local/share/homeai;
 # "-" tolerates it not existing yet).
-ReadWritePaths=@REPO@ /tmp @ZEROCLAW_DIR@ -%h/.local/share/homeai
+ReadWritePaths=@REPO@ /tmp @ZEROCLAW_DIR@ -%h/.local/share/homeai -%h/Pictures/homeai
 # NOTE: ProtectKernelTunables / ProtectKernelModules / ProtectControlGroups
 # are deliberately absent. They require dropping capabilities, which a *user*
 # service cannot do, and systemd fails the unit with 218/CAPABILITIES.
