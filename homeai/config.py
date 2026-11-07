@@ -406,9 +406,9 @@ class ArtConfig:
     """Art mode by voice (AVATAR_PLAN 6a step 8, homeai/art/voice.py)."""
 
     voice: bool = field(default_factory=lambda: _env_bool("HOMEAI_ART_VOICE", True))
-    # Who may draw, by enrolled voice name. Ani waits for her kid policy (AVATAR_PLAN 6e).
-    users: tuple[str, ...] = field(default_factory=lambda: tuple(
-        u.strip() for u in _env_str("HOMEAI_ART_USERS", "Adam").split(",") if u.strip()))
+    # Registered adults draw with no limits; every other voice (registered kids, unknown) under kid-safe rules.
+    adults: tuple[str, ...] = field(default_factory=lambda: tuple(
+        u.strip() for u in _env_str("HOMEAI_ART_ADULTS", "Adam").split(",") if u.strip()))
 
 
 @dataclass(frozen=True)

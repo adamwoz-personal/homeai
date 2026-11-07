@@ -133,13 +133,23 @@ def test_already_in_art_mode_from_the_command_line_is_not_switched_again(art):
 
 
 @pytest.mark.parametrize("speaker", [None, "Ani", "Beth"])
-def test_only_listed_users_may_draw(art, speaker):
-    assert art.handle("draw a fox", speaker) == AV.MSG_NOT_FOR_YOU
-    assert art.switcher.calls == [] and not art.active
+def test_kids_and_unknown_voices_draw_under_kid_rules(art, speaker):
+    assert art.handle("draw a fox", speaker).startswith("Art mode.") and art.active
+    assert art.session.rules.name == "kid-safe"
+    assert "family-friendly" in art.session.project.nodes["001"].spec["style"]
 
 
-def test_users_are_matched_without_case(tmp_path, art):
-    assert art.handle("art mode", "adam") == AV.MSG_READY
+def test_adults_draw_without_limits_matched_without_case(art):
+    art.handle("draw a fox", "adam")
+    assert art.session.rules.name == "allow-all"
+    assert "family-friendly" not in (art.session.project.nodes["001"].spec.get("style") or "")
+
+
+def test_rules_follow_whoever_is_speaking(art):
+    from homeai.art.policy import MSG_KID_DENIED
+    art.handle("art mode", "Adam")
+    assert art.handle("draw a bloody knight", None) == MSG_KID_DENIED and art.queue.submitted == []
+    assert art.handle("draw a bloody knight", "Adam") == "Drawing a bloody knight."
 
 
 def test_a_failed_switch_is_spoken_and_stays_in_voice(art):
@@ -168,12 +178,6 @@ def test_house_talk_from_anyone_in_art_mode_goes_to_jarvis_and_keeps_the_idle_cl
     art._clock.now += AV.IDLE_EXIT_S + 1
     assert art.handle("turn off the lights", None) is None
     assert art.check_idle()
-
-
-def test_someone_else_cannot_draw_in_adams_art_mode(art):
-    art.handle("art mode", "Adam")
-    assert art.handle("draw a red fox", None) == AV.MSG_NOT_FOR_YOU
-    assert art.queue.submitted == []
 
 
 def test_saying_art_mode_again(art):

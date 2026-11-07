@@ -166,8 +166,13 @@ homeai-mode voice     # ComfyUI stopped, coder back (~7 s warm, ~27 s cold)
 - Every finished picture is saved to `~/Pictures/homeai/<project>-<node>.png`
   (the folder must exist: the service can only write there if it does).
   Projects live in `~/.local/share/homeai/art/projects/`.
-- Only voices named in `HOMEAI_ART_USERS` (default `Adam`) may draw; anyone
-  else is told drawing isn't set up for them. Ani waits for her kid policy.
+- Everyone can draw. Registered adults (`HOMEAI_ART_ADULTS`, default `Adam`,
+  comma-separated) have no limits. Registered kids and any voice Jarvis doesn't
+  know draw under kid rules: requests or specs with sex, nudity, gore, drugs or
+  hate words are refused with "Let's draw something else", and every picture is
+  steered "family-friendly" (people "fully clothed"). Swords, dragons and monsters
+  are fine. The rules follow whoever is speaking, so a kid in your session gets
+  kid rules. Finished pictures aren't checked by a classifier yet.
   `HOMEAI_ART_VOICE=0` turns all of this off.
 - The window is the transient unit `homeai-art-viewer`; close it with Esc or q,
   or `systemctl --user stop homeai-art-viewer`. Logs: `journalctl --user | grep "art:"`.

@@ -9,8 +9,10 @@ returns the sentence to speak, or None to let Jarvis answer as usual:
   window, and draws if there was something to draw.
 - In art mode the drawing session gets the sentence; house talk ("turn off the
   lights") still goes to Jarvis. "I'm done drawing" leaves.
-- Only names in ``users`` may draw (default Adam) until AVATAR_PLAN 6e brings
-  Ani's kid policy. An unrecognised voice is refused: this fails closed.
+- Everyone may draw. Registered adults (``adults``, default Adam) draw with no
+  limits; registered kids and any voice Jarvis doesn't know draw under the
+  kid-safe policy (Adam 2026-11-07). The policy is chosen per sentence, so a kid
+  joining Adam's session gets kid rules for their requests.
 - 20 minutes with no art sentence and nothing drawing goes back to voice mode.
 
 Finished pictures pass the image policy, then are copied to ~/Pictures/homeai/.
@@ -30,7 +32,7 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from homeai.art import grammar
+from homeai.art import grammar, policy
 
 log = logging.getLogger("homeai.art.voice")
 
@@ -56,7 +58,6 @@ MSG_READY = "Art mode. What shall I draw?"
 MSG_ALREADY = "We're in art mode."
 MSG_IN_ART_MODE = "Yes, we're in art mode. Say I'm done drawing to leave."
 MSG_LEFT = "Done drawing."
-MSG_NOT_FOR_YOU = "Drawing is only set up for Adam so far."
 MSG_SWITCH_FAILED = "I couldn't start art mode: {why}"
 MSG_IDLE = "art mode idle for {minutes} minutes: back to voice mode"
 
@@ -128,12 +129,12 @@ class ArtVoice:
     """``build(owner, notify)`` returns (session, queue) wired to the real studio; tests pass fakes."""
 
     def __init__(self, switcher, build, publish: Callable[[str, dict], None], viewer=None,
-                 users: tuple[str, ...] = ("Adam",), pictures: Path = PICTURES, idle_s: float = IDLE_EXIT_S,
+                 adults: tuple[str, ...] = ("Adam",), pictures: Path = PICTURES, idle_s: float = IDLE_EXIT_S,
                  clock: Callable[[], float] = time.monotonic, on_state: Callable[[str], None] | None = None,
                  background: Callable[[Callable[[], None]], None] | None = None) -> None:
         self.switcher, self._build, self._publish = switcher, build, publish
         self.viewer = viewer or Viewer()
-        self.users = tuple(u.lower() for u in users)
+        self.adults = tuple(u.lower() for u in adults)
         self.pictures, self.idle_s, self._clock = Path(pictures), idle_s, clock
         self._on_state = on_state or (lambda state: None)
         self._background = background or (lambda fn: threading.Thread(target=fn, name="art-leave",
@@ -151,8 +152,10 @@ class ArtVoice:
     def active(self) -> bool:
         return self.session is not None
 
-    def _may_draw(self, speaker: str | None) -> bool:
-        return bool(speaker) and speaker.lower() in self.users
+    def rules_for(self, speaker: str | None):
+        """Registered adults: no limits. Everyone else (registered kids, unknown voices): kid-safe."""
+        adult = bool(speaker) and speaker.lower() in self.adults
+        return policy.load("allow-all" if adult else "kid-safe")
 
     # -- the one entry point ---------------------------------------------------
 
@@ -177,8 +180,7 @@ class ArtVoice:
             if intent is None and for_jarvis(text, subject):
                 return None                                  # house talk and other questions: Jarvis answers
             self._last = self._clock()
-            if not self._may_draw(speaker):
-                return MSG_NOT_FOR_YOU
+            self.session.rules = self.rules_for(speaker)
             # Everything else in art mode is about the picture, even without a drawing verb
             # ("let's start with the dragon", "let's make it cyberpunk"): in Adam's first
             # session those went to the chat model, which looked things up instead.
@@ -192,8 +194,6 @@ class ArtVoice:
     # -- entering and leaving ----------------------------------------------------
 
     def _enter(self, speaker: str | None, first: str | None) -> str:
-        if not self._may_draw(speaker):
-            return MSG_NOT_FOR_YOU
         self._on_state("mode_switching")
         try:
             if self.switcher.mode() != "art":
@@ -202,7 +202,8 @@ class ArtVoice:
             log.warning("art mode failed: %s", exc)
             return MSG_SWITCH_FAILED.format(why=str(exc).split(";")[0])
         self.owner = speaker
-        self.session, self.queue = self._build(speaker.lower(), self._on_job)
+        self.session, self.queue = self._build((speaker or "guest").lower(), self._on_job)
+        self.session.rules = self.rules_for(speaker)
         self.queue.start()
         self.viewer.start()
         self._last = self._clock()

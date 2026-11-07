@@ -200,3 +200,42 @@ def test_unknown_policy_fails_closed():
 def test_klein9_graph_is_the_bake_off_graph():
     ours = workflows.klein9("a fox", 7, 832, 1216, prefix="p")
     assert ours == comfy_common.workflow("klein9", "a fox", 7, 832, 1216, prefix="p")
+
+
+# -- kid-safe policy -------------------------------------------------------------------
+
+@pytest.mark.parametrize("said", ["draw a naked lady", "a bloody battlefield with dead bodies", "a man smoking a cigarette",
+                                  "a sexy elf", "kill the dragon"])
+def test_kid_safe_refuses_adult_words(said):
+    rules = policy.load("kid-safe")
+    decision = rules.check_request(said, "ani")
+    assert not decision.allowed and decision.reason == policy.MSG_KID_DENIED
+
+
+@pytest.mark.parametrize("said", ["a killer whale", "a bloodhound puppy", "a samurai with a sword", "a scary dragon",
+                                  "a knight fighting a monster"])
+def test_kid_safe_allows_kid_things(said):
+    assert policy.load("kid-safe").check_request(said, "ani").allowed
+
+
+def test_kid_safe_steers_the_spec_family_friendly():
+    rules = policy.load("kid-safe")
+    decision = rules.check_spec({"subject": "a samurai", "style": "anime"}, "ani")
+    assert decision.verdict == "rewrite"
+    assert decision.spec["style"] == "anime, family-friendly"
+    assert decision.spec["details"] == "everyone fully clothed"
+    animal = rules.check_spec({"subject": "a fox"}, "ani")
+    assert animal.spec == {"subject": "a fox", "style": "family-friendly"}
+    again = rules.check_spec(decision.spec, "ani")
+    assert again.verdict == "allow", "already steered: no change"
+
+
+def test_kid_safe_refuses_a_spec_the_model_made_adult():
+    decision = policy.load("kid-safe").check_spec({"subject": "a fox", "details": "in lingerie"}, "ani")
+    assert not decision.allowed
+
+
+def test_kid_safe_session_draws_the_steered_spec(tmp_path):
+    s = ArtSession(Store(tmp_path), FakeQueue(), "ani", rules=policy.load("kid-safe"), patch=fake_patch)
+    s.handle("draw a red fox")
+    assert prompt_of(s.queue.jobs[0]) == "A red fox. Family-friendly style."

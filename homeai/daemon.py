@@ -923,7 +923,7 @@ class VoiceAssistant:
         from homeai import gpu_mode
         from homeai.art.voice import ArtVoice, build_studio
         switcher = gpu_mode.ModeSwitcher(gpu_mode.System(), log=lambda line: log.info("mode: %s", line))
-        return ArtVoice(switcher, build_studio, self.presence.publish, users=self.cfg.art.users,
+        return ArtVoice(switcher, build_studio, self.presence.publish, adults=self.cfg.art.adults,
                         on_state=self.presence.state)
 
     def _handle_status(self, turn: Turn, text: str, ident, total: Stopwatch) -> bool:
