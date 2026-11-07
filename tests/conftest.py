@@ -30,3 +30,83 @@ def _isolated_home(tmp_path, monkeypatch):
     # No avatar event bus unless a test opts in (tests/test_avatar_presence.py).
     monkeypatch.setenv("HOMEAI_AVATAR", "0")
     (tmp_path / "run").mkdir(exist_ok=True)
+
+
+# -- threads left running at exit ---------------------------------------------
+# A daemon thread still running while Python shuts down can segfault the
+# interpreter, and Ubuntu's crash reporter then puts an "application stopped"
+# pop-up on Adam's desktop (2026-11-07: a mutant left the mic watchdog
+# reopening). Tests must stop what they start; this hook names any thread that
+# is still alive and leaves without interpreter finalisation, so a leak shows
+# up in the output instead of as a crash.
+_THREADS_AT_START: set[int] = set()
+
+
+def pytest_configure(config):
+    import threading
+    _THREADS_AT_START.update(t.ident for t in threading.enumerate())
+
+
+def pytest_unconfigure(config):
+    import os
+    import sys
+    import threading
+    leaked = [t for t in threading.enumerate()
+              if t.is_alive() and t.ident not in _THREADS_AT_START and t is not threading.current_thread()]
+    if not leaked:
+        return
+    names = ", ".join(sorted({t.name for t in leaked}))
+    print(f"\nthreads still running at exit ({len(leaked)}): {names}", file=sys.stderr)
+    status = getattr(config, "_homeai_exitstatus", 0)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(int(status))
+
+
+def pytest_sessionfinish(session, exitstatus):
+    session.config._homeai_exitstatus = exitstatus
+
+
+@pytest.fixture(autouse=True)
+def _close_memory_services(monkeypatch):
+    """Close every MemoryService a test started, so its ltm-recorder thread ends with the test."""
+    from homeai.memory_store.service import MemoryService
+    started = []
+    real_start = MemoryService.start
+
+    def start(self):
+        started.append(self)
+        return real_start(self)
+
+    monkeypatch.setattr(MemoryService, "start", start)
+    yield
+    for svc in started:
+        svc.close(timeout=2.0)
+
+
+@pytest.fixture
+def memory_cap():
+    """``with memory_cap(mb):`` makes a runaway allocation raise MemoryError inside the test.
+
+    For tests of loop guards: with the guard broken (a mutant), the loop eats
+    memory until the kernel OOM-kills it, and GNOME shows an "application
+    stopped" pop-up for every OOM kill (2026-11-07). RLIMIT_DATA turns that
+    into an ordinary failure. The limit is restored afterwards.
+    """
+    import contextlib
+    import re
+    import resource
+    from pathlib import Path
+
+    @contextlib.contextmanager
+    def cap(extra_mb: int = 256):
+        status = Path("/proc/self/status").read_text()
+        used = int(re.search(r"VmData:\s+(\d+) kB", status).group(1)) * 1024
+        soft, hard = resource.getrlimit(resource.RLIMIT_DATA)
+        resource.setrlimit(resource.RLIMIT_DATA, (used + extra_mb * 2**20, hard))
+        try:
+            yield
+        finally:
+            resource.setrlimit(resource.RLIMIT_DATA, (soft, hard))
+
+    return cap

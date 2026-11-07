@@ -47,6 +47,16 @@ delegation in the scorecard at the end.
 5. Change one thing at a time; keep the baseline in `~/homeai-bench/`.
 6. Any probe that runs a real agent must not let the model's tool calls run:
    they act on the house (a "say hello" probe played jazz on an Echo).
+7. Tests stop every thread they start (join it, or close the object that owns
+   it). A thread still running at interpreter exit can segfault Python, and
+   Ubuntu's crash reporter then shows an "application stopped" pop-up on
+   Adam's desktop. `tests/conftest.py` names any leaked thread at exit and
+   leaves with `os._exit`; a "threads still running at exit" line is a bug to fix.
+   Same for memory: a kernel OOM kill also shows that pop-up, and the mutant
+   scope's 4 GB cap is enforced by the OOM killer. A test of a loop guard wraps
+   the loop in the `memory_cap` fixture so a broken guard raises MemoryError
+   instead. After a gate, `journalctl -k --since <start> | grep -c "out of
+   memory"` and `ls /var/crash` should both be empty.
 
 **Long-term memory (Phases 1-3 built 2026-11-01; `plans/MEMORY_PLAN.md` §15):**
 Postgres `homeai` (socket, peer auth), code in `homeai/memory_store/`, CLI
@@ -1956,3 +1966,16 @@ Bake-off and routines (2026-11-06):
 - 2026-11-07: klein 9B's "6.6 s warm" from the bake-off holds only when the prompt repeats. With Jarvis on, the 8.3 GB
   text encoder and the 9 GB model swap on every new sentence, so an edit is ~11 s; "again" is 7.4 s. Time the real
   pattern of use (new text each time), not repeats.
+- 2026-11-07: Adam saw repeated "application stopped" pop-ups. They came from my mutant runs, not the live system:
+  `mic-dog-thread-outlives-stop` left the mic watchdog reopening while pytest shut down, which segfaulted it about
+  half the time (thread `mic-reopen`, /var/crash/*pytest*.crash). The test passed or failed correctly; only the exit
+  crashed. Fixes: that test ends the thread itself, an autouse fixture closes every MemoryService (7 `ltm-recorder`
+  threads were leaking), and conftest exits through `os._exit` after naming any leaked thread. Check `/var/crash`
+  and `journalctl -k | grep segfault` after a mutant run.
+- 2026-11-07: after a barge-in the mic opens with no wake word, and three barge-ins in a row answered background
+  conversation (speaker scores 0.31, 0.01, -0.03). The follow-up gate only covered `source == "followup"`. Barge-in
+  captures are now answered only when the voice matches the person Jarvis was talking to.
+- 2026-11-07 (later): two more pop-ups during a gate, with nothing in /var/crash. These were GNOME's notice for a
+  kernel OOM kill: `store-loop-forever` grew a list until the mutant scope's 4 GB MemoryMax killed it (7 such kills
+  today). `ulimit -v` can't replace the cap (the suite then can't start threads). Fix: the `memory_cap` fixture
+  (RLIMIT_DATA for the length of one test). The next full gate had 0 OOM kills and 0 crash files.

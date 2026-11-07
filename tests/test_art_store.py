@@ -204,12 +204,13 @@ def test_write_is_atomic(tmp_path, monkeypatch):
     assert [p.name for p in target.parent.iterdir()] == ["x.json"], "no temp file left behind"
 
 
-def test_lineage_survives_a_parent_loop(st):
+def test_lineage_survives_a_parent_loop(st, memory_cap):
     p = st.create("general", "adam")
     p.add("a", {})
     p.add("b", {})
     p.nodes["001"].parent = "002"
-    assert len(p.lineage()) == 2
+    with memory_cap():
+        assert len(p.lineage()) == 2
 
 
 def test_slug():
