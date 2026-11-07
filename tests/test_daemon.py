@@ -830,6 +830,34 @@ def test_followup_from_another_voice_is_ignored(voiced) -> None:
     assert turn.verdict == "other-speaker" and spoken == []
 
 
+@pytest.mark.parametrize("emb", [BETH, STRANGER, _unit(0.3, 0.2, 0.93)], ids=["known", "stranger", "unsure"])
+def test_bargein_from_anyone_but_the_owner_is_ignored(voiced, emb) -> None:
+    # 2026-11-07: background talk captured after "Jarvis" interrupted a reply was answered.
+    _speak_as(voiced, ADAM, "Hey Jarvis, what is two plus four?")
+    turn, spoken = _speak_as(voiced, emb, "When I had the studio I worked at the resort.", source="bargein")
+    voiced.agent.ask.assert_not_called()
+    assert turn.verdict == "other-speaker" and spoken == []
+
+
+def test_bargein_from_the_owner_is_answered(voiced) -> None:
+    _speak_as(voiced, ADAM, "Hey Jarvis, what is two plus four?")
+    turn, _ = _speak_as(voiced, ADAM, "and times two?", source="bargein")
+    voiced.agent.ask.assert_called_once()
+    assert turn.verdict == "allow"
+
+
+def test_bargein_stop_is_a_dismissal_even_unrecognised(voiced) -> None:
+    _speak_as(voiced, ADAM, "Hey Jarvis, what is two plus four?")
+    turn, spoken = _speak_as(voiced, None, "Stop.", source="bargein", seconds=0.3)
+    voiced.agent.ask.assert_not_called()
+    assert turn.verdict == "dismissed" and spoken == []
+
+
+def test_bargein_with_no_known_owner_is_answered(voiced) -> None:
+    turn, _ = _speak_as(voiced, STRANGER, "what is two plus four?", source="bargein")
+    voiced.agent.ask.assert_called_once()
+
+
 def test_followup_from_the_same_voice_is_answered(voiced) -> None:
     _speak_as(voiced, ADAM, "Hey Jarvis, what is two plus four?")
     _speak_as(voiced, _unit(0.9, 0.1, 0.1), "and times two?", source="followup")

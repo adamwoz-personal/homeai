@@ -361,11 +361,22 @@ class TestMicWatchdog:
     def test_runs_on_its_own_thread_until_stopped(self, mic) -> None:
         dog = MicWatchdog(mic, lambda: None, stall_s=0.02, check_s=0.005, max_reopens=10_000, reopen_timeout_s=0.1)
         dog.start()
-        deadline = time.monotonic() + 2.0
-        while len(FakeStream.opened) < 2 and time.monotonic() < deadline:
-            time.sleep(0.005)
-        dog.stop()
-        settled = len(FakeStream.opened)
-        assert settled >= 2
-        time.sleep(0.05)
-        assert len(FakeStream.opened) == settled
+        try:
+            deadline = time.monotonic() + 2.0
+            while len(FakeStream.opened) < 2 and time.monotonic() < deadline:
+                time.sleep(0.005)
+            dog.stop()
+            settled = len(FakeStream.opened)
+            assert settled >= 2
+            time.sleep(0.05)
+            assert len(FakeStream.opened) == settled
+        finally:
+            # If stop() is broken (mutant mic-dog-thread-outlives-stop) the thread
+            # would still be reopening at interpreter exit, which segfaulted
+            # pytest and raised desktop crash pop-ups (2026-11-07). SystemExit
+            # gets past the loop's `except Exception` and ends the thread.
+            def halt():
+                raise SystemExit
+            dog.check = halt
+            if dog._thread is not None:
+                dog._thread.join(timeout=2)

@@ -728,6 +728,25 @@ class VoiceAssistant:
                 self.transcript.write(turn)
                 return True
 
+        # After an interruption the mic opens with no wake word, so whoever
+        # talks next in the room is captured. Answer only the person Jarvis
+        # was talking to: on 2026-11-07 three barge-ins in a row answered
+        # background conversation (scores 0.31, 0.01, -0.03 and one "too
+        # little speech"), and each answer had to be interrupted again.
+        # Stricter than the follow-up gate on purpose: a missed request costs
+        # one "Hey Jarvis", an answered stranger costs another interruption.
+        # "Stop" still goes through to the dismissal below.
+        owner = self.memory.speaker
+        if source == "bargein" and self.voice_id is not None and owner \
+                and (ident is None or ident.name != owner) \
+                and not is_dismissal(text, self.cfg.wake.model):
+            log.info("barge-in follow-up not from %s (%s) - staying quiet", owner,
+                     "no ID" if ident is None else vid.describe(ident))
+            turn.verdict = "other-speaker"
+            turn.total_ms = total.ms()
+            self.transcript.write(turn)
+            return True
+
         cmd = vid.parse_command(text)
         if cmd is None or (self.voice_id is None and cmd.kind != "enrol"):
             return False
