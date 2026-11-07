@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+"""How well does the voice model turn spoken picture changes into PromptSpec patches? (AVATAR_PLAN 6a step 6)
+
+Why: "make it bluer" only works if the model puts blue in `palette` and leaves
+the subject alone. This runs a fixed set of instructions through
+homeai/art/patcher.py against the real voice model (direct Ollama call, no
+tools, so nothing in the house can act), checks each result, repeats each case,
+and reports pass rate and latency. Jarvis keeps running; the model stays pinned.
+
+Writes ~/homeai-bench/spec-patches-<time>/result.json.
+
+Usage:
+    .venv/bin/python tools/art/eval_spec_patches.py [--repeats 3]
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import statistics
+import sys
+from datetime import datetime
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO))
+
+from homeai.art import patcher as P  # noqa: E402
+from homeai.art import prompt_spec as PS  # noqa: E402
+
+FOX = {"subject": "a red fox", "setting": "sitting in the snow"}
+
+
+def has(field: str, *words: str):
+    return lambda before, after: any(w in str(after.get(field, "")).lower() for w in words) or \
+        f"{field} lacks {'/'.join(words)}: {after.get(field)!r}"
+
+
+def any_of(fields: tuple[str, ...], *words: str):
+    return lambda before, after: any(w in str(after.get(f, "")).lower() for f in fields for w in words) or \
+        f"none of {fields} has {'/'.join(words)}"
+
+
+def same(field: str):
+    return lambda before, after: before.get(field) == after.get(field) or \
+        f"{field} changed: {before.get(field)!r} -> {after.get(field)!r}"
+
+
+def cleared(field: str):
+    return lambda before, after: not after.get(field) or f"{field} still {after.get(field)!r}"
+
+
+def equals(field: str, value):
+    return lambda before, after: after.get(field) == value or f"{field} is {after.get(field)!r}, wanted {value!r}"
+
+
+CASES = [
+    ("new picture", {}, "draw a red fox sitting in the snow", [has("subject", "fox"), any_of(("subject", "setting"), "snow")]),
+    ("bluer", FOX, "make it bluer", [has("palette", "blue"), same("subject")]),
+    ("night", FOX, "make it night time", [any_of(("setting", "lighting"), "night"), same("subject")]),
+    ("fog", FOX, "add some fog", [any_of(("details", "setting", "lighting"), "fog", "mist"), same("subject")]),
+    ("watercolour", FOX, "make it a watercolour", [has("style", "watercolo"), same("subject")]),
+    ("wide", FOX, "make it a wide picture", [equals("aspect", "wide"), same("subject")]),
+    ("new subject", FOX, "make it a wolf instead", [has("subject", "wolf")]),
+    ("remove colour", {**FOX, "palette": "blue"}, "get rid of the blue", [cleared("palette"), same("subject")]),
+    ("camera", FOX, "show it from a low angle", [has("camera", "low"), same("subject")]),
+    ("leave out", FOX, "no people in it", [has("negative", "people"), same("subject")]),
+    ("reference", FOX, "use Mira", [lambda b, a: "Mira" in a.get("references", []) or f"references {a.get('references')}",
+                                    same("subject")]),
+    ("composition", FOX, "put the fox small in the corner", [any_of(("composition", "details"), "corner"),
+                                                             has("subject", "fox")]),
+]
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--repeats", type=int, default=3)
+    args = ap.parse_args()
+    out = Path.home() / "homeai-bench" / f"spec-patches-{datetime.now():%Y%m%d-%H%M%S}"
+    out.mkdir(parents=True)
+    rows, times = [], []
+    for name, start, instruction, checks in CASES:
+        before = PS.validate(start) if start else {}
+        for n in range(args.repeats):
+            result = P.patch_for(before, instruction)
+            problems = [r for c in checks for r in [c(before, result.spec)] if r is not True] if result.ok \
+                else [f"not caught: {result.detail}"]
+            times.append(result.seconds)
+            rows.append({"case": name, "run": n, "ok": not problems, "problems": problems, "patch": result.patch,
+                         "seconds": result.seconds})
+            print(f"{name:14} {n} {'PASS' if not problems else 'FAIL'} {result.seconds:5.2f}s {result.patch} "
+                  f"{'; '.join(problems)}", flush=True)
+    passed = sum(r["ok"] for r in rows)
+    summary = {"passed": passed, "runs": len(rows), "median_s": statistics.median(times), "max_s": max(times),
+               "model": P.MODEL}
+    (out / "result.json").write_text(json.dumps({"summary": summary, "rows": rows}, indent=1))
+    print(json.dumps(summary))
+    print(out)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
