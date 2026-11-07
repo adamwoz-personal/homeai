@@ -1167,3 +1167,12 @@ def test_status_update_crash_is_spoken(voiced) -> None:
     _, spoken = _speak_as(voiced, ADAM, "Hey Jarvis, status update.")
     assert spoken == ["Sorry, I couldn't put the status update together."]
     voiced.agent.ask.assert_not_called()
+
+
+def test_start_adopts_art_mode_left_on(assistant, monkeypatch) -> None:
+    calls = []
+    assistant.art = type("A", (), {"adopt": lambda self: calls.append("adopt")})()
+    for name in ("_start_voice_id", "_start_home", "_start_status"):
+        monkeypatch.setattr(assistant, name, lambda: None)
+    assistant._start_services()
+    assert calls == ["adopt"]

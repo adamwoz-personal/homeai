@@ -73,7 +73,7 @@ def test_edit_keeps_the_seed_and_says_what_changed(session):
     session.handle("draw a red fox")
     reply = session.handle("make it blue")
     first, second = session.queue.jobs
-    assert reply.spoken == "Changing it: palette: blue."
+    assert reply.spoken == "Changing palette to blue."
     assert seed_of(first) == seed_of(second) and "Blue colours" in prompt_of(second)
     assert session.project.nodes["002"].parent == "001"
 

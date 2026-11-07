@@ -1024,6 +1024,13 @@ class VoiceAssistant:
 
     # -- lifecycle ---------------------------------------------------------
 
+    def _start_services(self) -> None:
+        self._start_voice_id()
+        self._start_home()
+        self._start_status()
+        if self.art is not None:
+            self.art.adopt()        # art mode left on from before a restart still idles back to voice
+
     def start(self) -> bool:
         problems = self.preflight()
         if problems:
@@ -1039,9 +1046,7 @@ class VoiceAssistant:
 
         self._detector, description = build_detector(self.cfg.wake)
         log.info("wake detector: %s", description)
-        self._start_voice_id()
-        self._start_home()
-        self._start_status()
+        self._start_services()
         self.presence.start()
         # Load the in-process voice now, not on the first reply (~0.5 s).
         threading.Thread(target=self.tts.warm, name="tts-warm", daemon=True).start()

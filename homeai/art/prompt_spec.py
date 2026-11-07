@@ -101,14 +101,25 @@ def diff(before: dict, after: dict) -> dict:
 
 
 def describe(changes: dict) -> str:
-    """A short spoken summary of ``diff`` output, e.g. "palette: blue; lighting: night"."""
+    """A short spoken summary of ``diff`` output: "palette to blue and the details".
+
+    Short values are read out; long ones are named only. Reading every changed
+    field in full took ten seconds a turn in Adam's first session (2026-11-07).
+    """
     parts = []
     for name, (_, now) in changes.items():
         if name in ("seed", "strength"):
             continue
         shown = ", ".join(now) if isinstance(now, list) else now
-        parts.append(f"{name}: {shown}" if shown else f"{name} cleared")
-    return "; ".join(parts) or "nothing"
+        if not shown:
+            parts.append(f"no {name}")
+        elif len(str(shown).split()) <= 4:
+            parts.append(f"{name} to {shown}")
+        else:
+            parts.append(f"the {name}")
+    if not parts:
+        return "nothing"
+    return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
 
 
 def _cap(text: str) -> str:

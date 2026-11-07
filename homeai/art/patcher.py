@@ -28,9 +28,13 @@ SYSTEM = """You edit the description of a picture. You get the current descripti
 Answer with only the fields that should change, as JSON. Use null to remove a field. Leave out every field that stays.
 Fields: subject (what the picture is of), details, setting (place or time), style (art style), palette (colours),
 lighting, camera (angle or distance), composition, negative (things to leave out), aspect (square, portrait, landscape
-or wide), references (names of saved characters or styles).
-If the description is empty, the instruction asks for a new picture: fill in subject and anything else it names.
-Keep the subject unless the instruction changes what the picture is of. Never invent details the instruction doesn't ask for."""
+or wide), references (names of saved characters the person mentions by name, like "Mira"; never descriptions).
+If the description is empty, the instruction asks for a new picture: fill in subject, and only the other fields the
+instruction names. Don't add a style, palette, lighting, camera, composition or setting nobody asked for.
+Keep the subject unless the instruction changes what the picture is of. Never invent details the instruction doesn't ask for.
+If the instruction complains about something that went wrong (an extra head, a second rider, something odd in a hand),
+fix it: write what should be there instead in details ("a single head", "only one rider", "empty hands"). Never add
+the unwanted thing, and never repeat the complaint as a feature."""
 
 
 @dataclass
@@ -57,6 +61,14 @@ def messages_for(spec: dict, instruction: str) -> list[dict]:
                and k not in ("seed", "strength")}
     return [{"role": "system", "content": SYSTEM},
             {"role": "user", "content": f"Current description: {json.dumps(current)}\nInstruction: {instruction}"}]
+
+
+def _names_in(instruction: str, names) -> bool:
+    """Whether every reference the model gave is a name the person actually said."""
+    if not isinstance(names, list) or not names:
+        return True
+    said = instruction.lower()
+    return all(isinstance(n, str) and n.lower() in said for n in names)
 
 
 def clip_long_text(patch: dict) -> dict:
@@ -88,7 +100,10 @@ def patch_for(spec: dict, instruction: str, chat=ollama_chat, clock=time.monoton
             raise SpecError("empty patch")
         if "seed" in patch or "strength" in patch:
             raise SpecError("the model may not set seed or strength")
-        patch = clip_long_text(patch)
+        patch = {k: v for k, v in clip_long_text(patch).items()
+                 if not (isinstance(v, str) and v.strip().lower() in ("none", "n/a", "nothing"))}
+        if "references" in patch and not _names_in(instruction, patch["references"]):
+            del patch["references"]     # the model files descriptions under references; only names belong there
         new = apply_patch(spec, patch)
     except (urllib.error.URLError, OSError, TimeoutError, KeyError, ValueError) as exc:
         detail = f"{type(exc).__name__}: {exc}; model said {raw[:200]!r}"[:400]

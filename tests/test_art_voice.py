@@ -163,7 +163,7 @@ def test_a_failed_switch_is_spoken_and_stays_in_voice(art):
 def test_in_art_mode_sentences_go_to_the_session(art):
     art.handle("art mode", "Adam")
     assert art.handle("draw a red fox", "Adam") == "Drawing a red fox."
-    assert art.handle("make it blue", "Adam") == "Changing it: palette: blue."
+    assert art.handle("make it blue", "Adam") == "Changing palette to blue."
     assert len(art.queue.submitted) == 2
 
 
@@ -437,7 +437,7 @@ def test_in_art_mode_a_sentence_without_a_verb_is_drawn(art, said):
 def test_in_art_mode_a_free_sentence_changes_the_picture(art):
     art.handle("art mode", "Adam")
     art.handle("draw a red fox", "Adam")
-    assert art.handle("let's make it blue", "Adam") == "Changing it: palette: blue."
+    assert art.handle("let's make it blue", "Adam") == "Changing palette to blue."
     assert art.session.project.nodes["002"].parent == "001"
 
 
@@ -475,3 +475,76 @@ def test_long_fields_are_trimmed_not_refused():
     long = '{"lighting": "' + "neon " * 30 + '"}'
     result = patch_for({"subject": "a dragon"}, "make it neon", chat=lambda m, s: long)
     assert result.ok and len(result.spec["lighting"]) <= 80
+
+
+
+# -- Adam's second session (2026-11-07 evening) --------------------------------------------
+
+def test_descriptions_filed_as_references_are_dropped():
+    from homeai.art.patcher import patch_for
+    said = '{"subject": "undead dragon", "references": ["cyberpunk samurai", "undead creature"]}'
+    result = patch_for({"subject": "a dragon"}, "make it an undead dragon", chat=lambda m, s: said)
+    assert result.ok and result.spec["subject"] == "undead dragon" and not result.spec.get("references")
+    named = patch_for({"subject": "a dragon"}, "use Mira", chat=lambda m, s: '{"references": ["Mira"]}')
+    assert named.spec["references"] == ["Mira"]
+
+
+def test_none_is_not_a_value():
+    from homeai.art.patcher import patch_for
+    result = patch_for({}, "draw a dragon", chat=lambda m, s: '{"subject": "a dragon", "negative": "none"}')
+    assert result.ok and not result.spec.get("negative")
+
+
+def test_patch_instructions_cover_complaints_and_invented_fields():
+    from homeai.art.patcher import SYSTEM
+    assert "complains" in SYSTEM and "never repeat the complaint" in SYSTEM
+    assert "nobody asked for" in SYSTEM and "never descriptions" in SYSTEM
+
+
+# -- picking up after a restart ------------------------------------------------------------
+
+def test_reentering_within_the_hour_resumes_the_latest_project(art):
+    art.handle("draw a red fox", "Adam")
+    project = art.session.project.id
+    art.leave()
+    assert art.handle("art mode", "Adam") == AV.MSG_READY
+    assert art.session.project is not None and art.session.project.id == project
+    assert art.handle("make it blue", "Adam") == "Changing palette to blue."
+
+
+def test_an_old_project_is_not_resumed(art):
+    import time as _time
+    art.handle("draw a red fox", "Adam")
+    art.leave()
+    art._wall = lambda: _time.time() + AV.RESUME_WITHIN_S + 60
+    art.handle("art mode", "Adam")
+    assert art.session.project is None
+
+
+def test_someone_elses_project_is_not_resumed(art):
+    art.handle("draw a red fox", "Adam")
+    art.leave()
+    art.handle("art mode", None)
+    assert art.session.project is None
+
+
+def test_adopting_art_mode_left_on_goes_back_to_voice_when_idle(art, monkeypatch):
+    monkeypatch.setattr(AV, "IDLE_CHECK_S", 0.01)
+    art.switcher._mode = "art"
+    art._clock.now = 0.0
+    art.idle_s = 0.0
+    art.adopt()
+    import time as _time
+    deadline = _time.monotonic() + 2
+    while art.switcher.calls != ["voice"] and _time.monotonic() < deadline:
+        _time.sleep(0.01)
+    assert art.switcher.calls == ["voice"]
+
+
+def test_adopt_does_nothing_in_voice_mode(art, monkeypatch):
+    monkeypatch.setattr(AV, "IDLE_CHECK_S", 0.01)
+    art.idle_s = 0.0
+    art.adopt()
+    import time as _time
+    _time.sleep(0.05)
+    assert art.switcher.calls == []

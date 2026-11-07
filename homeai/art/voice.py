@@ -39,6 +39,7 @@ log = logging.getLogger("homeai.art.voice")
 PICTURES = Path.home() / "Pictures" / "homeai"
 IDLE_EXIT_S = 20 * 60
 IDLE_CHECK_S = 30.0
+RESUME_WITHIN_S = 60 * 60      # re-entering art mode within this reopens the latest project
 VIEWER_UNIT = "homeai-art-viewer"
 REPO = Path(__file__).resolve().parents[2]
 
@@ -131,7 +132,8 @@ class ArtVoice:
     def __init__(self, switcher, build, publish: Callable[[str, dict], None], viewer=None,
                  adults: tuple[str, ...] = ("Adam",), pictures: Path = PICTURES, idle_s: float = IDLE_EXIT_S,
                  clock: Callable[[], float] = time.monotonic, on_state: Callable[[str], None] | None = None,
-                 background: Callable[[Callable[[], None]], None] | None = None) -> None:
+                 background: Callable[[Callable[[], None]], None] | None = None,
+                 wall: Callable[[], float] = time.time) -> None:
         self.switcher, self._build, self._publish = switcher, build, publish
         self.viewer = viewer or Viewer()
         self.adults = tuple(u.lower() for u in adults)
@@ -139,6 +141,7 @@ class ArtVoice:
         self._on_state = on_state or (lambda state: None)
         self._background = background or (lambda fn: threading.Thread(target=fn, name="art-leave",
                                                                       daemon=True).start())
+        self._wall = wall
         self.session = None
         self.queue = None
         self.owner: str | None = None
@@ -204,6 +207,7 @@ class ArtVoice:
         self.owner = speaker
         self.session, self.queue = self._build((speaker or "guest").lower(), self._on_job)
         self.session.rules = self.rules_for(speaker)
+        self._resume_recent()
         self.queue.start()
         self.viewer.start()
         self._last = self._clock()
@@ -216,6 +220,52 @@ class ArtVoice:
         self.status = reply.spoken if reply else MSG_READY
         self._publish_state()
         return f"Art mode. {reply.spoken}" if reply else MSG_READY
+
+    def _resume_recent(self) -> None:
+        """Reopen this person's latest project if it was worked on in the last hour.
+
+        So "make it more skeletal" still means the dragon after Jarvis restarts,
+        or after an idle exit and "art mode" again.
+        """
+        store = getattr(self.session, "store", None)
+        if store is None:
+            return
+        try:
+            ids = store.projects(self.session.owner)
+            if not ids:
+                return
+            project = store.open(ids[0])
+            touched = max((p.stat().st_mtime for p in project.path.rglob("*") if p.is_file()), default=0.0)
+        except Exception as exc:  # noqa: BLE001 - a fresh start is fine
+            log.info("not resuming a project: %s", exc)
+            return
+        if self._wall() - touched <= RESUME_WITHIN_S and project.current is not None:
+            self.session.project = project
+            log.info("resuming art project %s at %s", project.id, project.current)
+
+    def adopt(self) -> None:
+        """At daemon start: art mode left on (Jarvis restarted mid-session) still idles back to voice."""
+        try:
+            if self.active or self.switcher.mode() != "art":
+                return
+        except Exception:  # noqa: BLE001 - can't tell: leave it to homeai-mode
+            return
+        log.info("art mode is on from before this start; back to voice after %d idle minutes",
+                 round(self.idle_s / 60))
+        self._last = self._clock()
+        stop = self._stop = threading.Event()
+
+        def watch() -> None:
+            while not stop.wait(IDLE_CHECK_S):
+                if self.active:
+                    return
+                if self._clock() - self._last >= self.idle_s:
+                    try:
+                        self.switcher.voice()
+                    except Exception:  # noqa: BLE001
+                        log.exception("going back to voice mode failed")
+                    return
+        threading.Thread(target=watch, name="art-adopt", daemon=True).start()
 
     def leave(self, why: str = "asked") -> str:
         """Back to voice mode. The slow part (coder reload) runs in the background."""

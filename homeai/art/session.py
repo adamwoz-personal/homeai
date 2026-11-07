@@ -124,7 +124,7 @@ class ArtSession:
             return Reply(verdict.reason, "denied")
         spec = {**spec, "seed": node.spec.get("seed")}      # same seed: only the change should change
         changes = prompt_spec.describe(prompt_spec.diff(node.spec, spec))
-        return Reply(f"Changing it: {changes}.", "edit", [self._draw(intent.text, spec, node.id)])
+        return Reply(f"Changing {changes}.", "edit", [self._draw(intent.text, spec, node.id)])
 
     def _on_again(self, intent, text):
         node = self._current()

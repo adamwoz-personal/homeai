@@ -52,7 +52,9 @@ def test_bad_patch_changes_nothing():
 
 def test_describe():
     changes = {"palette": (None, "blue"), "setting": ("snow", None), "seed": (1, 2), "references": ([], ["Mira"])}
-    assert PS.describe(changes) == "palette: blue; setting cleared; references: Mira"
+    assert PS.describe(changes) == "palette to blue, no setting and references to Mira"
+    long = {"details": (None, "being ridden by a cyberpunk samurai with a skeletal look")}
+    assert PS.describe(long) == "the details", "long values are named, not read out"
     assert PS.describe({}) == "nothing"
 
 
