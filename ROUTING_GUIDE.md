@@ -1986,5 +1986,5 @@ Bake-off and routines (2026-11-06):
   daemon's /proc/<pid>/mountinfo has no read-only /home, and `tools/art/probe_daemon_sandbox.sh` can write to $HOME
   under the same settings. A user-manager unit can't set up mount namespaces without PrivateUsers=yes. Art mode
   works either way (the probe confirms systemctl, systemd-run and ~/Pictures/homeai). Making the sandbox real is a
-  separate change to test on its own (PrivateUsers may break audio or the GPU); raised with Adam, not done.
+  separate change to test on its own (PrivateUsers may break audio or the GPU): todo in `plans/SANDBOX_PLAN.md`.
 
