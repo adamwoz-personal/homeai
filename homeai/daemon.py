@@ -757,23 +757,23 @@ class VoiceAssistant:
                 return True
 
         # After an interruption the mic opens with no wake word, so whoever
-        # talks next in the room is captured. Answer only the person Jarvis
-        # was talking to: on 2026-11-07 three barge-ins in a row answered
-        # background conversation (scores 0.31, 0.01, -0.03 and one "too
-        # little speech"), and each answer had to be interrupted again.
-        # Stricter than the follow-up gate on purpose: a missed request costs
-        # one "Hey Jarvis", an answered stranger costs another interruption.
-        # "Stop" still goes through to the dismissal below.
+        # talks next in the room is captured: background conversation was
+        # answered three times in a row (scores 0.01, -0.03, 0.31). The first
+        # fix demanded a positive match to the owner and then ignored Adam
+        # himself four times in his first art session (barge-in clips scored
+        # 0.29-0.45: short, with Jarvis's own voice fading out underneath).
+        # So barge-ins get the follow-up rule: ignored only when the voice is
+        # confidently someone else. A short "stop" can't be judged, so it reaches the dismissal.
         owner = self.memory.speaker
-        if source == "bargein" and self.voice_id is not None and owner \
-                and (ident is None or ident.name != owner) \
-                and not is_dismissal(text, self.cfg.wake.model):
-            log.info("barge-in follow-up not from %s (%s) - staying quiet", owner,
-                     "no ID" if ident is None else vid.describe(ident))
-            turn.verdict = "other-speaker"
-            turn.total_ms = total.ms()
-            self.transcript.write(turn)
-            return True
+        if source == "bargein" and self.voice_id is not None and ident is not None:
+            other, sim = self.voice_id.is_someone_else(owner, ident, emb)
+            if other:
+                log.info("barge-in follow-up from another voice (%s; %s to %s) - staying quiet",
+                         vid.describe(ident), "?" if sim is None else f"{sim:.2f}", owner)
+                turn.verdict = "other-speaker"
+                turn.total_ms = total.ms()
+                self.transcript.write(turn)
+                return True
 
         cmd = vid.parse_command(text)
         if cmd is None or (self.voice_id is None and cmd.kind != "enrol"):

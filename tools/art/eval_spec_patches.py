@@ -53,6 +53,12 @@ def equals(field: str, value):
     return lambda before, after: after.get(field) == value or f"{field} is {after.get(field)!r}, wanted {value!r}"
 
 
+# Adam's first live session (2026-11-07): the voice model filled in everything, and "both cyberpunk" wasn't caught.
+DRAGON = {"style": "anime", "aspect": "landscape", "subject": "dragon", "details": "samurai riding on its back",
+          "setting": "medieval Japan", "palette": "fire, water, earth", "lighting": "dramatic, with a sunset in the background",
+          "camera": "low-angle, looking up at the dragon", "composition": "dynamic, with the dragon and samurai in motion",
+          "negative": "none"}
+
 CASES = [
     ("new picture", {}, "draw a red fox sitting in the snow", [has("subject", "fox"), any_of(("subject", "setting"), "snow")]),
     ("bluer", FOX, "make it bluer", [has("palette", "blue"), same("subject")]),
@@ -66,6 +72,12 @@ CASES = [
     ("leave out", FOX, "no people in it", [has("negative", "people"), same("subject")]),
     ("reference", FOX, "use Mira", [lambda b, a: "Mira" in a.get("references", []) or f"references {a.get('references')}",
                                     same("subject")]),
+    ("both cyberpunk", DRAGON, "make the dragon and the samurai both cyberpunk",
+     [any_of(("subject", "details", "style"), "cyberpunk"), has("subject", "dragon")]),
+    ("correction", DRAGON, "that should have been a dragon with a samurai riding on its back",
+     [has("subject", "dragon"), any_of(("subject", "details"), "samurai")]),
+    ("lets make it", DRAGON, "let's make it a cyberpunk dragon and a cyberpunk samurai",
+     [any_of(("subject", "details", "style"), "cyberpunk")]),
     ("composition", FOX, "put the fox small in the corner", [any_of(("composition", "details"), "corner"),
                                                              has("subject", "fox")]),
 ]
@@ -74,16 +86,19 @@ CASES = [
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--repeats", type=int, default=3)
+    ap.add_argument("--only", default="", help="run only cases whose name contains this")
     args = ap.parse_args()
     out = Path.home() / "homeai-bench" / f"spec-patches-{datetime.now():%Y%m%d-%H%M%S}"
     out.mkdir(parents=True)
     rows, times = [], []
     for name, start, instruction, checks in CASES:
+        if args.only and args.only not in name:
+            continue
         before = PS.validate(start) if start else {}
         for n in range(args.repeats):
             result = P.patch_for(before, instruction)
             problems = [r for c in checks for r in [c(before, result.spec)] if r is not True] if result.ok \
-                else [f"not caught: {result.detail}"]
+                else [f"not caught: {result.message} {result.detail}"]
             times.append(result.seconds)
             rows.append({"case": name, "run": n, "ok": not problems, "problems": problems, "patch": result.patch,
                          "seconds": result.seconds})

@@ -11,6 +11,7 @@ before it may be shown.
 from __future__ import annotations
 
 import random
+import re
 from dataclasses import dataclass, field
 
 from homeai.art import grammar, policy, prompt_spec, workflows
@@ -21,6 +22,19 @@ MSG_NOTHING_YET = "There's no picture yet. Say draw, and what you'd like."
 MSG_NOT_YET = "I can't do that one yet."
 MSG_NOTHING_TO_STOP = "Nothing is drawing."
 MSG_NO_GRID = "There's no set of options to pick from."
+
+
+LEAD = re.compile(r"^(?:let'?s )?(?:draw|paint|sketch|generate|create|make)(?: me)? "
+                  r"(?:(?:a )?(?:picture|image|drawing|painting|sketch) of )?")
+
+
+def drawing_sentence(said: str) -> str:
+    """Say back what was asked in the asker's words: "Drawing a dragon with a samurai on its back."
+
+    The spec's subject alone came out as "Drawing dragon." (Adam's first session, 2026-11-07).
+    """
+    what = LEAD.sub("", said).strip()
+    return f"Drawing {what}." if what and what != said else "Drawing it now."
 
 
 @dataclass
@@ -81,6 +95,12 @@ class ArtSession:
             return Reply(MSG_NOT_YET, intent.kind)
         return handler(intent, text)
 
+    def handle_free(self, text: str) -> Reply:
+        """A sentence about the picture with no command shape: a new picture, or a change to this one."""
+        said = grammar._tidy(text)
+        kind = "edit" if self._current() is not None else "new"
+        return getattr(self, f"_on_{kind}")(grammar.Intent(kind, text=said), text)
+
     def _on_new(self, intent, text):
         result = self._patch({}, intent.text)
         if not result.ok:
@@ -90,7 +110,7 @@ class ArtSession:
             return Reply(verdict.reason, "denied")
         self.project = self.store.create(self.kind, self.owner, spec["subject"])
         self.grid = []
-        return Reply(f"Drawing {spec['subject']}.", "new", [self._draw(intent.text, spec, None)])
+        return Reply(drawing_sentence(intent.text), "new", [self._draw(intent.text, spec, None)])
 
     def _on_edit(self, intent, text):
         node = self._current()

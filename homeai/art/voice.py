@@ -40,12 +40,21 @@ IDLE_CHECK_S = 30.0
 VIEWER_UNIT = "homeai-art-viewer"
 REPO = Path(__file__).resolve().parents[2]
 
-ENTER = re.compile(r"^((switch|go|change|move) (in)?to |start |open |enter |turn on )?(the )?art mode( on)?$|"
-                   r"^let'?s (draw|paint|make (some )?(art|pictures))$")
+# Searched, not matched whole: Whisper adds words ("Hey Jervis, let's draw. Wait, bye, ma'am one.") and people
+# add their own ("I'm Adam, switch to art mode"); both were missed in Adam's first session (2026-11-07).
+ENTER = re.compile(r"(^|\b(switch|go|change|move) (in)?to |\b(start|open|enter|turn on) )(the )?art mode\b|"
+                   r"\blet'?s (draw|paint|sketch|make (some )?(art|pictures))\b")
+LETS_DRAW = re.compile(r"\blet'?s (draw|paint|sketch) (?P<what>(?!(something|some|it|that|this)\b).{3,})$")
+MODE_QUESTION = re.compile(r"\b(are we|am i|is this|are you) (still )?in art mode\b|\bwhat mode\b")
+# In art mode, a question that doesn't mention the picture is for Jarvis ("what time is it").
+QUESTION = re.compile(r"^(what|who|when|where|why|how|is|are|am|was|were|will|would|should|do|does|did|tell me)\b")
+ABOUT_PICTURE = re.compile(r"\b(picture|image|drawing|painting|prompt|colou?rs?|style|background|version|"
+                           r"option|this one|that one|too \w+|(it|this|that) (look|looks|seem|seems))\b")
 PICTURE_WORDS = re.compile(r"\b(draw|paint|sketch|picture|image|illustration|drawing|painting|portrait)\b")
 
 MSG_READY = "Art mode. What shall I draw?"
 MSG_ALREADY = "We're in art mode."
+MSG_IN_ART_MODE = "Yes, we're in art mode. Say I'm done drawing to leave."
 MSG_LEFT = "Done drawing."
 MSG_NOT_FOR_YOU = "Drawing is only set up for Adam so far."
 MSG_SWITCH_FAILED = "I couldn't start art mode: {why}"
@@ -53,7 +62,28 @@ MSG_IDLE = "art mode idle for {minutes} minutes: back to voice mode"
 
 
 def is_enter(text: str) -> bool:
-    return bool(ENTER.match(grammar._tidy(text)))
+    return bool(ENTER.search(grammar._tidy(text)))
+
+
+def lets_draw(text: str) -> str | None:
+    """'let's draw a dragon' -> 'draw a dragon' (so it enters art mode and draws)."""
+    match = LETS_DRAW.search(grammar._tidy(text))
+    return f"draw {match.group('what')}" if match else None
+
+
+COMMON = {"the", "and", "with", "its", "his", "her", "for", "are", "was", "that", "this", "from", "into", "onto",
+          "who", "what", "has", "have", "one", "two", "very", "some"}
+
+
+def for_jarvis(text: str, subject: str = "") -> bool:
+    """In art mode: house talk, or a question that isn't about the picture (nor names what's in it)."""
+    said = grammar._tidy(text)
+    if grammar.HOUSE.search(said):
+        return True
+    if not QUESTION.match(said) or ABOUT_PICTURE.search(said):
+        return False
+    words = set(re.findall(r"[a-z]{3,}", subject.lower())) - COMMON
+    return not any(w in said for w in words)
 
 
 def wants_picture(text: str) -> bool:
@@ -129,22 +159,30 @@ class ArtVoice:
     def handle(self, text: str, speaker: str | None) -> str | None:
         with self._lock:
             if not self.active:
-                if is_enter(text):
-                    return self._enter(speaker, None)
                 if wants_picture(text):
                     return self._enter(speaker, text)
+                if is_enter(text):
+                    return self._enter(speaker, lets_draw(text))
                 return None
             intent = grammar.parse(text)
-            if intent is None and not is_enter(text):
-                return None                                  # house talk: Jarvis answers
-            self._last = self._clock()
             if intent is not None and intent.kind == "leave":
+                self._last = self._clock()
                 return self.leave()
-            if is_enter(text):
+            if MODE_QUESTION.search(grammar._tidy(text)):
+                return MSG_IN_ART_MODE
+            if is_enter(text) and lets_draw(text) is None:
                 return MSG_ALREADY
+            node = self.session._current()
+            subject = " ".join(str(node.spec.get(k) or "") for k in ("subject", "details")) if node else ""
+            if intent is None and for_jarvis(text, subject):
+                return None                                  # house talk and other questions: Jarvis answers
+            self._last = self._clock()
             if not self._may_draw(speaker):
                 return MSG_NOT_FOR_YOU
-            reply = self.session.handle(text)
+            # Everything else in art mode is about the picture, even without a drawing verb
+            # ("let's start with the dragon", "let's make it cyberpunk"): in Adam's first
+            # session those went to the chat model, which looked things up instead.
+            reply = self.session.handle(text) if intent is not None else self.session.handle_free(text)
             if reply is None:
                 return None
             self.status = reply.spoken

@@ -9,12 +9,15 @@ If the answer can't be used, the previous spec stands and Jarvis says so.
 from __future__ import annotations
 
 import json
+import logging
 import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
-from homeai.art.prompt_spec import FIELDS, PATCH_SCHEMA, SpecError, apply_patch
+from homeai.art.prompt_spec import FIELDS, PATCH_SCHEMA, TEXT_FIELDS, SpecError, apply_patch
+
+log = logging.getLogger("homeai.art.patcher")
 
 OLLAMA = "http://127.0.0.1:11434"
 MODEL = "llama31-voice"
@@ -56,6 +59,22 @@ def messages_for(spec: dict, instruction: str) -> list[dict]:
             {"role": "user", "content": f"Current description: {json.dumps(current)}\nInstruction: {instruction}"}]
 
 
+def clip_long_text(patch: dict) -> dict:
+    """Shorten over-long text fields at a word boundary instead of refusing the whole change.
+
+    Ollama's structured output doesn't enforce maxLength, and the model writes
+    long lighting and palette descriptions; one 90-character field used to throw
+    away a good change ("I didn't catch that change", live 2026-11-07, suspected).
+    """
+    out = dict(patch)
+    for name, limit in TEXT_FIELDS.items():
+        value = out.get(name)
+        if isinstance(value, str) and len(value) > limit:
+            cut = value[:limit].rsplit(" ", 1)[0].rstrip(" ,;:")
+            out[name] = cut or value[:limit]
+    return out
+
+
 def patch_for(spec: dict, instruction: str, chat=ollama_chat, clock=time.monotonic) -> PatchResult:
     """The new spec for ``instruction``; on any failure, ``spec`` unchanged with ``ok`` False."""
     start = clock()
@@ -69,8 +88,10 @@ def patch_for(spec: dict, instruction: str, chat=ollama_chat, clock=time.monoton
             raise SpecError("empty patch")
         if "seed" in patch or "strength" in patch:
             raise SpecError("the model may not set seed or strength")
+        patch = clip_long_text(patch)
         new = apply_patch(spec, patch)
     except (urllib.error.URLError, OSError, TimeoutError, KeyError, ValueError) as exc:
-        return PatchResult(spec, {}, False, MSG_NOT_CAUGHT, round(clock() - start, 2),
-                           f"{type(exc).__name__}: {exc}; model said {raw[:200]!r}"[:400])
+        detail = f"{type(exc).__name__}: {exc}; model said {raw[:200]!r}"[:400]
+        log.warning("patch for %r not caught: %s", instruction, detail)
+        return PatchResult(spec, {}, False, MSG_NOT_CAUGHT, round(clock() - start, 2), detail)
     return PatchResult(new, patch, True, "", round(clock() - start, 2))

@@ -397,3 +397,77 @@ def test_art_crash_is_spoken_not_fatal(quick_art):
     turn, spoken = _turn(quick_art, "draw a fox", RuntimeError("boom"))
     assert spoken == ["Something went wrong in art mode."]
     quick_art.agent.ask.assert_not_called()
+
+
+# -- Adam's first live session (2026-11-07): every sentence that went wrong -----------------
+
+@pytest.mark.parametrize("said", ["Hey Jervis, let's draw. Wait, bye, ma'am one.", "I'm Adam, switch to art mode.",
+                                  "okay switch to art mode now"])
+def test_entering_with_extra_words(art, said):
+    assert art.handle(said, "Adam") == AV.MSG_READY and art.active
+
+
+def test_lets_draw_something_enters_and_draws(art):
+    reply = art.handle("let's draw a dragon with a samurai riding on its back", "Adam")
+    assert reply == "Art mode. Drawing a dragon with a samurai riding on its back."
+    assert len(art.queue.submitted) == 1
+
+
+def anything_patch(spec, instruction):
+    """A voice model that takes any sentence as the subject of a new picture."""
+    from homeai.art.patcher import PatchResult
+    from homeai.art import prompt_spec
+    if spec:
+        return PatchResult(spec, {}, False, "not caught")
+    return PatchResult(prompt_spec.validate({"subject": instruction}), {"subject": instruction}, True)
+
+
+@pytest.mark.parametrize("said", ["Let's start with the dragon.", "a red fox in the snow"])
+def test_in_art_mode_a_sentence_without_a_verb_is_drawn(art, said):
+    art.handle("art mode", "Adam")
+    art.session._patch = anything_patch
+    reply = art.handle(said, "Adam")
+    assert reply is not None and len(art.queue.submitted) == 1
+
+
+def test_in_art_mode_a_free_sentence_changes_the_picture(art):
+    art.handle("art mode", "Adam")
+    art.handle("draw a red fox", "Adam")
+    assert art.handle("let's make it blue", "Adam") == "Changing it: palette: blue."
+    assert art.session.project.nodes["002"].parent == "001"
+
+
+@pytest.mark.parametrize("said", ["Are we in art mode right now?", "what mode are we in"])
+def test_asking_if_in_art_mode(art, said):
+    art.handle("art mode", "Adam")
+    assert art.handle(said, "Adam") == AV.MSG_IN_ART_MODE
+
+
+@pytest.mark.parametrize("said", ["what time is it", "how tall is mount everest", "who won the game last night"])
+def test_other_questions_in_art_mode_go_to_jarvis(art, said):
+    art.handle("art mode", "Adam")
+    assert art.handle(said, "Adam") is None and art.queue.submitted == []
+
+
+@pytest.mark.parametrize("said", ["what prompt made this", "is it too dark", "where is the fox", "does it look right"])
+def test_questions_about_the_picture_stay_in_art_mode(art, said):
+    art.handle("art mode", "Adam")
+    art.handle("draw a red fox", "Adam")
+    assert art.handle(said, "Adam") is not None
+
+
+def test_drawing_sentence_uses_the_askers_words():
+    from homeai.art.session import drawing_sentence
+    assert drawing_sentence("draw a dragon with a samurai riding on its back") == \
+        "Drawing a dragon with a samurai riding on its back."
+    assert drawing_sentence("make a picture of a samurai") == "Drawing a samurai."
+    assert drawing_sentence("let's start with the dragon") == "Drawing it now."
+
+
+def test_long_fields_are_trimmed_not_refused():
+    from homeai.art.patcher import clip_long_text, patch_for
+    clipped = clip_long_text({"lighting": "glowing " * 20, "palette": "red"})
+    assert len(clipped["lighting"]) <= 80 and clipped["lighting"].endswith("glowing") and clipped["palette"] == "red"
+    long = '{"lighting": "' + "neon " * 30 + '"}'
+    result = patch_for({"subject": "a dragon"}, "make it neon", chat=lambda m, s: long)
+    assert result.ok and len(result.spec["lighting"]) <= 80

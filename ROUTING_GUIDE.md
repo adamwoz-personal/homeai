@@ -1992,4 +1992,18 @@ Bake-off and routines (2026-11-06):
   doorbell announcements have been silent for three weeks and nothing noticed. Lesson: a watcher that only reacts to
   changes can't tell "quiet" from "broken"; check the source's freshness (`tools/inspect_ring_entities.py`). The
   status update reads the activity sensor's history too.
+- 2026-11-07, Adam's first art session by voice, what went wrong and why:
+  1. My strict barge-in gate (answer only a positive voice match) ignored Adam four times: his barge-in clips
+     scored 0.29-0.45, under the 0.45 line (short clips, Jarvis's voice fading underneath). Barge-ins now use the
+     follow-up rule (ignore only a confident "someone else"). Lesson: I tuned the gate on three background clips and
+     never measured Adam's own barge-in scores. Check both sides of a threshold before shipping it.
+  2. In art mode, sentences without a drawing verb ("let's start with the dragon", "let's make it cyberpunk") fell
+     through to the chat model, which looked things up. Now everything in art mode is about the picture except house
+     talk and questions that don't mention it.
+  3. Entry phrases were matched whole, so "I'm Adam, switch to art mode" and Whisper's extra words missed. Searched now.
+  4. "Drawing dragon.": the reply used the spec's subject. It now repeats the asker's words.
+  5. A change was "not caught" with no log of why; patch failures are logged now, and over-long fields are trimmed
+     instead of refusing the change (suspected cause, unverified: the eval couldn't reproduce it).
+  6. Adam's wake turns scored 0.26-0.73 against his own profile; two were refused as "not Adam". His profile is
+     weak (one short enrolment). Re-enrolling with the script should help (unverified).
 

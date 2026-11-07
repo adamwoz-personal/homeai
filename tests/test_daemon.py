@@ -830,13 +830,22 @@ def test_followup_from_another_voice_is_ignored(voiced) -> None:
     assert turn.verdict == "other-speaker" and spoken == []
 
 
-@pytest.mark.parametrize("emb", [BETH, STRANGER, _unit(0.3, 0.2, 0.93)], ids=["known", "stranger", "unsure"])
+@pytest.mark.parametrize("emb", [BETH, STRANGER, _unit(0.1, 0.2, 0.97)], ids=["known", "stranger", "far"])
 def test_bargein_from_anyone_but_the_owner_is_ignored(voiced, emb) -> None:
     # 2026-11-07: background talk captured after "Jarvis" interrupted a reply was answered.
     _speak_as(voiced, ADAM, "Hey Jarvis, what is two plus four?")
     turn, spoken = _speak_as(voiced, emb, "When I had the studio I worked at the resort.", source="bargein")
     voiced.agent.ask.assert_not_called()
     assert turn.verdict == "other-speaker" and spoken == []
+
+
+@pytest.mark.parametrize("score", [0.29, 0.39, 0.42])
+def test_bargein_from_the_owner_below_the_id_line_is_still_answered(voiced, score) -> None:
+    # Adam's first art session: his own barge-ins scored 0.29-0.45 and the strict gate ignored them.
+    _speak_as(voiced, ADAM, "Hey Jarvis, what is two plus four?")
+    adam_ish = _unit(score, 0, (1 - score ** 2) ** 0.5)
+    turn, _ = _speak_as(voiced, adam_ish, "are we in art mode right now?", source="bargein")
+    voiced.agent.ask.assert_called_once()
 
 
 def test_bargein_from_the_owner_is_answered(voiced) -> None:
