@@ -146,6 +146,24 @@ class HAClient:
     def state(self, entity_id: str) -> dict:
         return self._request("GET", f"/api/states/{entity_id}")
 
+    def history(self, entity_ids: list[str], start_iso: str, end_iso: str) -> dict[str, list[dict]]:
+        """Each entity's rows ({"state", "attributes"}) between two ISO 8601 times, oldest first; read-only."""
+        from urllib.parse import quote
+        if not entity_ids:
+            return {}
+        path = (f"/api/history/period/{quote(start_iso)}?end_time={quote(end_iso)}"
+                f"&filter_entity_id={','.join(entity_ids)}")
+        result = self._request("GET", path)
+        out: dict[str, list[dict]] = {}
+        for series in result if isinstance(result, list) else []:
+            if not isinstance(series, list):
+                continue
+            for row in series:
+                if isinstance(row, dict) and row.get("entity_id"):
+                    out.setdefault(row["entity_id"], []).append(
+                        {"state": str(row.get("state")), "attributes": row.get("attributes") or {}})
+        return out
+
     def call_service(self, domain: str, service: str, data: dict | None = None) -> Any:
         log.info("HA call %s.%s %s", domain, service, data or {})
         return self._request("POST", f"/api/services/{domain}/{service}", data or {})

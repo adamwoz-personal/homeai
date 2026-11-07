@@ -218,12 +218,14 @@ class SpeakerProfile:
     model: str
     enrolled_at: float = field(default_factory=time.time)
     sample_count: int = 1
+    created_at: float = 0.0     # first enrolment; kept when the profile is updated (0: unknown, older file)
+    source: str = "asked"       # "asked" (remember my voice) or "offered" (Jarvis asked an unknown voice)
 
     def merged(self, embedding: np.ndarray, count: int = 1) -> SpeakerProfile:
         """This profile with more samples averaged in (weighted by count)."""
         total = self.sample_count + count
         mean = (self.embedding * self.sample_count + _unit(embedding) * count) / total
-        return SpeakerProfile(self.name, _unit(mean), self.model, time.time(), total)
+        return SpeakerProfile(self.name, _unit(mean), self.model, time.time(), total, self.created_at, self.source)
 
 
 class SpeakerRegistry:
@@ -292,6 +294,7 @@ class SpeakerRegistry:
             self._profiles[name] = SpeakerProfile(
                 name, _unit(emb), model,
                 float(raw.get("enrolled_at", 0.0)), int(raw.get("sample_count", 1)),
+                float(raw.get("created_at", raw.get("enrolled_at", 0.0))), str(raw.get("source", "asked")),
             )
         if skipped:
             self.problem = "ignored speaker profiles: " + ", ".join(skipped)
@@ -308,7 +311,8 @@ class SpeakerRegistry:
         with self._lock:
             return self._profiles.get(_find(self._profiles, name))
 
-    def add(self, name: str, embedding: np.ndarray, count: int = 1, replace: bool = False) -> SpeakerProfile:
+    def add(self, name: str, embedding: np.ndarray, count: int = 1, replace: bool = False,
+            source: str = "asked") -> SpeakerProfile:
         name = name.strip()
         if not name:
             raise ValueError("speaker name is empty")
@@ -316,7 +320,10 @@ class SpeakerRegistry:
             key = _find(self._profiles, name) or name
             old = self._profiles.get(key)
             if old is None or replace:
-                profile = SpeakerProfile(key, _unit(embedding), self.model, time.time(), count)
+                now = time.time()
+                created = old.created_at if old is not None and old.created_at else now
+                profile = SpeakerProfile(key, _unit(embedding), self.model, now, count, created,
+                                         old.source if old is not None else source)
             else:
                 profile = old.merged(embedding, count)
             self._profiles[key] = profile
@@ -337,6 +344,8 @@ class SpeakerRegistry:
                         "model": p.model,
                         "enrolled_at": p.enrolled_at,
                         "sample_count": p.sample_count,
+                        "created_at": p.created_at,
+                        "source": p.source,
                     }
                     for p in self._profiles.values()
                 },

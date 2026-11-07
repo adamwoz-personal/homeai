@@ -334,3 +334,46 @@ def test_goodnight_phrases(text):
 @pytest.mark.parametrize("text", ["good night", "goodnight", "what time is bedtime", "bed"])
 def test_bare_goodnight_stays_a_farewell(text):
     assert parse(text) is None
+
+
+# -- alerts for the status update -------------------------------------------
+
+@pytest.fixture
+def ha_act():
+    return FakeHA(states=default_states() + ring_entities(activity=stamp(900), category="ding"))
+
+
+@pytest.fixture
+def home_act(ha_act):
+    return Home(ha_act, clock=lambda: NOW)
+
+def test_door_alerts_counts_rings_and_motion_in_the_window(ha_act, home_act):
+    ha_act.past = {"event.front_door_ding": [stamp(30 * 3600), stamp(3600), stamp(600)],
+               "event.front_door_motion": [stamp(7200), "unknown", stamp(7200), stamp(60)],
+               "light.kitchen": [stamp(10)]}
+    alerts = doorbell.door_alerts(home_act, NOW - 24 * 3600, NOW)
+    assert alerts == {("front door", "ring"): [NOW - 3600, NOW - 600],
+                      ("front door", "motion"): [NOW - 7200, NOW - 60]}
+    assert ha_act.history_asked[0] == ["event.front_door_ding", "event.front_door_motion",
+                                   "sensor.front_door_last_activity"]
+
+
+def test_door_alerts_from_the_activity_sensor_when_events_are_stuck(ha_act, home_act):
+    ha_act.past = {"event.front_door_ding": [stamp(40 * 86400)],
+               "sensor.front_door_last_activity": [
+                   {"state": stamp(30 * 3600), "attributes": {"category": "ding"}},
+                   {"state": stamp(5000), "attributes": {"category": "motion"}},
+                   {"state": stamp(5000), "attributes": {"category": "motion"}},    # polled again: same alert
+                   {"state": stamp(900), "attributes": {"category": "ding"}}]}
+    assert doorbell.door_alerts(home_act, NOW - 24 * 3600, NOW) == {("front door", "motion"): [NOW - 5000],
+                                                               ("front door", "ring"): [NOW - 900]}
+
+
+def test_the_same_alert_in_both_places_counts_once(ha_act, home_act):
+    ha_act.past = {"event.front_door_ding": [stamp(900)],
+               "sensor.front_door_last_activity": [{"state": stamp(897), "attributes": {"category": "ding"}}]}
+    assert doorbell.door_alerts(home_act, NOW - 3600, NOW) == {("front door", "ring"): [NOW - 900]}
+
+
+def test_door_alerts_none(ha, home):
+    assert doorbell.door_alerts(home, NOW - 3600, NOW) == {}

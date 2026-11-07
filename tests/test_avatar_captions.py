@@ -56,3 +56,17 @@ def test_rasteriser_draws_caches_and_skips_invisible():
     assert r.image([("jarvis", "Hello there.", 1.0 - 0.001)], (200, 200)) is img   # quantised
     faded = r.image([("jarvis", "Hello there.", 0.3)], (200, 200))
     assert faded is not img and faded[..., 3].max() < img[..., 3].max()
+
+
+def test_script_is_drawn_from_the_top_with_room_for_a_paragraph():
+    text = " ".join(["word"] * 60)
+    lines = cap.layout([("script", text, 1.0), ("jarvis", "answer", 1.0)], (400, 400), lambda who, s: len(s) * 8)
+    script = [base for who, line, alpha, base in lines if who == "script"]
+    jarvis = [base for who, line, alpha, base in lines if who == "jarvis"]
+    assert 1 < len(script) <= cap.MAX_LINES["script"]
+    assert script == sorted(script) and max(script) < min(jarvis)
+
+
+def test_bus_keeps_the_latest_script_for_a_restarted_avatar():
+    from homeai.avatar.bus import COALESCED
+    assert "script" in COALESCED

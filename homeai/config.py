@@ -412,6 +412,15 @@ class ArtConfig:
 
 
 @dataclass(frozen=True)
+class StatusConfig:
+    """'Status update' (homeai/status_update.py). Admins hear new voices and doorbell alerts; others the weather."""
+
+    enabled: bool = field(default_factory=lambda: _env_bool("HOMEAI_STATUS_UPDATE", True))
+    admins: tuple[str, ...] = field(default_factory=lambda: tuple(
+        u.strip() for u in _env_str("HOMEAI_STATUS_ADMINS", "Adam").split(",") if u.strip()))
+
+
+@dataclass(frozen=True)
 class Config:
     audio: AudioConfig = field(default_factory=AudioConfig)
     stt: SttConfig = field(default_factory=SttConfig)
@@ -424,6 +433,7 @@ class Config:
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     avatar: AvatarConfig = field(default_factory=AvatarConfig)
     art: ArtConfig = field(default_factory=ArtConfig)
+    status: StatusConfig = field(default_factory=StatusConfig)
 
     def validation_errors(self) -> list[str]:
         """Return human-readable problems. Empty list means good to start.

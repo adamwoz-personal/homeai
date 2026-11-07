@@ -151,6 +151,42 @@ def door_status(home: Home, where: str | None = None) -> str:
     return " ".join(parts)
 
 
+def door_alerts(home: Home, since: float, until: float) -> dict[tuple[str, str], list[float]]:
+    """Rings and motion between two times (epoch s), per (door, "ring" | "motion"), from HA history.
+
+    History, not the watcher's own record, so alerts while Jarvis was down still count. Reads the
+    event entities and the last-activity sensor: on 2026-11-07 the event entities had been stuck
+    since 2026-10-15 while the (polled) last-activity sensor kept updating. The same alert seen
+    in both (within 5 s) counts once.
+    """
+    doors = discover(home.client.states())
+    ids: dict[str, tuple[str, str | None]] = {}
+    for door in doors:
+        for kind, eid in (("ring", door.ding), ("motion", door.motion), (None, door.activity)):
+            if eid:
+                ids[eid] = (door.name, kind)
+    start = datetime.fromtimestamp(since, timezone.utc).isoformat()
+    end = datetime.fromtimestamp(until, timezone.utc).isoformat()
+    seen: dict[str, list[tuple[float, str]]] = {}
+    for eid, rows in home.client.history(list(ids), start, end).items():
+        if eid not in ids:
+            continue
+        door, kind = ids[eid]
+        for row in rows:
+            t = parse_time(row.get("state"))
+            if t is None or not since < t <= until:
+                continue
+            what = kind or ("ring" if (row.get("attributes") or {}).get("category") in ("ding", "ring")
+                            else "motion")
+            if not any(abs(t - other) <= 5 for other, _ in seen.get(door, [])):
+                seen.setdefault(door, []).append((t, what))
+    out: dict[tuple[str, str], list[float]] = {}
+    for door, events in seen.items():
+        for t, what in sorted(events):
+            out.setdefault((door, what), []).append(t)
+    return out
+
+
 def door_battery(home: Home, where: str | None = None) -> str:
     states = {s["entity_id"]: s for s in home.client.states()}
     doors = [d for d in _pick(discover(list(states.values())), where) if d.battery]

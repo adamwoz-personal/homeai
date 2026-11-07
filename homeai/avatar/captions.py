@@ -16,9 +16,9 @@ from typing import Callable
 import numpy as np
 
 ELLIPSIS = "\u2026"
-MAX_LINES = {"jarvis": 3, "user": 2, "status": 1}
-SCALE = {"jarvis": 1 / 20, "user": 1 / 26, "status": 1 / 22}    # font px per window px (height)
-TINT = {"jarvis": (235, 245, 255), "user": (160, 175, 190), "status": (190, 180, 230)}
+MAX_LINES = {"jarvis": 3, "user": 2, "status": 1, "script": 7}
+SCALE = {"jarvis": 1 / 20, "user": 1 / 26, "status": 1 / 22, "script": 1 / 19}  # font px per window px (height)
+TINT = {"jarvis": (235, 245, 255), "user": (160, 175, 190), "status": (190, 180, 230), "script": (255, 236, 170)}
 MARGIN = 0.06               # of the width, each side
 ALPHA_STEPS = 20            # fades re-rasterise at most this many times
 
@@ -76,6 +76,11 @@ def layout(captions: list[tuple[str, str, float]], size: tuple[int, int],
     for cap_who, text, alpha in captions:
         if cap_who == "status":
             out.append(("status", text, alpha, int(h * 0.5 + h * 0.30)))
+        elif cap_who == "script":               # text to read aloud: large, from the top down
+            step = int(h * SCALE["script"] * 1.3)
+            lines = wrap(text, lambda s: measure("script", s), max_w, MAX_LINES["script"])
+            for i, line in enumerate(lines):
+                out.append(("script", line, alpha, int(h * 0.08) + step * (i + 1)))
     return out
 
 

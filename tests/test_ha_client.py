@@ -223,3 +223,24 @@ def test_no_lights_or_no_alexa_is_partial(tmp_path):
     no_lights = FakeHA(states=[s for s in FakeHA().states() if not s["entity_id"].startswith("light.")])
     code, msg = hc.check(f, client_factory=lambda s: no_lights)
     assert code == 2 and "Hue" in msg and "Alexa Devices" not in msg
+
+
+def test_history_is_a_read_only_get_keyed_by_entity():
+    import json as _json
+    body = _json.dumps([[{"entity_id": "event.front_door_ding", "state": "a", "attributes": {"x": 1}},
+                         {"entity_id": "event.front_door_ding", "state": "b"}],
+                        [{"entity_id": "event.front_door_motion", "state": "c"}], [], "junk", [{"state": "x"}]]).encode()
+    client, session = _client(response=FakeResponse(body=body))
+    out = client.history(["event.front_door_ding", "event.front_door_motion"],
+                         "2026-11-07T00:00:00+00:00", "2026-11-08T00:00:00+00:00")
+    assert out == {"event.front_door_ding": [{"state": "a", "attributes": {"x": 1}}, {"state": "b", "attributes": {}}],
+                   "event.front_door_motion": [{"state": "c", "attributes": {}}]}
+    method, url, _, _ = session.requests[0]
+    assert method == "GET" and "/api/history/period/2026-11-07T00%3A00%3A00%2B00%3A00" in url
+    assert "filter_entity_id=event.front_door_ding,event.front_door_motion" in url
+    assert "end_time=2026-11-08T00%3A00%3A00%2B00%3A00" in url
+
+
+def test_history_of_nothing_asks_nothing():
+    client, session = _client()
+    assert client.history([], "a", "b") == {} and session.requests == []

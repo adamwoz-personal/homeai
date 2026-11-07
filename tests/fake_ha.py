@@ -83,6 +83,14 @@ class FakeHA:
             raise self.fail
         return self._states
 
+    def history(self, entity_ids, start_iso, end_iso):
+        """Recorded history: tests fill ``self.past`` with {entity_id: [states...]}."""
+        if self.fail:
+            raise self.fail
+        self.history_asked = (list(entity_ids), start_iso, end_iso)
+        rows = lambda v: [r if isinstance(r, dict) else {"state": r, "attributes": {}} for r in v]  # noqa: E731
+        return {eid: rows(v) for eid, v in getattr(self, "past", {}).items() if eid in entity_ids}
+
     def services(self):
         if self.fail:
             raise self.fail

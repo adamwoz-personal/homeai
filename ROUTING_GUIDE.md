@@ -1987,4 +1987,9 @@ Bake-off and routines (2026-11-06):
   under the same settings. A user-manager unit can't set up mount namespaces without PrivateUsers=yes. Art mode
   works either way (the probe confirms systemctl, systemd-run and ~/Pictures/homeai). Making the sandbox real is a
   separate change to test on its own (PrivateUsers may break audio or the GPU): todo in `plans/SANDBOX_PLAN.md`.
+- 2026-11-07: building the status update found Home Assistant's Ring event entities (`event.front_door_ding`,
+  `event.front_door_motion`) stuck at 2026-10-15 while `sensor.front_door_last_activity` kept updating. So the
+  doorbell announcements have been silent for three weeks and nothing noticed. Lesson: a watcher that only reacts to
+  changes can't tell "quiet" from "broken"; check the source's freshness (`tools/inspect_ring_entities.py`). The
+  status update reads the activity sensor's history too.
 

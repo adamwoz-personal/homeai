@@ -52,6 +52,7 @@ SLEEP_S = 300.0             # Adam 2026-11-04: five idle minutes
 QUIET_SLEEP_S = 30.0        # in quiet hours, sleep again soon after any activity
 CAPTION_HOLD_S = 4.0        # after it was said (Jarvis: after he stops talking)
 CAPTION_FADE_S = 1.0
+SCRIPT_HOLD_S = 120.0       # text to read aloud (voice enrolment) stays this long unless cleared
 
 BASE_RADIUS = 0.55
 OPEN_RADIUS = 0.18          # extra radius at full openness
@@ -167,6 +168,7 @@ class Scene:
     local_mode: str | None = None   # None | "coding" | "switching" (window-detected)
     _heard: tuple[str, float | None] | None = None
     _said: _Said | None = None
+    _script: tuple[str, float | None] | None = None   # (text to read aloud, shown since)
     _poked: bool = True
     _active_at: float | None = None
     _open: float = 0.0
@@ -203,6 +205,9 @@ class Scene:
                 self._said.starts.append(u.start)
         elif etype == "speech_stop":
             self.utterances.clear()
+        elif etype == "script":
+            text = str(data.get("text", "")).strip()
+            self._script = (text, t) if text else None
         elif etype == "caption":
             text = str(data.get("text", "")).strip()
             if not text:
@@ -254,6 +259,12 @@ class Scene:
         out = []
         if shown in STATUS_TEXT:
             out.append(("status", STATUS_TEXT[shown], 1.0))
+        if self._script is not None:
+            text, at = self._script
+            if at is not None and now - at > SCRIPT_HOLD_S:
+                self._script = None
+            else:
+                out.append(("script", text, 1.0))
         if self._heard is not None:
             text, at = self._heard
             alpha = _fade(now - at)
@@ -279,6 +290,8 @@ class Scene:
             self._active_at, self._poked = now, False
         if self._heard is not None and self._heard[1] is None:
             self._heard = (self._heard[0], now)
+        if self._script is not None and self._script[1] is None:
+            self._script = (self._script[0], now)
         self.utterances = [u for u in self.utterances if now < u.end + STALE_S]
         if self.utterances:
             self._active_at = now

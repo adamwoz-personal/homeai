@@ -246,3 +246,25 @@ def test_registry_picks_up_changes_made_by_another_process(tmp_path):
     assert daemon.reload_if_changed() and daemon.names() == ["Adam"]
     path.unlink()
     assert daemon.reload_if_changed() and daemon.names() == []
+
+
+def test_created_at_survives_updates_and_reloads(tmp_path):
+    path = tmp_path / "speakers.json"
+    reg = SpeakerRegistry(path, MODEL)
+    first = reg.add("Lily", np.array([1.0, 0, 0]), source="offered")
+    again = reg.add("Lily", np.array([0.9, 0.1, 0]), replace=True)
+    merged = reg.add("Lily", np.array([1.0, 0.1, 0]))
+    assert first.created_at > 0 and again.created_at == first.created_at == merged.created_at
+    assert merged.source == "offered"
+    reg.save()
+    loaded = SpeakerRegistry(path, MODEL).get("Lily")
+    assert loaded.created_at == first.created_at and loaded.source == "offered"
+
+
+def test_old_registry_files_use_enrolled_at_as_created(tmp_path):
+    import json as _json
+    path = tmp_path / "speakers.json"
+    path.write_text(_json.dumps({"version": 1, "speakers": {"Adam": {"embedding": [1, 0, 0], "model": MODEL,
+                                                                      "enrolled_at": 123.0, "sample_count": 2}}}))
+    adam = SpeakerRegistry(path, MODEL).get("Adam")
+    assert adam.created_at == 123.0 and adam.source == "asked"

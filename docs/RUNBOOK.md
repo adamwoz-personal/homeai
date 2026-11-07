@@ -201,6 +201,25 @@ journalctl --user -u homeai | grep -E "wake word detected|unverified|heard:"
   `tests/test_wake_verify.py` and check it with
   `tools/wake_word_similarity.py WORD`.
 
+## Status update
+
+"Hey Jarvis, status update" (or "what did I miss", "catch me up"). For an
+admin (`HOMEAI_STATUS_ADMINS`, default Adam):
+- voice profiles created since your last update (the first time: the last week);
+- doorbell rings and motion since your last update, at most the last 24 hours,
+  read from Home Assistant's history, so alerts while Jarvis was down count;
+- the weather. Anyone else gets only the weather.
+The answer is built without the model (~0.8 s). "Last update" is per person in
+`~/.local/share/homeai/status_update.json`, moved on only after a complete update.
+Check what it would say, without moving that time: `tools/probe_status_update.py`.
+
+**Ring events stuck since 2026-10-15.** Home Assistant's `event.front_door_ding`
+and `event.front_door_motion` haven't changed since then, while
+`sensor.front_door_last_activity` (polled) still updates. The status update reads
+both. The doorbell *announcements* watch the event entities, so they have been
+silent since then. Check with `tools/inspect_ring_entities.py`; the likely fix is
+reloading or re-authenticating the Ring integration in Home Assistant (unverified).
+
 ## Changing Jarvis's voice
 
 ```bash
@@ -232,10 +251,20 @@ homeai-mode speaker remove Adam   # takes effect without a restart
 ```
 
 By voice (best: same mic and distance as everyday use):
-- "Hey Jarvis, remember my voice as Adam." ("is Adam" or just "Adam" also
-  work; with no name heard, Jarvis asks for one.) Then talk about anything for
-  about ten seconds; Jarvis asks for more if it needs it and says "Got it"
-  when done. Saying "stop" cancels. Re-enrolling replaces the old profile.
+- "Hey Jarvis, remember my voice as Adam", "register me", "register my voice"
+  or "create a profile for me". With no name heard, Jarvis asks for one. Then
+  it asks: talk for a bit, or read something? "Read" (or "the screen", "a
+  script") puts a short paragraph on the avatar screen to read aloud; anything
+  else means talk about anything for about ten seconds. Jarvis asks for more
+  if it needs it and says "Got it" when done. Saying "stop" cancels (and clears
+  the screen). Re-enrolling yourself replaces your old profile; another voice
+  can't take a name that's already enrolled.
+- Jarvis also offers: an unknown voice that has talked to it for three turns
+  and about eight seconds (a child making requests, say) is asked "By the way,
+  I don't know your voice yet. What's your name?" once, at the end of a reply.
+  Answering with a name saves the profile; anything else is fine and it won't
+  ask that voice again. The speech is kept in memory only until then, at most
+  30 minutes. Voices that are close to someone known aren't pooled.
 - "Hey Jarvis, who am I?" says who it thinks you are (no model call).
 - "Hey Jarvis, forget my voice." removes the voice it recognises.
 

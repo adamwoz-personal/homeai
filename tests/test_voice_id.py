@@ -137,3 +137,84 @@ def test_describe():
 ])
 def test_extract_name(answer, name):
     assert vid.extract_name(answer) == name
+
+
+# -- other ways to ask, talk-or-read, offered profiles ----------------------------
+
+@pytest.mark.parametrize("said, name", [("register me", None), ("register my voice", None),
+                                        ("create a profile for me", None), ("set up my voice profile", None),
+                                        ("register me as Sam", "Sam"), ("make a profile, I'm Lily", "Lily")])
+def test_more_ways_to_ask_for_enrolment(said, name):
+    assert parse_command(said) == Command("enrol", name)
+
+
+@pytest.mark.parametrize("said", ["register the car", "create a shopping list", "what's my profile picture"])
+def test_not_enrolment(said):
+    assert parse_command(said) is None
+
+
+@pytest.mark.parametrize("said, how", [("put something on the screen", "read"), ("I'd rather read", "read"),
+                                       ("give me a script", "read"), ("I'll just talk", "talk"),
+                                       ("talk", "talk"), ("um, I don't know", "talk"),
+                                       ("I'll read, no, just talk", "talk")])
+def test_talk_or_read(said, how):
+    assert vid.enrol_method(said) == how
+
+
+def test_script_is_about_twelve_seconds_of_reading():
+    words = len(vid.ENROL_SCRIPT.split())
+    assert 30 <= words <= 45                  # ~2.7 words a second read aloud
+
+
+class FakeClock:
+    def __init__(self):
+        self.now = 0.0
+
+    def __call__(self):
+        return self.now
+
+
+def speech(seconds):
+    return (0.3 * np.sin(np.arange(int(seconds * 16000)) / 16000 * 2 * np.pi * 220)).astype(np.float32)
+
+
+def test_pool_is_ready_after_enough_turns_and_speech():
+    pool = vid.StrangerPool(need_s=6.0, min_turns=3)
+    kid = unit(0, 0, 1)
+    assert pool.add(kid, speech(4)) is None
+    assert pool.add(unit(0, 0.1, 1), speech(4)) is None            # 8 s, but only two turns
+    voice = pool.add(kid, speech(1))
+    assert voice is not None and len(voice.clips) == 3
+
+
+def test_pool_keeps_voices_apart():
+    pool = vid.StrangerPool(need_s=2.0, min_turns=2)
+    pool.add(unit(0, 0, 1), speech(2))
+    assert pool.add(unit(0, 1, 0), speech(2)) is None              # someone else: a new voice
+    assert len(pool.voices) == 2
+
+
+def test_pool_forgets_old_voices_and_never_saves():
+    clock = FakeClock()
+    pool = vid.StrangerPool(max_age_s=60, clock=clock)
+    pool.add(unit(0, 0, 1), speech(2))
+    clock.now = 61
+    pool.add(unit(0, 1, 0), speech(2))
+    assert len(pool.voices) == 1
+
+
+def test_pool_asks_each_voice_once():
+    pool = vid.StrangerPool(need_s=1.0, min_turns=1)
+    voice = pool.add(unit(0, 0, 1), speech(2))
+    enrolment = pool.take(voice)
+    assert enrolment.offered and enrolment.stage == "name" and enrolment.speech_s >= 1.0
+    assert enrolment.rounds == 0
+    assert pool.add(unit(0, 0, 1), speech(2)) is None
+
+
+def test_pool_matches_only_its_own_voice():
+    pool = vid.StrangerPool(need_s=1.0, min_turns=1)
+    voice = pool.add(unit(0, 0, 1), speech(2))
+    assert pool.matches(voice, unit(0, 0.2, 1)) and not pool.matches(voice, unit(1, 0, 0))
+    assert not pool.matches(voice, None)
+    assert pool.add(None, speech(2)) is None

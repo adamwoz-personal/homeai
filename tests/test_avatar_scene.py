@@ -465,3 +465,20 @@ def test_captions_render_over_the_sphere(gl):
     # fbo.read rows start at the bottom, like the texture: the caption is in the first rows.
     assert np.abs(shown[:40].astype(int) - plain[:40]).sum() > 1000
     assert np.array_equal(shown[100:140], plain[100:140])       # the sphere centre untouched
+
+
+def test_script_to_read_stays_until_cleared_or_too_old():
+    from homeai.avatar.scene import SCRIPT_HOLD_S
+    s = Scene(state="idle", connected=True)
+    s.apply({"type": "script", "t_mono": 5.0, "data": {"text": "Read this out loud."}})
+    assert ("script", "Read this out loud.", 1.0) in s.frame(60.0).captions     # long after captions fade
+    s.apply({"type": "script", "t_mono": 61.0, "data": {"text": ""}})
+    assert all(who != "script" for who, *_ in s.frame(62.0).captions)
+    s.apply({"type": "script", "t_mono": 100.0, "data": {"text": "Again."}})
+    assert all(who != "script" for who, *_ in s.frame(100.0 + SCRIPT_HOLD_S + 1).captions)
+
+
+def test_script_arrives_in_a_snapshot():
+    s = Scene(state="idle", connected=True)
+    s.apply({"type": "snapshot", "data": {"events": {"script": {"type": "script", "data": {"text": "Hi."}}}}})
+    assert ("script", "Hi.", 1.0) in s.frame(1.0).captions

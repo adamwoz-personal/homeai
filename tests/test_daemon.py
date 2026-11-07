@@ -874,10 +874,12 @@ def test_who_am_i(voiced) -> None:
 
 def test_enrolment_by_voice(voiced, monkeypatch) -> None:
     import homeai.voice_id as vid
-    monkeypatch.setattr(vid, "ENROL_TARGET_SPEECH_S", 6.0)
+    monkeypatch.setattr(vid, "ENROL_TARGET_SPEECH_S", 7.0)
     carl = _unit(1, 1, 1)
     _, spoken = _speak_as(voiced, carl, "Hey Jarvis, remember my voice as Carl.", seconds=2.0)
-    assert spoken[0].startswith("Okay, Carl.") and voiced._followup_armed.is_set()
+    assert spoken == [vid.MSG_ENROL_HOW.format(name="Carl")] and voiced._followup_armed.is_set()
+    _, spoken = _speak_as(voiced, carl, "I'll just talk.", source="followup", seconds=1.0)
+    assert spoken == [vid.MSG_ENROL_TALK] and voiced._followup_armed.is_set()
     turn, spoken = _speak_as(voiced, carl, "I had a busy day.", source="followup", seconds=2.0)
     assert spoken == [vid.MSG_ENROL_MORE] and voiced._followup_armed.is_set()
     assert turn.verdict == "enrolling"
@@ -887,6 +889,57 @@ def test_enrolment_by_voice(voiced, monkeypatch) -> None:
     voiced.agent.ask.assert_not_called()
     assert voiced.voice_id.registry.get("Carl") is not None
     assert "Carl" in voiced.voice_id.registry.path.read_text()
+
+
+@pytest.mark.parametrize("said", ["register me", "register my voice", "create a profile for me",
+                                  "can you make me a voice profile"])
+def test_other_ways_to_ask_for_enrolment(voiced, said) -> None:
+    import homeai.voice_id as vid
+    _, spoken = _speak_as(voiced, _unit(1, 1, 1), f"Hey Jarvis, {said}.")
+    assert spoken == [vid.MSG_ENROL_NO_NAME] and voiced._enrolment.stage == "name"
+    voiced.agent.ask.assert_not_called()
+
+
+def test_enrolment_by_reading_a_script_on_the_screen(voiced, monkeypatch) -> None:
+    import homeai.voice_id as vid
+    monkeypatch.setattr(vid, "ENROL_TARGET_SPEECH_S", 6.0)
+    published = []
+    monkeypatch.setattr(voiced.presence, "publish", lambda etype, data: published.append((etype, data)))
+    carl = _unit(1, 1, 1)
+    _speak_as(voiced, carl, "Hey Jarvis, register me as Carl.", seconds=1.0)
+    _, spoken = _speak_as(voiced, carl, "Put something on the screen.", source="followup", seconds=1.0)
+    assert spoken == [vid.MSG_ENROL_READ] and ("script", {"text": vid.ENROL_SCRIPT}) in published
+    _, spoken = _speak_as(voiced, carl, "Hey Jarvis, what's the weather like.", source="followup", seconds=2.0)
+    assert spoken == [vid.MSG_ENROL_READ_MORE]
+    _, spoken = _speak_as(voiced, carl, "My favourite colours are blue.", source="followup", seconds=3.0)
+    assert spoken == ["Got it. I'll know your voice now, Carl."]
+    assert [d for t, d in published if t == "script"][-1] == {"text": ""}, "the script is cleared when done"
+    assert voiced.voice_id.registry.get("Carl").source == "asked"
+
+
+def test_abandoned_reading_clears_the_script(voiced, monkeypatch) -> None:
+    published = []
+    monkeypatch.setattr(voiced.presence, "publish", lambda etype, data: published.append((etype, data)))
+    _speak_as(voiced, _unit(1, 1, 1), "Hey Jarvis, register me as Carl.")
+    _speak_as(voiced, _unit(1, 1, 1), "I'd rather read.", source="followup")
+    _speak_as(voiced, _unit(1, 1, 1), "Hey Jarvis, what is two plus four?")
+    assert voiced._enrolment is None and [d for t, d in published if t == "script"][-1] == {"text": ""}
+
+
+def test_another_voice_cannot_take_an_existing_name(voiced) -> None:
+    import homeai.voice_id as vid
+    _, spoken = _speak_as(voiced, STRANGER, "Hey Jarvis, register my voice as Adam.")
+    assert spoken == [vid.MSG_ENROL_TAKEN.format(name="Adam")] and voiced._enrolment is None
+    _speak_as(voiced, STRANGER, "Hey Jarvis, register me.")
+    _, spoken = _speak_as(voiced, STRANGER, "Adam.", source="followup")
+    assert spoken == [vid.MSG_ENROL_TAKEN.format(name="Adam")]
+    assert voiced.voice_id.registry.get("Adam").embedding.tolist() == pytest.approx(ADAM.tolist())
+
+
+def test_adam_can_re_enrol_himself(voiced) -> None:
+    import homeai.voice_id as vid
+    _, spoken = _speak_as(voiced, ADAM, "Hey Jarvis, remember my voice as Adam.")
+    assert spoken == [vid.MSG_ENROL_HOW.format(name="Adam")]
 
 
 def test_enrolment_is_abandoned_by_a_new_wake_turn(voiced) -> None:
@@ -904,6 +957,7 @@ def test_enrolment_without_a_name_asks_for_one(voiced, monkeypatch) -> None:
     assert voiced._followup_armed.is_set()
     _, spoken = _speak_as(voiced, ADAM, "It's Adam.", source="followup", seconds=1.0)
     assert spoken[0].startswith("Okay, Adam.") and voiced._enrolment.name == "Adam"
+    _speak_as(voiced, ADAM, "Talking is fine.", source="followup", seconds=1.0)
     _, spoken = _speak_as(voiced, ADAM, "Busy day today.", source="followup", seconds=3.0)
     assert spoken == ["Got it. I'll know your voice now, Adam."]
 
@@ -1015,3 +1069,92 @@ class _NoTimer:
 
     def start(self) -> None:
         self.running = True
+
+
+# -- offering a profile to an unknown voice ------------------------------------
+
+KID = _unit(0.1, 0.1, 1)        # nobody enrolled is close (Adam/Beth score ~0.1)
+
+
+def _three_turns(voiced, emb=KID):
+    for _ in range(3):
+        turn, _ = _speak_as(voiced, emb, "Hey Jarvis, what is two plus four?", seconds=3.0)
+    return [turn.reply]
+
+
+def test_an_unknown_voice_that_keeps_talking_is_asked_its_name(voiced) -> None:
+    import homeai.voice_id as vid
+    spoken = _three_turns(voiced)
+    assert spoken == [f"Six. {vid.MSG_OFFER}"] and voiced._followup_armed.is_set()
+    _, spoken = _speak_as(voiced, KID, "I'm Lily.", source="followup", seconds=1.0)
+    assert spoken == ["Nice to meet you, Lily. I'll know your voice now."]
+    profile = voiced.voice_id.registry.get("Lily")
+    assert profile is not None and profile.source == "offered" and profile.created_at > 0
+
+
+def test_two_turns_are_not_enough_to_ask(voiced) -> None:
+    for _ in range(2):
+        turn, _ = _speak_as(voiced, KID, "Hey Jarvis, what is two plus four?", seconds=6.0)
+    assert turn.reply == "Six."
+
+
+def test_a_declined_offer_is_not_asked_again(voiced) -> None:
+    import homeai.voice_id as vid
+    _three_turns(voiced)
+    _, spoken = _speak_as(voiced, KID, "No thanks.", source="followup")
+    assert spoken == [vid.MSG_OFFER_DECLINED] and voiced.voice_id.registry.names() == ["Adam", "Beth"]
+    assert _three_turns(voiced) == ["Six."]
+
+
+def test_the_name_must_come_from_the_voice_that_was_asked(voiced) -> None:
+    _three_turns(voiced)
+    _speak_as(voiced, _unit(1, -1, 0.2), "I'm Sam.", source="followup")
+    assert voiced.voice_id.registry.get("Sam") is None and voiced._enrolment is None
+
+
+def test_known_voices_are_never_pooled(voiced) -> None:
+    for _ in range(4):
+        turn, _ = _speak_as(voiced, ADAM, "Hey Jarvis, what is two plus four?", seconds=4.0)
+    assert turn.reply == "Six." and voiced._strangers.voices == []
+
+
+def test_a_near_miss_of_a_known_voice_is_not_pooled(voiced) -> None:
+    near_adam = _unit(1, 0, 2.5)          # unknown (0.37), but close to Adam: probably Adam on a bad day
+    for _ in range(4):
+        turn, _ = _speak_as(voiced, near_adam, "Hey Jarvis, what is two plus four?", seconds=4.0)
+    assert turn.reply == "Six." and voiced._strangers.voices == []
+
+
+def test_no_offer_after_a_reply_that_asks_a_question(voiced) -> None:
+    from types import SimpleNamespace
+    voiced.agent.ask.side_effect = lambda *a, **k: SimpleNamespace(
+        ok=True, text="Six. Do you want me to show the working?", attempts=1, error="")
+    for _ in range(3):
+        turn, _ = _speak_as(voiced, KID, "Hey Jarvis, what is two plus four?", seconds=3.0)
+    assert turn.reply.endswith("working?") and voiced._enrolment is None
+
+
+# -- status update -------------------------------------------------------------
+
+def test_status_update_is_spoken_without_the_agent(voiced) -> None:
+    from tests.test_status_update import FakeStatus
+    voiced.status = FakeStatus("No news. It's 61 degrees.")
+    turn, spoken = _speak_as(voiced, ADAM, "Hey Jarvis, status update.")
+    voiced.agent.ask.assert_not_called()
+    assert spoken == ["No news. It's 61 degrees."] and turn.verdict == "status"
+    assert voiced.status.seen == [("status update.", "Adam")]
+
+
+def test_other_talk_passes_the_status_check(voiced) -> None:
+    from tests.test_status_update import FakeStatus
+    voiced.status = FakeStatus(None)
+    _speak_as(voiced, ADAM, "Hey Jarvis, what is two plus four?")
+    voiced.agent.ask.assert_called_once()
+
+
+def test_status_update_crash_is_spoken(voiced) -> None:
+    from tests.test_status_update import FakeStatus
+    voiced.status = FakeStatus(RuntimeError("boom"))
+    _, spoken = _speak_as(voiced, ADAM, "Hey Jarvis, status update.")
+    assert spoken == ["Sorry, I couldn't put the status update together."]
+    voiced.agent.ask.assert_not_called()
