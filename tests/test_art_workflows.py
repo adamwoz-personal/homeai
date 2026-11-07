@@ -67,3 +67,11 @@ def test_print_grid_puts_a_line_on_every_inch():
     dark = np.flatnonzero(pixels[25] < 300)                 # a row between the horizontal lines
     centres = [int(run.mean()) for run in np.split(dark, np.flatnonzero(np.diff(dark) > 1) + 1)]
     assert centres == [0, 50, 100, 149] or centres == [0, 50, 100, 150]
+
+
+@pytest.mark.parametrize("model", comfy_common.MODELS)
+def test_no_links_to_missing_nodes(model):
+    """A dangling link kills ComfyUI's job thread (homeai/art/comfy.py: dangling_links)."""
+    from homeai.art.comfy import dangling_links
+
+    assert dangling_links(comfy_common.workflow(model, "a fox", 7)) == []

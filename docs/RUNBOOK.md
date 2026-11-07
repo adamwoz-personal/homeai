@@ -148,6 +148,9 @@ homeai-mode voice     # ComfyUI stopped, coder back (~7 s warm, ~27 s cold)
   voice mode.
 - The art tools in `tools/art/` start their own ComfyUI on the same port, so
   run them in voice mode, not art mode.
+- If pictures stop finishing while ComfyUI still answers, its job thread has
+  probably died: `homeai-mode voice && homeai-mode art` restarts it. Check with
+  `tools/art/comfy_client_live.py` (from voice mode).
 - Nothing draws by voice yet: art mode only gets the GPU ready (AVATAR_PLAN 6a).
 
 ## False wakes ("it answered and nobody said Jarvis")
