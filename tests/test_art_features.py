@@ -166,14 +166,20 @@ def test_session_draws_and_changes_by_letter(session):
     assert session.handle("what prompt made this").spoken == prompt
 
 
-def test_kid_rules_steer_features(tmp_path):
-    patch = scripted({"ops": [{"op": "add", "kind": "subject", "text": "a knight on a horse"}]})
+def test_kid_rules_steer_the_prompt_not_the_features(tmp_path):
+    patch = scripted({"ops": [{"op": "add", "kind": "subject", "text": "a knight on a horse"}]},
+                     {"ops": [{"op": "add", "kind": "subject", "text": "a red fox"}]})
     s = ArtSession(Store(tmp_path), Queue(), "guest", rules=policy.load("kid-safe"), patch=patch)
     s.handle("draw a knight on a horse")
-    feats = F.features_of(s.project.nodes["001"].spec)
-    assert [(f.kind, f.text) for f in feats[1:]] == [("element", "everyone fully clothed"),
-                                                      ("style", "family-friendly")] or \
-        {(f.kind, f.text) for f in feats[1:]} == {("element", "everyone fully clothed"), ("style", "family-friendly")}
+    node = s.project.nodes["001"]
+    assert [f.text for f in F.features_of(node.spec)] == ["a knight on a horse"]
+    assert node.meta["prompt"] == "A knight on a horse. Everyone fully clothed, family-friendly."
+    s.handle("new picture")
+    s.handle("draw a red fox")
+    assert s.project.nodes["001"].meta["prompt"] == "A red fox. Family-friendly."     # clothes only with people
+    s.rules = policy.load("allow-all")
+    s._draw("again", s.project.nodes["001"].spec, None)
+    assert s.queue.jobs[-1]["pos"]["inputs"]["text"] == "A red fox."
 
 
 def test_kid_rules_refuse_adult_features(tmp_path):
@@ -213,9 +219,9 @@ def test_saved_pictures_go_to_the_askers_folder_with_their_description(tmp_path)
     assert sidecar["seed"] == project.nodes["001"].spec["seed"] and sidecar["model"] == "klein9"
     state = published[-1][1]
     assert state["features"] == [{"id": "A", "kind": "subject", "text": "a dragon"}] and state["changed"] == ["A"]
-    # an unknown voice's picture goes to guest/
-    art.handle("new picture", None)
-    art.handle("draw a cat", None)
+    # an unknown voice's own session goes to guest/
+    art.session, art.owner = None, None
+    art.handle("draw a picture of a cat", None)
     project = art.session.project
     project.finish("001", image)
     art._on_job({"state": "done", "project": project.id, "node": "001", "image": str(project.image("001"))})
@@ -237,3 +243,48 @@ def test_feature_rows_for_the_window():
     assert ("B", "element", False) in rows and ("", "a rider", False) in rows
     assert V.feature_rows({}) == []
     assert V.wrap("one two three", 7) == ["one two", "three"]
+
+
+# -- Adam's battleship session (2026-11-07) ------------------------------------------------------
+
+def test_a_letterless_change_is_skipped():
+    after, changed = F.apply_ops(DRAGON, [{"op": "change", "text": "A to a steampunk battleship"},
+                                          {"op": "add", "kind": "element", "text": "a steampunk battleship"}])
+    assert changed == ["E"] and after[0] == DRAGON[0] and after[-1].text == "a steampunk battleship"
+    with pytest.raises(SpecError):
+        F.apply_ops(DRAGON, [{"op": "change", "id": "Q", "text": "x"}])      # a named letter must exist
+
+
+def test_one_main_subject():
+    after, changed = F.apply_ops(DRAGON, [{"op": "add", "kind": "subject", "text": "a steampunk battleship"}])
+    assert [f.kind for f in after].count("subject") == 1 and after[-1].kind == "element"
+
+
+def test_a_complaint_never_writes_the_defect_in(tmp_path):
+    patch = scripted({"ops": [{"op": "add", "kind": "subject", "text": "a single dragon"}]},
+                     {"ops": [{"op": "change", "id": "A", "text": "a single dragon with two heads, one on each side"}]})
+    s = ArtSession(Store(tmp_path), Queue(), "adam", patch=patch, rng=random.Random(1))
+    s.handle("draw a dragon")
+    reply = s.handle("again. it has two, a little head on this side and a big head on this side")
+    assert reply.spoken.startswith("Fixing it") and len(s.grid) == 4
+    for node in s.grid:
+        assert F.features_of(s.project.nodes[node].spec)[0].text == "a single dragon"
+
+
+def test_a_question_never_changes_the_picture(tmp_path):
+    from homeai.art.session import MSG_QUESTION
+
+    def no_model(*a):
+        raise AssertionError("patched a question")
+    s = ArtSession(Store(tmp_path), Queue(), "adam", patch=scripted({"ops": [{"op": "add", "kind": "subject",
+                                                                              "text": "a dragon"}]}))
+    s.handle("draw a dragon")
+    s._patch = no_model
+    assert s.handle_free("what is that in his hand?").spoken == MSG_QUESTION
+
+
+def test_what_prompt_includes_hidden_steering_words(tmp_path):
+    patch = scripted({"ops": [{"op": "add", "kind": "subject", "text": "a knight"}]})
+    s = ArtSession(Store(tmp_path), Queue(), "guest", rules=policy.load("kid-safe"), patch=patch)
+    s.handle("draw a knight")
+    assert s.handle("what prompt made this").spoken == s.project.nodes["001"].meta["prompt"]

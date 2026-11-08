@@ -106,10 +106,16 @@ def apply_ops(features: list[Feature], ops: list[dict], used: set[str] | None = 
     changed: list[str] = []
     for op in ops:
         kind = op.get("op")
+        if kind == "change" and not str(op.get("id") or "").strip():
+            # A change with no letter is the model guessing: one replaced the dragon with "A to a steampunk
+            # battleship" and another failed the whole change (live and eval, 2026-11-07). Skip it, keep the rest.
+            continue
         if kind == "add":
             text, fkind = _clean(op.get("text", "")), op.get("kind") or "element"
             if not text or fkind not in KINDS:
                 raise SpecError(f"bad add {op!r}")
+            if fkind == "subject" and any(f.kind == "subject" for f in current):
+                fkind = "element"       # one main subject; a second "subject" is placed relative to it
             if len(current) >= MAX_FEATURES:
                 raise SpecError(f"a picture has at most {MAX_FEATURES} features")
             letter = _next_letter(current, used)
@@ -136,13 +142,17 @@ def apply_ops(features: list[Feature], ops: list[dict], used: set[str] | None = 
     return current, changed
 
 
-def render(features: list[Feature], aspect: str = "square"):
-    """The prompt: main subject first, then what's placed relative to it, where, and the look."""
+def render(features: list[Feature], aspect: str = "square", steer: list[str] | tuple = ()):
+    """The prompt: main subject first, then what's placed relative to it, where, and the look.
+
+    ``steer``: policy words (kid-safe) added to the prompt but never shown as features.
+    """
     from homeai.art.prompt_spec import Rendered, _cap
     ordered = sorted(features, key=lambda f: (ORDER[f.kind], f.id))
     sentences = [_cap(f.text) + "." for f in ordered if f.kind in ("subject", "element", "setting",
                                                                    "composition", "camera")]
     look = [f.text for f in ordered if f.kind in ("style", "colour", "lighting")]
+    look += [w for w in steer if w.lower() not in " ".join(sentences + look).lower()]
     if look:
         sentences.append(_cap(", ".join(look)) + ".")
     width, height = SIZES.get(aspect, SIZES["square"])

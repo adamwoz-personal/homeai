@@ -24,6 +24,15 @@ MSG_NOT_YET = "I can't do that one yet."
 MSG_NOTHING_TO_STOP = "Nothing is drawing."
 MSG_NO_GRID = "There's no set of options to pick from."
 MSG_FRESH = "Okay, a new picture. What shall I draw?"
+MSG_QUESTION = "I can't answer questions about the picture yet, but I can change it."
+
+# A question is never a change: "what is image three?" changed four features (Adam, 2026-11-07).
+QUESTION = re.compile(r"^(what|who|when|where|why|how|which|is (it|that|this|there)|are (they|there|those)|"
+                      r"does (it|that)|did (it|you))\b")
+# Defects a complaint names; a patch that writes them into the features asks for them again
+# ("a single flying dragon with two heads, one on each side", 2026-11-07).
+DEFECT = re.compile(r"\b(two|three|four|several|multiple|many|extra|second|third|2|3|4) "
+                    r"(heads?|riders?|samurais?|legs?|arms?|tails?|wings?|hands?|people|faces?)\b")
 TRIES_AFTER_COMPLAINT = 4
 
 
@@ -43,10 +52,10 @@ def drawing_sentence(said: str) -> str:
 MODEL = "klein9"
 
 
-def render_spec(spec: dict):
-    """The prompt for a stored spec: lettered features, or the older PromptSpec fields."""
+def render_spec(spec: dict, steer: list[str] | tuple = ()):
+    """The prompt for a stored spec: lettered features (plus hidden policy words), or the older PromptSpec fields."""
     if "features" in spec:
-        return F.render(F.features_of(spec), spec.get("aspect") or "square")
+        return F.render(F.features_of(spec), spec.get("aspect") or "square", steer)
     return prompt_spec.render(spec)
 
 
@@ -88,7 +97,8 @@ class ArtSession:
 
     def _draw(self, instruction: str, spec: dict, parent: str | None, preview: bool = False) -> str:
         spec = {**spec, "seed": spec.get("seed") if spec.get("seed") is not None else self._seed()}
-        rendered = render_spec(spec)
+        steer = getattr(self.rules, "steer", None)
+        rendered = render_spec(spec, steer(F.text_of(spec)) if steer and "features" in spec else ())
         node = self.project.add(instruction, spec, parent=parent,
                                 meta={"prompt": rendered.text, "model": MODEL, "seed": spec["seed"],
                                       "size": [rendered.width, rendered.height], "by": self.speaker or self.owner})
@@ -123,6 +133,8 @@ class ArtSession:
     def handle_free(self, text: str) -> Reply:
         """A sentence about the picture with no command shape: a new picture, or a change to this one."""
         said = grammar._tidy(text)
+        if QUESTION.match(said):
+            return Reply(MSG_QUESTION, "question")
         kind = "edit" if self._current() is not None else "new"
         return getattr(self, f"_on_{kind}")(grammar.Intent(kind, text=said), text)
 
@@ -154,6 +166,8 @@ class ArtSession:
         else:
             said = f"Changing {prompt_spec.describe(prompt_spec.diff(node.spec, {**spec, 'seed': node.spec.get('seed')}))}."
         if grammar.is_complaint(intent.text):
+            if "features" in spec and DEFECT.search(F.text_of(spec)) and not DEFECT.search(F.text_of(node.spec)):
+                spec, self.last_changed = {**node.spec}, []         # don't write the defect in; just re-roll
             # The same seed keeps the same broken layout (two heads stayed through four edits, 2026-11-07):
             # draw several new tries and let the person pick.
             jobs, self.grid = [], []
@@ -218,7 +232,7 @@ class ArtSession:
         node = self._current()
         if node is None:
             return Reply(MSG_NOTHING_YET, "what")
-        return Reply(render_spec(node.spec).text, "what")
+        return Reply(node.meta.get("prompt") or render_spec(node.spec).text, "what")
 
     def _on_cancel(self, intent, text):
         stopped = [job for job in self.jobs if self.queue.cancel(job)]

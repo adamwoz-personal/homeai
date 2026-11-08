@@ -169,7 +169,8 @@ homeai-mode voice     # ComfyUI stopped, coder back (~7 s warm, ~27 s cold)
 - The picture is described by lettered features (A, B, C...) shown in a second
   window; "make the dragon red" rewrites the dragon's letter, "remove C" drops one,
   "change B to a knight" works by letter. A complaint ("it has two heads") draws four
-  new tries, numbered in the picture window: "the second one" picks.
+  new tries, numbered in the picture window: "the second one", "image three" or
+  "option 3" picks. Questions ("what is that in his hand?") never change the picture.
 - Every finished picture is saved to `~/Pictures/homeai/<name>/<project>-<node>.png`
   (`guest/` for voices Jarvis doesn't know) with a `.json` beside it: the features,
   the prompt, seed, model and who asked
@@ -180,8 +181,14 @@ homeai-mode voice     # ComfyUI stopped, coder back (~7 s warm, ~27 s cold)
   know draw under kid rules: requests or specs with sex, nudity, gore, drugs or
   hate words are refused with "Let's draw something else", and every picture is
   steered "family-friendly" (people "fully clothed"). Swords, dragons and monsters
-  are fine. The rules follow whoever is speaking, so a kid in your session gets
-  kid rules. Finished pictures aren't checked by a classifier yet.
+  are fine. The steering words go into the prompt only, not the features list
+  ("what prompt made this" shows them). Finished pictures aren't checked by a
+  classifier yet.
+- The person who started art mode is the audience. While they draw, a voice that
+  is confidently someone else is ignored (logged as `art: ignoring another voice`;
+  house talk still reaches Jarvis), and a voice Jarvis can't tell apart from them
+  counts as them. A session started by an unknown voice is a guest session under
+  kid rules. Words from two people in one recording can't be split yet.
   `HOMEAI_ART_VOICE=0` turns all of this off.
 - The window is the transient unit `homeai-art-viewer`; close it with Esc or q,
   or `systemctl --user stop homeai-art-viewer`. Logs: `journalctl --user | grep "art:"`.

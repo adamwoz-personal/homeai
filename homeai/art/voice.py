@@ -11,8 +11,11 @@ returns the sentence to speak, or None to let Jarvis answer as usual:
   lights") still goes to Jarvis. "I'm done drawing" leaves.
 - Everyone may draw. Registered adults (``adults``, default Adam) draw with no
   limits; registered kids and any voice Jarvis doesn't know draw under the
-  kid-safe policy (Adam 2026-11-07). The policy is chosen per sentence, so a kid
-  joining Adam's session gets kid rules for their requests.
+  kid-safe policy (Adam 2026-11-07). The person who entered art mode is the
+  audience: while they draw, a voice that is confidently someone else is
+  ignored, and one that can't be told apart counts as them (Adam 2026-11-07:
+  "remember who the main audience is and ignore the background people").
+  A session started by an unknown voice is a guest session under kid rules.
 - 20 minutes with no art sentence and nothing drawing goes back to voice mode.
 
 Finished pictures pass the image policy, then are copied to ~/Pictures/homeai/.
@@ -46,7 +49,9 @@ REPO = Path(__file__).resolve().parents[2]
 
 # Searched, not matched whole: Whisper adds words ("Hey Jervis, let's draw. Wait, bye, ma'am one.") and people
 # add their own ("I'm Adam, switch to art mode"); both were missed in Adam's first session (2026-11-07).
-ENTER = re.compile(r"(^|\b(switch|go|change|move) (in)?to |\b(start|open|enter|turn on) )(the )?art mode\b|"
+# Whisper's mishearings of "art mode" ("switch to Art Mize" went to the chat model, 2026-11-07).
+ART_MODE = r"(art|arts|art's|art-) ?(mode|modes|mize|mod|mood|moat|node)"
+ENTER = re.compile(r"(^|\b(switch|go|change|move) (in)?to |\b(start|open|enter|turn on) )(the )?" + ART_MODE + r"\b|"
                    r"\blet'?s (draw|paint|sketch|make (some )?(art|pictures))\b")
 LETS_DRAW = re.compile(r"\blet'?s (draw|paint|sketch) (?P<what>(?!(something|some|it|that|this)\b).{3,})$")
 MODE_QUESTION = re.compile(r"\b(are we|am i|is this|are you) (still )?in art mode\b|\bwhat mode\b")
@@ -169,7 +174,12 @@ class ArtVoice:
 
     # -- the one entry point ---------------------------------------------------
 
-    def handle(self, text: str, speaker: str | None) -> str | None:
+    def handle(self, text: str, speaker: str | None, other: bool = False) -> str | None:
+        """``other``: the voice is confidently not the person whose session this is (the daemon's speaker check).
+
+        Returns the sentence to say, None for Jarvis to answer, or "" to stay quiet (someone else in the room
+        talking about the picture while its owner draws).
+        """
         with self._lock:
             if not self.active:
                 if wants_picture(text):
@@ -189,6 +199,13 @@ class ArtVoice:
             subject = " ".join(str(node.spec.get(k) or "") for k in ("subject", "details")) if node else ""
             if intent is None and for_jarvis(text, subject):
                 return None                                  # house talk and other questions: Jarvis answers
+            if other and self.owner:
+                # The person drawing is the audience: the family talking in the background isn't
+                # (a child's "it has two heads" became kid rules and changes, Adam 2026-11-07).
+                log.info("art: ignoring another voice in %s's session: %r", self.owner, text)
+                return ""
+            if speaker is None and self.owner:
+                speaker = self.owner        # not confidently someone else: the session's owner, not a stranger
             self._last = self._clock()
             self.session.rules = self.rules_for(speaker)
             self.session.speaker = speaker or "guest"

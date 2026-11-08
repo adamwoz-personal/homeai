@@ -65,6 +65,12 @@ wrong (two heads, an extra rider, a leg in the wrong place), change that feature
 For a new picture (no features yet), make one subject feature and add only what the person described; don't invent
 a style, colours, lighting or camera they didn't ask for.
 If the person rambles or corrects themselves ("a dragon, no wait, a wyvern, um, green"), use what they ended up meaning.
+Each thing is described in exactly one feature: never mention an element's thing inside another feature (the rider
+belongs in its own feature, not also in the dragon's).
+Sizes: when the person says something is too small or too big, write its size relative to the subject in its own
+feature ("a huge steam-powered battleship, many times bigger than the dragon").
+Ignore words that aren't about the picture (exclamations, questions or remarks to other people in the room). If
+nothing said is about the picture, answer with no operations.
 Set aspect only if they ask for a shape (square, portrait, landscape, wide)."""
 
 

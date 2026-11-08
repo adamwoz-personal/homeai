@@ -33,6 +33,14 @@ DRAGON = {"features": [{"id": "A", "kind": "subject", "text": "a single green dr
                        {"id": "C", "kind": "setting", "text": "a neon city street at night"},
                        {"id": "D", "kind": "style", "text": "cyberpunk"}], "aspect": "landscape"}
 
+# Adam's battleship session, 2026-11-07 (node 007 onwards).
+BATTLE = {"features": [{"id": "A", "kind": "subject", "text": "a single flying dragon"},
+                       {"id": "B", "kind": "setting", "text": "over the ocean"},
+                       {"id": "C", "kind": "element", "text": "a cyborg samurai sitting on the dragon's back"},
+                       {"id": "D", "kind": "element", "text": "a steam-powered battleship shooting lasers at the dragon"}],
+          "aspect": "square"}
+NO_CHANGE = "no change"         # a case whose right answer is "nothing to do" (the patch is refused)
+
 
 def text(spec, letter):
     return next((f["text"].lower() for f in spec.get("features", []) if f["id"] == letter), "")
@@ -69,6 +77,20 @@ CASES = [
      [lambda s, c: has_word(s, "moon") or "no moon", lambda s, c: count(s) == 5 or f"{count(s)} features"]),
     ("style swap", DRAGON, "make it a watercolour instead of cyberpunk",
      [lambda s, c: "watercolo" in text(s, "D") or f"D is {text(s, 'D')!r}", lambda s, c: count(s) == 4 or "count"]),
+    ("ship scale", BATTLE, "the boat seems really small compared to the proportion of the human being and the dragon",
+     [lambda s, c: c == ["D"] or f"changed {c}",
+      lambda s, c: any(w in text(s, "D") for w in ("bigger", "larger", "huge", "massive", "enormous", "giant", "towering"))
+      or f"D is {text(s, 'D')!r}"]),
+    ("one rider", BATTLE, "make the samurai's armor gold",
+     [lambda s, c: "samurai" not in text(s, "A") or f"A is {text(s, 'A')!r}",
+      lambda s, c: "gold" in text(s, "C") or f"C is {text(s, 'C')!r}"]),
+    ("add fight", {**BATTLE, "features": BATTLE["features"][:3]},
+     "make it, fight it, a steampunk battleship that's shooting lasers at it",
+     [lambda s, c: has_word(s, "battleship") or "no battleship", lambda s, c: count(s, "subject") == 1 or "subjects",
+      lambda s, c: "samurai" not in text(s, "A") or "samurai copied into A",
+      lambda s, c: "dragon" in text(s, "A") or f"lost the dragon: A is {text(s, 'A')!r}"]),
+    ("chatter", BATTLE, "oh gosh, it's fake again. oh my gosh, what's that", NO_CHANGE),
+    ("aside", BATTLE, "sure. yeah, you're talking with my husband", NO_CHANGE),
 ]
 
 
@@ -85,8 +107,11 @@ def main() -> int:
             continue
         for n in range(args.repeats):
             result = P.features_patch_for(start, said)
-            problems = [r for c in checks for r in [c(result.spec, result.changed)] if r is not True] if result.ok \
-                else [f"not caught: {result.detail}"]
+            if checks == NO_CHANGE:
+                problems = [f"changed {result.changed}"] if result.ok else []
+            else:
+                problems = [r for c in checks for r in [c(result.spec, result.changed)] if r is not True] \
+                    if result.ok else [f"not caught: {result.detail}"]
             times.append(result.seconds)
             rows.append({"case": name, "run": n, "ok": not problems, "problems": problems, "ops": result.patch,
                          "features": result.spec.get("features") if result.ok else None, "seconds": result.seconds})

@@ -551,7 +551,7 @@ class VoiceAssistant:
         if self._handle_status(turn, transcript.text, ident, total):
             return
 
-        if self._handle_art(turn, transcript.text, ident, total):
+        if self._handle_art(turn, transcript.text, ident, total, emb):
             return
 
         if self._handle_home(turn, transcript.text, source, total):
@@ -947,18 +947,27 @@ class VoiceAssistant:
         self._say_turn(turn, reply, total)
         return True
 
-    def _handle_art(self, turn: Turn, text: str, ident, total: Stopwatch) -> bool:
+    def _handle_art(self, turn: Turn, text: str, ident, total: Stopwatch, emb=None) -> bool:
         """Drawing sentences, and entering or leaving art mode. False: not about art."""
         if self.art is None:
             return False
         speaker = ident.name if ident is not None else None
+        other = False
+        owner = getattr(self.art, "owner", None)
+        if getattr(self.art, "active", False) and owner and self.voice_id is not None and ident is not None:
+            other, _ = self.voice_id.is_someone_else(owner, ident, emb)
         try:
-            reply = self.art.handle(text, speaker)
+            reply = self.art.handle(text, speaker, other=other)
         except Exception:  # noqa: BLE001 - a broken art mode must not take Jarvis down
             log.exception("art mode failed on %r", text)
             reply = "Something went wrong in art mode."
         if reply is None:
             return False
+        if reply == "":
+            turn.verdict = "other-speaker"
+            turn.total_ms = total.ms()
+            self.transcript.write(turn)
+            return True
         log.info("art: %r -> %r", text, reply)
         turn.verdict = "art"
         self._say_turn(turn, reply, total, listen=reply.endswith("?"))

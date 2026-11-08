@@ -56,3 +56,30 @@ def test_ordinary_talk_is_not_art(said):
 def test_make_it_is_never_a_new_picture():
     for said in ("make it bigger", "make them smile", "make her taller", "make this red"):
         assert parse(said).kind == "edit"
+
+
+# -- Adam's battleship session (2026-11-07) ------------------------------------------------------
+
+@pytest.mark.parametrize("said, n", [("what is image three?", 3), ("image three.", 3), ("option three.", 3),
+                                     ("number 2", 2), ("show me option four", 4), ("the third picture", 3),
+                                     ("let's see the first one", 1), ("go with option one", 1)])
+def test_picking_an_option_by_number(said, n):
+    assert parse(said) == Intent("select", n=n)
+
+
+def test_chatter_after_again_is_not_a_change():
+    assert parse("again. Oh gosh, it's fake again. Oh my gosh, what's that?") == Intent("again")
+    complaint = parse("again. It has two, a little head on this side and a big head on this side.")
+    assert complaint.kind == "edit" and complaint.text.startswith("it has two")
+
+
+def test_saying_the_wake_word_again_restarts_the_request():
+    said = "Draw me a dragon. Hey Jarvis, let's draw a dragon flying over the ocean."
+    from homeai.art.grammar import _tidy
+    from homeai.art.session import drawing_sentence
+    assert _tidy(said) == "let's draw a dragon flying over the ocean"
+    assert drawing_sentence(_tidy(said)) == "Drawing a dragon flying over the ocean."
+    assert _tidy("hey jarvis") == ""                             # only the wake word: nothing asked
+    assert parse("hey jarvis, draw a fox") == Intent("new", text="draw a fox")
+    assert parse("Jarvis, draw a fox") == Intent("new", text="draw a fox")
+    assert parse("Hey Jarvis, stop.") == Intent("cancel")

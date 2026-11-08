@@ -44,6 +44,9 @@ class AllowAll:
     def check_image(self, path: Path, profile: str) -> Decision:
         return ALLOW
 
+    def steer(self, text: str) -> list[str]:
+        return []
+
 
 class DenyAll:
     def __init__(self, name: str) -> None:
@@ -53,6 +56,9 @@ class DenyAll:
         return Decision("deny", MSG_UNKNOWN_POLICY)
 
     check_request = check_spec = check_image = _deny
+
+    def steer(self, text: str) -> list[str]:
+        return []
 
 
 # Kid-safe: words that stop a request or a spec. Whole words only, so "killer whale" and "bloodhound" pass.
@@ -95,7 +101,7 @@ class KidSafe:
         if KID_BLOCKED.search(text):
             return Decision("deny", MSG_KID_DENIED)
         if "features" in spec:
-            return self._steer_features(spec, text)
+            return ALLOW            # lettered features: steered by ``steer`` at drawing time, not in the list
         safe = dict(spec)
         style = str(safe.get("style") or "")
         if KID_STYLE not in style:
@@ -105,21 +111,11 @@ class KidSafe:
             safe["details"] = f"{details}, {KID_CLOTHED}" if details else KID_CLOTHED
         return Decision("rewrite", spec=safe) if safe != spec else ALLOW
 
-    def _steer_features(self, spec: dict, text: str) -> Decision:
-        """Lettered features: family-friendly goes in as a style feature, clothes as an element (once each)."""
-        from homeai.art import features as F
-        current = F.features_of(spec)
-        ops = []
-        if KID_STYLE not in text.lower():
-            ops.append({"op": "add", "kind": "style", "text": KID_STYLE})
-        if PEOPLE.search(text) and KID_CLOTHED not in text.lower():
-            ops.append({"op": "add", "kind": "element", "text": KID_CLOTHED})
-        if not ops:
-            return ALLOW
-        used = set(spec.get("letters_used") or [])
-        after, _ = F.apply_ops(current, ops, used)
-        return Decision("rewrite", spec={**spec, "features": F.dump(after),
-                                         "letters_used": sorted(used | {f.id for f in after})})
+    def steer(self, text: str) -> list[str]:
+        """Words added to the prompt only, never to the features: Adam didn't want the filters in his list of
+        things to work with (2026-11-07). Clothes only when people are in the picture."""
+        out = [KID_CLOTHED] if PEOPLE.search(text) else []
+        return out + [KID_STYLE]
 
     def check_image(self, path: Path, profile: str) -> Decision:
         return ALLOW

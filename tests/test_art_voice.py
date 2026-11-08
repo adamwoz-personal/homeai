@@ -147,9 +147,19 @@ def test_adults_draw_without_limits_matched_without_case(art):
 
 def test_rules_follow_whoever_is_speaking(art):
     from homeai.art.policy import MSG_KID_DENIED
-    art.handle("art mode", "Adam")
+    art.handle("art mode", None)                       # a guest session: kid rules for everyone in it
     assert art.handle("draw a bloody knight", None) == MSG_KID_DENIED and art.queue.submitted == []
+    assert art.handle("draw a bloody knight", "Ani") == MSG_KID_DENIED
     assert art.handle("draw a bloody knight", "Adam") == "Drawing a bloody knight."
+
+
+def test_the_person_drawing_is_the_audience(art):
+    art.handle("art mode", "Adam")
+    assert art.handle("make it blue", None, other=True) == "" and art.queue.submitted == []
+    assert art.handle("turn off the lights", None, other=True) is None     # house talk still reaches Jarvis
+    # a voice that can't be told apart from Adam's counts as Adam: no kid rules mid-session
+    assert art.handle("draw a bloody knight", None) == "Drawing a bloody knight."
+    assert art.session.speaker == "Adam"
 
 
 def test_a_failed_switch_is_spoken_and_stays_in_voice(art):
@@ -342,8 +352,11 @@ class FakeArt:
     def __init__(self, reply):
         self.reply, self.seen = reply, []
 
-    def handle(self, text, speaker):
+    active, owner = True, "Adam"
+
+    def handle(self, text, speaker, other=False):
         self.seen.append((text, speaker))
+        self.others = getattr(self, "others", []) + [other]
         if isinstance(self.reply, Exception):
             raise self.reply
         return self.reply
@@ -395,6 +408,13 @@ def test_daemon_passes_non_art_talk_to_the_agent(quick_art):
 def test_a_question_from_art_mode_opens_a_followup(quick_art):
     _turn(quick_art, "art mode", AV.MSG_READY)
     assert quick_art._followup_armed.is_set()
+
+
+def test_daemon_stays_quiet_for_another_voice_in_an_art_session(quick_art):
+    quick_art.voice_id = type("V", (), {"is_someone_else": lambda self, owner, ident, emb: (True, 0.1)})()
+    turn, spoken = _turn(quick_art, "it has two heads", "", name=None)
+    quick_art.agent.ask.assert_not_called()
+    assert spoken == [] and turn.verdict == "other-speaker" and quick_art.art.others == [True]
 
 
 def test_art_crash_is_spoken_not_fatal(quick_art):
@@ -630,3 +650,15 @@ def test_daemon_listens_longer_in_art_mode(assistant):
     assert assistant._long_capture()
     assistant.art = None
     assert not assistant._long_capture()
+
+
+# -- Adam's battleship session (2026-11-07) ------------------------------------------------------
+
+@pytest.mark.parametrize("said", ["switch to Art Mize.", "go to arts mode", "switch to art mod"])
+def test_misheard_art_mode_still_enters(said):
+    assert AV.is_enter(said)
+
+
+@pytest.mark.parametrize("said", ["art made by kids is great", "what's the weather"])
+def test_not_art_mode(said):
+    assert not AV.is_enter(said)

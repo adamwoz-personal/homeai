@@ -37,9 +37,17 @@ SIGN_OFF = re.compile(r"(?:[.,!?]?\s*(?:and |okay |ok |so |um |uh )?(?:that'?s i
                       r"go ahead(?: and draw it)?|draw it(?: now)?|draw that(?: now)?|you can draw it(?: now)?))+[.!?]*$")
 
 
+WAKE = re.compile(r"\b(?:hey|hi|okay|ok) (?:jarvis|jervis|travis)\b[,.!]*\s*")
+
+
 def _tidy(text: str) -> str:
     text = text.lower().strip()
-    text = re.sub(r"^(hey jarvis|jarvis)[, ]+", "", text)
+    # "Draw me a dragon. Hey Jarvis, let's draw a dragon flying over the ocean." (Adam, 2026-11-07): saying the wake
+    # word again restarts the request, so the words after the last one are what was meant.
+    parts = WAKE.split(text)
+    if len(parts) > 1 and len(parts[-1].split()) >= 2:
+        text = parts[-1]
+    text = re.sub(r"^(?:hey |hi |okay |ok )?(?:jarvis|jervis)[,.!]*\s*", "", text)
     text = re.sub(r"^(please|can you|could you|now)[, ]+", "", text)
     text = re.sub(r"[, ]+please$", "", text)
     trimmed = SIGN_OFF.sub("", text).strip()
@@ -57,7 +65,8 @@ PATTERNS: list[tuple[str, re.Pattern]] = [(kind, re.compile(rx)) for kind, rx in
     ("variations", r"^(a few|some) (options|versions|variations)$"),
     ("back", rf"^(go |step )?back( {NUM})?( steps?)?$"),
     ("back", r"^undo( that)?$"),
-    ("select", r"^(i like |pick |use )?(the )?(first|second|third|fourth|last) one$"),
+    ("select", r"^(i like |pick |use |show me |go with |let'?s (see|go with|have) )?(the )?(first|second|third|fourth|last) "
+               r"(one|picture|image|option|try)$"),
     ("keep", r"^(keep|save|pin) (that|this|it)( one)?( as (my )?(?P<name>[a-z0-9' -]{1,40}))?$"),
     ("what", r"^(what prompt (made|did) (this|that|it)|what('s| is| was) the prompt|what did you (use|tell it))$"),
     ("compare", r"^(show (them|those|me them) side by side|compare (them|those))$"),
@@ -93,10 +102,26 @@ def is_complaint(text: str) -> bool:
     return bool(COMPLAINT.search(_tidy(text)))
 
 
+# Picking from the numbered options by number: "image three", "what is image three", "option 3", "number three".
+# All three of Adam's tries went to the patcher instead and changed the picture (2026-11-07).
+PICK = re.compile(r"^(?:(?:i like|pick|use|show me|go with|let'?s (?:see|go with|have)|what(?:'s| is| about)|"
+                  r"how about|can i see|i want) )?(?:the )?(?:image|option|picture|number|try|version|choice|one) "
+                  r"(?:number )?(?P<n>[1-4]|one|two|three|four)$")
+# "Again. Oh gosh, it's fake again..." took the chatter after "again" as a change (2026-11-07).
+AGAIN_THEN = re.compile(r"^(?:try again|again|another one|one more|re-?roll)[.!,]+\s+(?P<rest>.+)$")
+
+
 def parse(text: str) -> Intent | None:
     said = _tidy(text)
     if not said:
         return None
+    pick = PICK.match(said)
+    if pick:
+        return Intent("select", n=_number(pick.group("n")))
+    again = AGAIN_THEN.match(said)
+    if again:
+        rest = again.group("rest")
+        return Intent("edit", text=rest) if is_complaint(rest) else Intent("again")
     fresh = FRESH.search(said)
     if fresh:
         rest = LEAD_IN.sub("", fresh.group("rest").strip()).strip(" .,")
@@ -113,7 +138,7 @@ def parse(text: str) -> Intent | None:
                 n = max(1, min(n, MAX_VARIATIONS))
             return Intent(kind, n=n)
         if kind == "select":
-            return Intent(kind, n=ORDINALS[match.group(3)])
+            return Intent(kind, n=ORDINALS[next(g for g in match.groups() if g in ORDINALS)])
         if kind == "keep":
             return Intent(kind, name=(match.group("name") or "").strip())
         return Intent(kind)

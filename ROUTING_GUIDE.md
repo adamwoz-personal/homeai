@@ -2018,3 +2018,15 @@ Bake-off and routines (2026-11-06):
   Lesson: label from full-size pictures, never a contact sheet, and treat a unanimous disagreement as a reason to
   look again. The vision-check spike's numbers use the corrected labels.
 
+
+## Art session 3: the audience, and what the patcher shouldn't see (2026-11-07)
+- Every voice-art fault that night was something reaching the patcher that wasn't an instruction: a question
+  ("what is image three?" changed four features), family chatter after "again", a complaint (written in as
+  "with two heads"), a repeated "Hey Jarvis". Lesson: route by shape first (pick, again, question, complaint)
+  and give the model only real instructions; guard its output for the one thing it must never do (write a
+  defect count in).
+- At temperature 0 the same Ollama request still varied between runs (complaint case 1/3 then 4/4 with the
+  same prompt). Repeat evals at least 3x before blaming a prompt edit.
+- The child's words and Adam's arrived in one recording (scores 0.52 and 0.44 vs Adam). Whole-sentence
+  speaker checks can't split those; only per-segment scoring could (ART_FEATURES_PLAN S1, not built).
+- Policy additions (kid-safe steering) belong in the prompt, not in the user-visible model of the picture.
