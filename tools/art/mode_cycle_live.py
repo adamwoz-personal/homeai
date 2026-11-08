@@ -18,13 +18,13 @@ import json
 import subprocess
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
 from homeai import gpu_mode as G  # noqa: E402
+from homeai.benchio import bench_path  # noqa: E402
 
 
 def unit_property(unit: str, name: str) -> str:
@@ -74,7 +74,7 @@ def main() -> int:
     if switcher.mode() != "voice":
         print(f"start in voice mode (now {switcher.mode()})", file=sys.stderr)
         return 1
-    out = Path.home() / "homeai-bench" / f"mode-cycle-{datetime.now():%Y%m%d-%H%M%S}"
+    out = bench_path("mode-cycle")
     out.mkdir(parents=True)
     runs = []
     for n in range(args.cycles):

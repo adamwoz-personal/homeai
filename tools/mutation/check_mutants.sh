@@ -709,6 +709,8 @@ MUTANTS=(
   "gpuinfo-used-required|homeai/gpu_info.py|s/ if used_file.exists() else 0$//|tests/test_gpu_info.py"
   "gpuinfo-biggest-is-first|homeai/gpu_info.py|s/max(amd_cards(drm_root), key=lambda c: c.total, default=None)/(amd_cards(drm_root) or [None])[0]/|tests/test_gpu_info.py"
   "gpumode-vram-in-gb|homeai/gpu_mode.py|s/card.total \/ 1024\*\*3, card.used \/ 1024\*\*3/card.total \/ 1e9, card.used \/ 1e9/|tests/test_gpu_info.py"
+  "benchio-wrong-stamp|homeai/benchio.py|s/%Y%m%d-%H%M%S/%Y%m%d-%H%M/|tests/test_benchio.py"
+  "toolcheck-runs-main|tools/inspect_tool_imports.py|s/f\"_tool_check_{path.stem}\"/\"__main__\"/|tests/test_benchio.py"
   "ha-env-world-readable|homeai/install/ha_setup.py|s/TOKEN={token}\\\\n\", mode=0o600)/TOKEN={token}\\\\n\")/|tests/"
 )
 

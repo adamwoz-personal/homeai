@@ -27,7 +27,6 @@ import sys
 import threading
 import time
 import urllib.request
-from datetime import datetime
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -40,6 +39,7 @@ from homeai.art.patcher import MODEL as VOICE_MODEL  # noqa: E402
 from tools.art.probe_vision_check import ask  # noqa: E402
 
 from homeai.httpjson import OLLAMA  # noqa: E402
+from homeai.benchio import bench_path  # noqa: E402
 PROMPT = ("A single red dragon with one head and four legs, flying. One samurai in full armor sitting on the "
           "dragon's back. Over the ocean.")
 QUESTION = "How many heads does the dragon have? Answer with a number only."
@@ -96,7 +96,7 @@ def main() -> int:
         print("not from coding mode", file=sys.stderr)
         return 1
     started = switcher.mode() != "art"
-    out = Path.home() / "homeai-bench" / f"check-cost-{datetime.now():%Y%m%d-%H%M%S}"
+    out = bench_path("check-cost")
     out.mkdir(parents=True)
     rows = []
     try:

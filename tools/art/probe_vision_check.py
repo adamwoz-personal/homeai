@@ -24,7 +24,6 @@ import re
 import sys
 import time
 import urllib.request
-from datetime import datetime
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -33,6 +32,7 @@ sys.path.insert(0, str(REPO))
 from homeai import gpu_mode as G  # noqa: E402
 
 from homeai.httpjson import OLLAMA  # noqa: E402
+from homeai.benchio import bench_path  # noqa: E402
 # Labels by eye, checked at full size (thumbnails misled: a first pass called old-005 one-headed, and all
 # three vision models disagreed correctly). Per picture: riders on the dragon, dragon heads, seated astride.
 LABELS = {
@@ -74,7 +74,7 @@ def main() -> int:
     ap.add_argument("bench", type=Path)
     ap.add_argument("--model", default="minicpm-v")
     args = ap.parse_args()
-    out = Path.home() / "homeai-bench" / f"vision-check-{datetime.now():%Y%m%d-%H%M%S}"
+    out = bench_path("vision-check")
     out.mkdir(parents=True)
     switcher = G.ModeSwitcher(G.System(), log=lambda line: print("  ", line, flush=True))
     rows = []

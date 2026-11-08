@@ -34,7 +34,6 @@ import sys
 import tempfile
 import time
 import wave
-from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -46,6 +45,7 @@ from homeai.config import SpeakerConfig, SttConfig  # noqa: E402
 from homeai.speaker import SpeakerEmbedder, cosine  # noqa: E402
 from homeai.speaker_split import parse_words  # noqa: E402
 from homeai.stt import write_wav  # noqa: E402
+from homeai.benchio import bench_path  # noqa: E402
 
 SR = 16000
 VOICES = Path.home() / "homeai-bench" / "voices"
@@ -107,7 +107,7 @@ def main() -> int:
     enrol, rest = owner[: 7 * SR], owner[7 * SR:]
     profile = embedder.embed(enrol)
     gap = np.zeros(int(0.4 * SR), dtype=np.float32)
-    out = Path.home() / "homeai-bench" / f"segment-speakers-{datetime.now():%Y%m%d-%H%M%S}"
+    out = bench_path("segment-speakers")
     out.mkdir(parents=True)
     rows = []
     for other_file in (f for f in files if f != owner_file):

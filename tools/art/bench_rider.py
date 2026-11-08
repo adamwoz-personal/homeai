@@ -23,7 +23,6 @@ import json
 import shutil
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -33,6 +32,7 @@ from homeai import gpu_mode as G  # noqa: E402
 from homeai.art import comfy as C  # noqa: E402
 from homeai.art import prompt_spec as PS  # noqa: E402
 from homeai.art import workflows  # noqa: E402
+from homeai.benchio import bench_path  # noqa: E402
 
 NODE_006 = {"subject": "oriental undead samurai", "details": "riding an oriental undead dragon, in full samurai armor",
             "style": "cyberpunk style", "palette": "neon colours", "lighting": "high contrast lighting",
@@ -77,7 +77,7 @@ def main() -> int:
     if switcher.mode() == "coding":
         print("not from coding mode", file=sys.stderr)
         return 1
-    out = Path.home() / "homeai-bench" / f"rider-{datetime.now():%Y%m%d-%H%M%S}"
+    out = bench_path("rider")
     out.mkdir(parents=True)
     rows, results = [], []
     try:

@@ -26,6 +26,7 @@ sys.path.insert(0, str(REPO))
 
 from homeai.avatar import assets, facegl, gl  # noqa: E402
 from homeai.avatar.tour import staged_face  # noqa: E402
+from homeai.benchio import bench_path  # noqa: E402
 
 
 def measure(asset, size: int, frames: int, hair: bool, scale: float) -> dict:
@@ -77,7 +78,7 @@ def main() -> int:
         rows.append(measure(asset, args.size, args.frames, True, s))
     for r in rows:
         print(json.dumps(r))
-    out = Path.home() / "homeai-bench" / f"bench_hair_gpu-{time.strftime('%Y%m%d-%H%M%S')}.json"
+    out = bench_path("bench_hair_gpu", ".json")
     out.write_text(json.dumps({"size": args.size, "frames": args.frames, "rows": rows}, indent=1))
     print("->", out)
     return 0

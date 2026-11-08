@@ -2050,3 +2050,7 @@ Bake-off and routines (2026-11-06):
   Krea, Z-Image) defeats "redraw with a new seed": the defect comes back. Measure seed variety along with
   defect rates before pairing a model with the F4 checker. Count checks also miss what counting can't see
   (scale, a wizard drawn as a second knight): keep looking at the sheets.
+- 2026-11-08: I smoke-tested 19 refactored tools with `--help`. Four live tools take no arguments, so `--help`
+  ran them: `art_voice_live.py` switched the card to art mode and left its picture window open (no speech, no
+  house tools; restored with `homeai-mode voice` and the window stopped). Check tools with
+  `tools/inspect_tool_imports.py` (imports only, never runs `main`), not by running them.

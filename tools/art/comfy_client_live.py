@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -27,6 +26,7 @@ from comfy_common import workflow  # noqa: E402
 
 from homeai import gpu_mode as G  # noqa: E402
 from homeai.art import comfy as C  # noqa: E402
+from homeai.benchio import bench_path  # noqa: E402
 
 
 def attempt(client: C.ComfyClient, graph: dict) -> dict:
@@ -42,7 +42,7 @@ def main() -> int:
     if switcher.mode() != "voice":
         print(f"start in voice mode (now {switcher.mode()})", file=sys.stderr)
         return 1
-    out = Path.home() / "homeai-bench" / f"comfy-client-{datetime.now():%Y%m%d-%H%M%S}"
+    out = bench_path("comfy-client")
     out.mkdir(parents=True)
     good = workflow("klein", "a red fox sitting in snow", 7, 512, 512)
     missing = json.loads(json.dumps(good))

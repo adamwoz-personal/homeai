@@ -18,7 +18,6 @@ from __future__ import annotations
 import json
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -31,6 +30,7 @@ from homeai import gpu_mode as G  # noqa: E402
 from homeai.art import comfy as C  # noqa: E402
 from homeai.art import jobs as J  # noqa: E402
 from homeai.art import store as S  # noqa: E402
+from homeai.benchio import bench_path  # noqa: E402
 
 PROMPTS = ("a red fox in snow", "a lighthouse at dusk", "a teapot shaped like a frog", "a castle on a hill")
 
@@ -40,7 +40,7 @@ def main() -> int:
     if switcher.mode() != "voice":
         print(f"start in voice mode (now {switcher.mode()})", file=sys.stderr)
         return 1
-    out = Path.home() / "homeai-bench" / f"queue-live-{datetime.now():%Y%m%d-%H%M%S}"
+    out = bench_path("queue-live")
     store = S.Store(out / "projects")
     project = store.create("general", "probe", "queue live")
     events: list[dict] = []

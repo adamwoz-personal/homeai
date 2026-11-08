@@ -17,10 +17,11 @@ import json
 import math
 import shutil
 import sys
-from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from homeai.benchio import bench_path  # noqa: E402
 
 from comfy_common import ROOT, Comfy, CoderStopped  # noqa: E402
 
@@ -194,7 +195,7 @@ def main() -> int:
     ap.add_argument("--prompt", default=PROMPT)
     ap.add_argument("--who", help="use this description instead of the spec's")
     args = ap.parse_args()
-    out = Path.home() / "homeai-bench" / f"pose-probe-{datetime.now():%Y%m%d-%H%M%S}"
+    out = bench_path("pose-probe")
     out.mkdir(parents=True)
     poses = sorted(p.stem for p in args.exports.glob("*.png"))
     results, clean, marked = {}, [], []

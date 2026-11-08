@@ -15,10 +15,11 @@ import argparse
 import json
 import shutil
 import sys
-from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from homeai.benchio import bench_path  # noqa: E402
 
 from comfy_common import MODELS, Comfy, CoderStopped, VramPeak, vram_used_gb, workflow  # noqa: E402
 
@@ -31,7 +32,7 @@ def main() -> int:
     ap.add_argument("--warm", type=int, default=3)
     ap.add_argument("--no-voice", action="store_true", help="stop Jarvis and unload the voice model during the run")
     args = ap.parse_args()
-    out = Path.home() / "homeai-bench" / f"comfy-smoke-{datetime.now():%Y%m%d-%H%M%S}"
+    out = bench_path("comfy-smoke")
     out.mkdir(parents=True)
     results = {"baseline_vram_gb": None, "models": {}}
     with CoderStopped(voice_off=args.no_voice):

@@ -27,7 +27,6 @@ import argparse
 import json
 import shutil
 import sys
-from datetime import datetime
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -37,6 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from comfy_common import MODELS, Comfy, CoderStopped, workflow  # noqa: E402
 from homeai.art import checker as CK  # noqa: E402
 from homeai.art import features as F  # noqa: E402
+from homeai.benchio import bench_path  # noqa: E402
 
 
 def _feats(*pairs) -> list[F.Feature]:
@@ -77,7 +77,7 @@ def checks_of(scene: str) -> list[CK.Check]:
 
 
 def draw(args) -> int:
-    out = Path(args.into) if args.into else Path.home() / "homeai-bench" / f"multi-{datetime.now():%Y%m%d-%H%M%S}"
+    out = Path(args.into) if args.into else bench_path("multi")
     out.mkdir(parents=True, exist_ok=True)
     path = out / "result.json"
     data = json.loads(path.read_text()) if path.exists() else {"prompts": {}, "runs": []}

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -25,6 +24,7 @@ from PIL import Image, ImageDraw  # noqa: E402
 
 from homeai.avatar import assets  # noqa: E402
 from homeai.avatar.tour import FACE_TOUR, render_face  # noqa: E402
+from homeai.benchio import bench_path  # noqa: E402
 
 
 def contact(images: list[tuple[str, np.ndarray]], cols: int = 6) -> Image.Image:
@@ -66,7 +66,7 @@ def main() -> int:
     if asset is None:
         print("no face asset: none chosen (homeai-avatar use vN)", file=sys.stderr)
         return 1
-    out = args.out or Path.home() / "homeai-bench" / f"face-render-{time.strftime('%Y%m%d-%H%M%S')}"
+    out = args.out or bench_path("face-render")
     out.mkdir(parents=True, exist_ok=True)
     images = list(render_face(asset, args.pose or FACE_TOUR, (args.size, args.size),
                               hair=not args.no_hair, captions=args.captions))

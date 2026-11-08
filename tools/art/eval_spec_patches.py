@@ -18,7 +18,6 @@ import argparse
 import json
 import statistics
 import sys
-from datetime import datetime
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -26,6 +25,7 @@ sys.path.insert(0, str(REPO))
 
 from homeai.art import patcher as P  # noqa: E402
 from homeai.art import prompt_spec as PS  # noqa: E402
+from homeai.benchio import bench_path  # noqa: E402
 
 FOX = {"subject": "a red fox", "setting": "sitting in the snow"}
 
@@ -100,7 +100,7 @@ def main() -> int:
     ap.add_argument("--repeats", type=int, default=3)
     ap.add_argument("--only", default="", help="run only cases whose name contains this")
     args = ap.parse_args()
-    out = Path.home() / "homeai-bench" / f"spec-patches-{datetime.now():%Y%m%d-%H%M%S}"
+    out = bench_path("spec-patches")
     out.mkdir(parents=True)
     rows, times = [], []
     for name, start, instruction, checks in CASES:

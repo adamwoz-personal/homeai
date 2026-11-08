@@ -22,7 +22,6 @@ import json
 import subprocess
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -32,6 +31,7 @@ from homeai import gpu_mode as G  # noqa: E402
 from homeai.art import checker as CK  # noqa: E402
 from homeai.art import voice as AV  # noqa: E402
 from homeai.avatar.bus import EventBus  # noqa: E402
+from homeai.benchio import bench_path  # noqa: E402
 
 SCRIPT = ("switch to art mode", "draw a samurai with red armor riding a dragon", "make the dragon green",
           "again", "turn off the lights", "I'm done drawing")
@@ -46,7 +46,7 @@ def main() -> int:
     if switcher.mode() == "coding":
         print("start in voice or art mode, not coding", file=sys.stderr)
         return 1
-    out = Path.home() / "homeai-bench" / f"art-voice-{datetime.now():%Y%m%d-%H%M%S}"
+    out = bench_path("art-voice")
     out.mkdir(parents=True)
     bus = EventBus(out / "events.sock", source="art-voice-live")
     bus.start()

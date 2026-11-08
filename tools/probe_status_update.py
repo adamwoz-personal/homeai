@@ -30,6 +30,7 @@ from homeai.home import build_home  # noqa: E402
 from homeai.mcp_server import DEFAULT_LOCATION  # noqa: E402
 from homeai.speaker import SpeakerRegistry  # noqa: E402
 from homeai.weather import get_weather  # noqa: E402
+from homeai.benchio import bench_path  # noqa: E402
 
 
 def main() -> int:
@@ -38,7 +39,7 @@ def main() -> int:
     ap.add_argument("--days", type=float, default=1.0, help="how far back to count doorbell history (check only)")
     args = ap.parse_args()
     cfg = load()
-    out = Path.home() / "homeai-bench" / f"status-update-{datetime.now():%Y%m%d-%H%M%S}"
+    out = bench_path("status-update")
     out.mkdir(parents=True)
     registry = SpeakerRegistry(cfg.speaker.registry_path, "wespeaker_en_voxceleb_resnet34_LM")
     home = build_home(cfg.home.env_path, default_echo=cfg.home.default_echo)

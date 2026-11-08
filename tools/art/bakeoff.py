@@ -16,10 +16,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from homeai.benchio import bench_path  # noqa: E402
 
 from comfy_common import ANIME, MODELS, RETIRED, Comfy, CoderStopped, workflow  # noqa: E402
 
@@ -86,7 +87,7 @@ def main() -> int:
     args = ap.parse_args()
     models = args.model or tuple(m for m in MODELS if m not in RETIRED)
     chosen = args.scenario or tuple(SCENARIOS)
-    out = Path.home() / "homeai-bench" / f"bakeoff-{datetime.now():%Y%m%d-%H%M%S}"
+    out = bench_path("bakeoff")
     out.mkdir(parents=True)
     results = {}
     images: dict[tuple[str, int], dict[str, list[str]]] = {}

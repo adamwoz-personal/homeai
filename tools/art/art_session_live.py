@@ -19,7 +19,6 @@ from __future__ import annotations
 import json
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -30,6 +29,7 @@ from homeai.art import comfy as C  # noqa: E402
 from homeai.art import jobs as J  # noqa: E402
 from homeai.art.session import ArtSession  # noqa: E402
 from homeai.art.store import Store  # noqa: E402
+from homeai.benchio import bench_path  # noqa: E402
 
 SCRIPT = ("draw a red fox sitting in the snow", "make it blue", "add some fog", "again", "go back two",
           "make it a watercolour", "keep that", "what prompt made this", "turn off the lights")
@@ -55,7 +55,7 @@ def main() -> int:
     if switcher.mode() != "voice":
         print(f"start in voice mode (now {switcher.mode()})", file=sys.stderr)
         return 1
-    out = Path.home() / "homeai-bench" / f"art-session-{datetime.now():%Y%m%d-%H%M%S}"
+    out = bench_path("art-session")
     store = Store(out / "projects")
     steps, checks = [], {}
     try:

@@ -19,14 +19,13 @@ import argparse
 import json
 import statistics
 import sys
-from datetime import datetime
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
-from homeai.art import features as F  # noqa: E402
 from homeai.art import patcher as P  # noqa: E402
+from homeai.benchio import bench_path  # noqa: E402
 
 DRAGON = {"features": [{"id": "A", "kind": "subject", "text": "a single green dragon with one head and four legs"},
                        {"id": "B", "kind": "element", "text": "one samurai in full armor sitting on the dragon's back"},
@@ -112,7 +111,7 @@ def main() -> int:
     ap.add_argument("--repeats", type=int, default=2)
     ap.add_argument("--only", default="")
     args = ap.parse_args()
-    out = Path.home() / "homeai-bench" / f"features-{datetime.now():%Y%m%d-%H%M%S}"
+    out = bench_path("features")
     out.mkdir(parents=True)
     rows, times = [], []
     for name, start, said, checks in CASES:

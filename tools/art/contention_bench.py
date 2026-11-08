@@ -22,10 +22,11 @@ import threading
 import time
 import urllib.request
 import uuid
-from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from homeai.benchio import bench_path  # noqa: E402
 
 from comfy_common import MODELS, OLLAMA, VOICE, Comfy, CoderStopped, workflow  # noqa: E402
 
@@ -69,7 +70,7 @@ def main() -> int:
     ap.add_argument("--model", action="append", choices=MODELS)
     ap.add_argument("--seconds", type=float, default=40.0)
     args = ap.parse_args()
-    out = Path.home() / "homeai-bench" / f"contention-{datetime.now():%Y%m%d-%H%M%S}.json"
+    out = bench_path("contention", ".json")
     results = {}
     ask()                                               # warm
     with CoderStopped():
