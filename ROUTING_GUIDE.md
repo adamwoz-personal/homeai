@@ -2013,4 +2013,8 @@ Bake-off and routines (2026-11-06):
   the counts ("a single head and four legs", "one samurai... sits on its back, holding the reins with both hands")
   was clean 4/4. Lesson: for multi-subject scenes the prompt structure matters more than the model; the subject
   of the sentence must be the big thing, with the other placed relative to it. Small sample; F4's checker will count properly.
+- 2026-11-07: I labelled the rider bench by eye from thumbnails and called the old prompt's dragons one-headed. All
+  three vision models said two heads; at full size they were right (3 of 4 had two heads, one had three riders).
+  Lesson: label from full-size pictures, never a contact sheet, and treat a unanimous disagreement as a reason to
+  look again. The vision-check spike's numbers use the corrected labels.
 
