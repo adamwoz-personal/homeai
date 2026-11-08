@@ -82,6 +82,12 @@ def thumbs_of(state: dict) -> list[dict]:
     return list(state.get("lineage") or [])[-MAX_THUMBS:]
 
 
+def option_label(step: dict) -> str:
+    """An option's number, and what the check found wrong with it ("2: 2 heads")."""
+    problems = step.get("problems") or []
+    return f"{step['n']}: {', '.join(problems)}" if problems else str(step["n"])
+
+
 FEATURES_SIZE = (560, 720)
 CHANGED = (255, 214, 120)
 
@@ -214,7 +220,7 @@ def main() -> int:
                 colour = FG if step.get("node") == current else DIM
                 pygame.draw.rect(screen, colour, (x, y, w, h - 4), 2 if step.get("node") == current else 1)
                 if step.get("n"):                        # options: the number to say
-                    label = font.render(str(step["n"]), True, FG, BG)
+                    label = font.render(option_label(step), True, FG, BG)
                     screen.blit(label, (x + 6, y + 4))
             pygame.display.flip()
             if feature_win is not None:

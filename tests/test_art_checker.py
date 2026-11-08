@@ -132,18 +132,6 @@ def test_a_broken_checker_shows_the_picture(art):
     assert len(exported(art)) == 1 and art.status == "Done." and art.warmed == [1]
 
 
-def test_a_redraw_keeps_its_place_among_the_options(art):
-    session = art.session
-    art.handle("give me four", "Adam")
-    grid = list(session.grid)
-    art.answers += ["1", "1", "3", "1"]           # option 1 right, option 2 has three heads
-    finish(art, grid[0])
-    finish(art, grid[1])
-    assert session.grid[0] == grid[0] and session.grid[1] not in grid
-    assert session.project.nodes[session.grid[1]].meta["redraw_of"] == grid[1]
-    assert session.project.current == grid[0]     # the person is still looking at option 1
-
-
 def test_no_checker_no_check(art):
     art.checker = None
     art.answers.append("5")
@@ -189,3 +177,59 @@ def test_the_multi_subject_bakeoff_asks_what_its_scenes_promise():
                    "battleship": [("heads", 1)], "two_people": [("humans", 2)],
                    "fruit": [("apples", 3), ("pears", 2)]}
     assert B.prompt_of("battleship").text.startswith("A single green dragon with one head.")
+
+
+# -- options after a complaint: pick from the right ones, don't redraw them all -----------------------
+
+def four_options(art):
+    art.handle("give me four", "Adam")
+    return list(art.session.grid)
+
+
+def test_a_wrong_option_is_not_redrawn_while_others_may_be_right(art):
+    grid = four_options(art)
+    art.answers += ["2", "1"]                     # option 1: two heads
+    finish(art, grid[0])
+    project = art.session.project
+    assert art.session.grid == grid and project.nodes[grid[0]].state == "done"
+    assert project.nodes[grid[0]].meta["checked"] == ["2 heads"]
+    assert art.status == "Option 1 came out with 2 heads." and len(exported(art)) == 1
+    assert art.state()["options"][0]["problems"] == ["2 heads"]
+
+
+def test_a_right_option_replaces_a_wrong_one_on_screen(art):
+    grid = four_options(art)
+    project = art.session.project
+    assert project.current == grid[0]
+    art.answers += ["2", "1"]
+    finish(art, grid[0])
+    assert project.current == grid[0]             # nothing better yet
+    finish(art, grid[1])                          # right
+    assert project.current == grid[1] and art.state()["options"][1]["problems"] == []
+
+
+def test_a_picked_option_stays_picked(art):
+    grid = four_options(art)
+    art.answers += ["2", "1"]
+    finish(art, grid[0])
+    art.handle("the first one", "Adam")
+    finish(art, grid[1])
+    assert art.session.project.current == grid[0]
+
+
+def test_when_every_option_is_wrong_the_last_one_is_redrawn(art):
+    grid = four_options(art)
+    art.answers += ["2", "1"] * 4
+    for node in grid:
+        finish(art, node)
+    session = art.session
+    assert [session.project.nodes[n].state for n in grid[:3]] == ["done"] * 3
+    assert session.project.nodes[grid[3]].state == "failed" and session.grid[3] not in grid
+    assert art.status.startswith("Redrawing") and session.project.current == grid[0]   # still looking at 1
+    assert session.project.nodes[session.grid[3]].meta["redraw_of"] == grid[3]
+
+
+def test_viewer_labels_an_option_with_its_problems():
+    from homeai.art import viewer as V
+    assert V.option_label({"n": 2, "problems": ["2 heads", "3 riders"]}) == "2: 2 heads, 3 riders"
+    assert V.option_label({"n": 3, "problems": []}) == "3" and V.option_label({"n": 1}) == "1"

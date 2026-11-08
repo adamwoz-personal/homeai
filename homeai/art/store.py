@@ -154,6 +154,13 @@ class Project:
         self._save_node(node)
         return node
 
+    def note(self, node_id: str, **meta) -> Node:
+        """Add facts about a node (e.g. what a check found) without changing its state."""
+        node = self._node(node_id)
+        node.meta = {**node.meta, **meta}
+        self._save_node(node)
+        return node
+
     def fail(self, node_id: str, reason: str) -> Node:
         node = self._node(node_id)
         node.state, node.meta = "failed", {**node.meta, "error": reason[:500]}

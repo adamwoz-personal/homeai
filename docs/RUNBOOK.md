@@ -177,6 +177,10 @@ homeai-mode voice     # ComfyUI stopped, coder back (~7 s warm, ~27 s cold)
   pass the last try is shown ("Best I could do: 2 heads"). A check takes ~3 s the
   first time (Jarvis's voice model is pushed out of Ollama and reloaded in the
   background, ~2 s), ~0.7 s after. `HOMEAI_ART_CHECK=0` turns it off.
+- Numbered options (after a complaint, or "give me four"): a wrong option is not
+  redrawn while another may be right; its thumbnail says what is wrong ("2: 2 heads")
+  and the window moves to the first right one, unless the person already picked.
+  Only if every option is wrong is the last one redrawn.
 - Every finished picture is saved to `~/Pictures/homeai/<name>/<project>-<node>.png`
   (`guest/` for voices Jarvis doesn't know) with a `.json` beside it: the features,
   the prompt, seed, model and who asked

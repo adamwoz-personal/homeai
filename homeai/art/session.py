@@ -81,6 +81,7 @@ class ArtSession:
         self._patch, self._rng, self.kind = patch, rng or random.Random(), kind
         self.project = None
         self.grid: list[str] = []
+        self.picked = False             # the person chose an option: don't move them off it
         self.jobs: list[str] = []
         self.speaker: str | None = None     # who asked for the next picture (set per sentence by ArtVoice)
         self.last_changed: list[str] = []    # feature letters the last change touched (for the window)
@@ -172,7 +173,7 @@ class ArtSession:
                 spec, self.last_changed = {**node.spec}, []         # don't write the defect in; just re-roll
             # The same seed keeps the same broken layout (two heads stayed through four edits, 2026-11-07):
             # draw several new tries and let the person pick.
-            jobs, self.grid = [], []
+            jobs, self.grid, self.picked = [], [], False
             for _ in range(TRIES_AFTER_COMPLAINT):
                 jobs.append(self._draw(intent.text, {**spec, "seed": None}, node.id))
                 self.grid.append(self.project.current)
@@ -180,6 +181,27 @@ class ArtSession:
             return Reply(f"Fixing it: {TRIES_AFTER_COMPLAINT} new tries. Say which one you like.", "edit", jobs)
         spec = {**spec, "seed": node.spec.get("seed")}      # same seed: only the change should change
         return Reply(said, "edit", [self._draw(intent.text, spec, node.id)])
+
+    def checked(self, node_id: str, issues: list[str]) -> bool:
+        """Record what the check found; True if this picture should be redrawn (F4 + F5 follow-up).
+
+        Alone, a wrong picture is redrawn. Among numbered options, it isn't while another option is
+        still drawing or came out right: the person picks from those instead, and 4 options x 3
+        redraws would keep the GPU busy for over a minute. A right option replaces a wrong one on screen.
+        """
+        if self.project is None or node_id not in self.project.nodes:
+            return False
+        self.project.note(node_id, checked=list(issues))
+        grid = [n for n in self.grid if n in self.project.nodes]
+        if node_id not in grid or len(grid) < 2:
+            return bool(issues)
+        if issues:
+            others = [self.project.nodes[n] for n in grid if n != node_id]
+            return not any(n.state != "failed" and not n.meta.get("checked") for n in others)
+        shown = self.project.nodes.get(self.project.current)
+        if not self.picked and shown is not None and shown.id in grid and shown.meta.get("checked"):
+            self.project.select(node_id)
+        return False
 
     def redraw(self, node_id: str, reason: str) -> str | None:
         """A checked picture came out wrong: mark it failed and draw it again with a new seed (F4).
@@ -216,7 +238,7 @@ class ArtSession:
         node = self._current()
         if node is None:
             return Reply(MSG_NOTHING_YET, "variations")
-        jobs, self.grid = [], []
+        jobs, self.grid, self.picked = [], [], False
         for _ in range(intent.n):
             jobs.append(self._draw(f"option of {node.id}", {**node.spec, "seed": None}, node.parent))
             self.grid.append(self.project.current)
@@ -230,6 +252,7 @@ class ArtSession:
         if not 0 <= index < len(self.grid):
             return Reply(f"There are only {len(self.grid)}.", "select")
         self.project.select(self.grid[index])
+        self.picked = True
         return Reply("That one.", "select")
 
     def _on_back(self, intent, text):

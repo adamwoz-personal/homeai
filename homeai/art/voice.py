@@ -384,7 +384,11 @@ class ArtVoice:
                 self._publish_state()
                 return
             self._export(event, session)        # the session it was drawn in, even if art mode just ended
-            self.status = f"Best I could do: {', '.join(issues)}." if issues else "Done."
+            grid = list(getattr(session, "grid", []))
+            if issues and len(grid) > 1 and event.get("node") in grid:
+                self.status = f"Option {grid.index(event['node']) + 1} came out with {', '.join(issues)}."
+            else:
+                self.status = f"Best I could do: {', '.join(issues)}." if issues else "Done."
         elif event.get("state") == "running":
             self.status = "Drawing..."
         elif event.get("state") in ("failed", "cancelled") and event.get("message"):
@@ -417,11 +421,11 @@ class ArtVoice:
             self._background(self._warm_voice)
             return [], False
         log.info("art: checked %s/%s: %s", project.id, node.id, ", ".join(issues) or "ok")
-        if issues and node.meta.get("tries", 0) < CK.MAX_REDRAWS:
-            with self._lock:
-                if self.session is not session:
-                    return issues, False
-                job = session.redraw(node.id, "checked: " + ", ".join(issues))
+        with self._lock:
+            if self.session is not session:
+                return issues, False
+            again = session.checked(node.id, issues) and node.meta.get("tries", 0) < CK.MAX_REDRAWS
+            job = session.redraw(node.id, "checked: " + ", ".join(issues)) if again else None
             if job is not None:
                 self.status = f"Redrawing: it came out with {', '.join(issues)}."
                 return issues, True
@@ -486,7 +490,8 @@ class ArtVoice:
             for number, node_id in enumerate(grid, 1):
                 image = project.image(node_id)
                 out["options"].append({"n": number, "node": node_id, "state": project.nodes[node_id].state,
-                                       "image": str(image) if image.exists() else None})
+                                       "image": str(image) if image.exists() else None,
+                                       "problems": list(project.nodes[node_id].meta.get("checked") or [])})
         return out
 
     def _publish_state(self) -> None:
