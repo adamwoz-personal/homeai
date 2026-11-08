@@ -240,7 +240,7 @@ def finished(art, tmp_path, node="001"):
 def test_a_finished_picture_is_saved_to_pictures_and_shown(art, tmp_path):
     art.handle("draw a red fox", "Adam")
     project = finished(art, tmp_path)
-    saved = tmp_path / "Pictures" / AV.export_name(project.id, "001")
+    saved = tmp_path / "Pictures" / "adam" / AV.export_name(project.id, "001")
     assert saved.read_bytes() == b"png"
     state = last_art(art)
     assert state["current"]["image"] == str(project.image("001")) and state["status"] == "Done."

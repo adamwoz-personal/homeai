@@ -15,7 +15,8 @@ import re
 from dataclasses import dataclass, field
 
 from homeai.art import grammar, policy, prompt_spec, workflows
-from homeai.art.patcher import MSG_NOT_CAUGHT, patch_for
+from homeai.art import features as F
+from homeai.art.patcher import MSG_NOT_CAUGHT, features_patch_for
 from homeai.art.store import StoreError
 
 MSG_NOTHING_YET = "There's no picture yet. Say draw, and what you'd like."
@@ -39,6 +40,23 @@ def drawing_sentence(said: str) -> str:
     return f"Drawing {what}." if what and what != said else "Drawing it now."
 
 
+MODEL = "klein9"
+
+
+def render_spec(spec: dict):
+    """The prompt for a stored spec: lettered features, or the older PromptSpec fields."""
+    if "features" in spec:
+        return F.render(F.features_of(spec), spec.get("aspect") or "square")
+    return prompt_spec.render(spec)
+
+
+def title_of(spec: dict) -> str:
+    if "features" in spec:
+        main = next((f for f in F.features_of(spec) if f.kind == "subject"), None)
+        return main.text if main else "picture"
+    return spec.get("subject") or "picture"
+
+
 @dataclass
 class Reply:
     spoken: str
@@ -47,13 +65,16 @@ class Reply:
 
 
 class ArtSession:
-    def __init__(self, store, queue, owner: str, rules=None, patch=patch_for, rng=None, kind: str = "general"):
+    def __init__(self, store, queue, owner: str, rules=None, patch=features_patch_for, rng=None,
+                 kind: str = "general"):
         self.store, self.queue, self.owner = store, queue, owner
         self.rules = rules or policy.load("allow-all")
         self._patch, self._rng, self.kind = patch, rng or random.Random(), kind
         self.project = None
         self.grid: list[str] = []
         self.jobs: list[str] = []
+        self.speaker: str | None = None     # who asked for the next picture (set per sentence by ArtVoice)
+        self.last_changed: list[str] = []    # feature letters the last change touched (for the window)
 
     # -- helpers ---------------------------------------------------------------
 
@@ -67,8 +88,10 @@ class ArtSession:
 
     def _draw(self, instruction: str, spec: dict, parent: str | None, preview: bool = False) -> str:
         spec = {**spec, "seed": spec.get("seed") if spec.get("seed") is not None else self._seed()}
-        node = self.project.add(instruction, spec, parent=parent)
-        rendered = prompt_spec.render(spec)
+        rendered = render_spec(spec)
+        node = self.project.add(instruction, spec, parent=parent,
+                                meta={"prompt": rendered.text, "model": MODEL, "seed": spec["seed"],
+                                      "size": [rendered.width, rendered.height], "by": self.speaker or self.owner})
         graph = workflows.klein9(rendered.text, spec["seed"], rendered.width, rendered.height,
                                  prefix=f"art/{self.project.id}")
         job = self.queue.submit(self.project.id, node.id, graph,
@@ -82,7 +105,7 @@ class ArtSession:
             return verdict, spec
         verdict = self.rules.check_spec(spec, self.owner)
         if verdict.verdict == "rewrite" and verdict.spec is not None:
-            spec = prompt_spec.validate(verdict.spec)
+            spec = verdict.spec if "features" in verdict.spec else prompt_spec.validate(verdict.spec)
         return verdict, spec
 
     # -- the one entry point ---------------------------------------------------
@@ -110,7 +133,8 @@ class ArtSession:
         verdict, spec = self._allowed(text, result.spec)
         if not verdict.allowed:
             return Reply(verdict.reason, "denied")
-        self.project = self.store.create(self.kind, self.owner, spec["subject"])
+        self.last_changed = list(result.changed)
+        self.project = self.store.create(self.kind, (self.speaker or self.owner).lower(), title_of(spec))
         self.grid = []
         return Reply(drawing_sentence(intent.text), "new", [self._draw(intent.text, spec, None)])
 
@@ -124,7 +148,11 @@ class ArtSession:
         verdict, spec = self._allowed(text, result.spec)
         if not verdict.allowed:
             return Reply(verdict.reason, "denied")
-        changes = prompt_spec.describe(prompt_spec.diff(node.spec, {**spec, "seed": node.spec.get("seed")}))
+        self.last_changed = list(result.changed)
+        if "features" in spec:
+            said = F.describe(result.changed, F.features_of(node.spec), F.features_of(spec))
+        else:
+            said = f"Changing {prompt_spec.describe(prompt_spec.diff(node.spec, {**spec, 'seed': node.spec.get('seed')}))}."
         if grammar.is_complaint(intent.text):
             # The same seed keeps the same broken layout (two heads stayed through four edits, 2026-11-07):
             # draw several new tries and let the person pick.
@@ -135,7 +163,7 @@ class ArtSession:
             self.project.select(self.grid[0])
             return Reply(f"Fixing it: {TRIES_AFTER_COMPLAINT} new tries. Say which one you like.", "edit", jobs)
         spec = {**spec, "seed": node.spec.get("seed")}      # same seed: only the change should change
-        return Reply(f"Changing {changes}.", "edit", [self._draw(intent.text, spec, node.id)])
+        return Reply(said, "edit", [self._draw(intent.text, spec, node.id)])
 
     def _on_fresh(self, intent, text):
         self.project, self.grid = None, []
@@ -190,7 +218,7 @@ class ArtSession:
         node = self._current()
         if node is None:
             return Reply(MSG_NOTHING_YET, "what")
-        return Reply(prompt_spec.render(node.spec).text, "what")
+        return Reply(render_spec(node.spec).text, "what")
 
     def _on_cancel(self, intent, text):
         stopped = [job for job in self.jobs if self.queue.cancel(job)]

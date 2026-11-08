@@ -1,9 +1,11 @@
 """The picture window for art mode (AVATAR_PLAN 6a step 8a).
 
-A separate window and process, so the avatar keeps running as it is. It
-follows the latest ``art`` event on the event bus (published by
-homeai/art/voice.py): the current picture large, a status line, and the
-pictures that led to it as a strip of thumbnails along the bottom.
+A separate process, so the avatar keeps running as it is, with two windows.
+Both follow the latest ``art`` event on the event bus (published by
+homeai/art/voice.py). The picture window: the current picture large, a status
+line, and the pictures that led to it (or numbered options to pick from) along
+the bottom. The features window (ART_FEATURES_PLAN F2): the lettered features
+A, B, C... with the ones the last change touched highlighted.
 
 Pure parts (``layout``, ``status_line``, ``fit``) are unit-tested; ``main``
 only draws. Started by art mode as the transient unit ``homeai-art-viewer``;
@@ -80,6 +82,33 @@ def thumbs_of(state: dict) -> list[dict]:
     return list(state.get("lineage") or [])[-MAX_THUMBS:]
 
 
+FEATURES_SIZE = (560, 720)
+CHANGED = (255, 214, 120)
+
+
+def wrap(text: str, width_chars: int) -> list[str]:
+    """Word wrap by characters (the window's font is near fixed-width enough for a list)."""
+    lines, line = [], ""
+    for word in text.split():
+        if line and len(line) + 1 + len(word) > width_chars:
+            lines.append(line)
+            line = word
+        else:
+            line = f"{line} {word}".strip()
+    return lines + ([line] if line else [])
+
+
+def feature_rows(state: dict, width_chars: int = 40) -> list[tuple[str, str, bool]]:
+    """(letter or "", line, just changed) for the features window: "A  subject" then the wrapped text."""
+    changed = set(state.get("changed") or [])
+    rows = []
+    for feature in state.get("features") or []:
+        hot = feature.get("id") in changed
+        rows.append((feature.get("id", "?"), feature.get("kind", ""), hot))
+        rows += [("", line, hot) for line in wrap(str(feature.get("text", "")), width_chars)]
+    return rows
+
+
 class Images:
     """Loads each picture once per size; a missing or half-written file is skipped, not fatal."""
 
@@ -101,6 +130,28 @@ class Images:
         return self._cache[key]
 
 
+def draw_features(window, state: dict, letter_font, text_font) -> None:
+    surface = window.get_surface()
+    surface.fill(BG)
+    width, height = surface.get_size()
+    rows = feature_rows(state, max(16, (width - 70) // 11))
+    y = PAD
+    if not rows:
+        surface.blit(text_font.render("No features yet. Say what to draw.", True, DIM), (PAD, y))
+    for letter, line, hot in rows:
+        if y > height - 30:
+            break
+        colour = CHANGED if hot else FG
+        if letter:
+            surface.blit(letter_font.render(letter, True, colour), (PAD, y))
+            surface.blit(text_font.render(line, True, DIM), (PAD + 40, y + 4))
+            y += 34
+        else:
+            surface.blit(text_font.render(line, True, colour), (PAD + 40, y))
+            y += 26
+    window.flip()
+
+
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(name)s: %(message)s")
     os.environ.setdefault("SDL_VIDEODRIVER", "x11")
@@ -116,6 +167,13 @@ def main() -> int:
     screen = pygame.display.set_mode(SIZE, pygame.RESIZABLE)
     pygame.display.set_caption("Jarvis — pictures")
     font = pygame.font.SysFont("dejavusans", 22)
+    small = pygame.font.SysFont("dejavusans", 20)
+    letter_font = pygame.font.SysFont("dejavusans", 26, bold=True)
+    try:                                            # the lettered features, in a window of their own
+        feature_win = pygame.Window("Jarvis \u2014 features", FEATURES_SIZE, resizable=True)
+    except Exception:  # noqa: BLE001 - an older pygame: the picture window still works
+        log.warning("features window unavailable", exc_info=True)
+        feature_win = None
     images = Images(pygame)
     state: dict = {"active": True, "status": "Starting..."}
     client.start()
@@ -125,6 +183,11 @@ def main() -> int:
     try:
         while True:
             for event in pygame.event.get():
+                if event.type == pygame.WINDOWCLOSE and feature_win is not None \
+                        and getattr(event, "window", None) is feature_win:
+                    feature_win.destroy()
+                    feature_win = None
+                    continue
                 if event.type == pygame.QUIT:
                     return 0
                 if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_q):
@@ -154,12 +217,17 @@ def main() -> int:
                     label = font.render(str(step["n"]), True, FG, BG)
                     screen.blit(label, (x + 6, y + 4))
             pygame.display.flip()
+            if feature_win is not None:
+                draw_features(feature_win, state, letter_font, small)
             shown = (state.get("current") or {}).get("image") if picture is not None else None
             if shots and shown and shown != shot_of:
                 shot_of = shown
                 n = len(list(os.scandir(shots))) + 1 if os.path.isdir(shots) else 1
                 os.makedirs(shots, exist_ok=True)
                 pygame.image.save(screen, os.path.join(shots, f"window-{n}.png"))
+                if feature_win is not None:
+                    draw_features(feature_win, state, letter_font, small)
+                    pygame.image.save(feature_win.get_surface(), os.path.join(shots, f"features-{n}.txt.png"))
             clock.tick(10)
     finally:
         client.stop()

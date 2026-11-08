@@ -112,6 +112,8 @@ def parse(text: str) -> Intent | None:
     if HOUSE.search(said):
         return None
     new = NEW.match(said)
+    if new and said.startswith("make the "):
+        return Intent("edit", text=said)        # "make the dragon red" changes it; "make a dragon" is new
     if new:
         return Intent("new", text=said)
     if EDIT_START.match(said):

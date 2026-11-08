@@ -128,14 +128,15 @@ class Project:
     def _save_node(self, node: Node) -> None:
         write_json(self.path / "nodes" / f"{node.id}.json", node.to_json())
 
-    def add(self, instruction: str, spec: dict, parent: str | None = "current", kind: str = "image") -> Node:
+    def add(self, instruction: str, spec: dict, parent: str | None = "current", kind: str = "image",
+            meta: dict | None = None) -> Node:
         """A new pending node under ``parent`` (default: current), which becomes current."""
         parent_id = self.current if parent == "current" else parent
         if parent_id is not None and parent_id not in self.nodes:
             raise StoreError(f"no node {parent_id} in {self.id}")
         number = max((int(k) for k in self.nodes if k.isdigit()), default=0) + 1
         node = Node(id=f"{number:03d}", parent=parent_id, instruction=instruction, spec=spec, kind=kind,
-                    created=time.time())
+                    created=time.time(), meta=dict(meta or {}))
         self._save_node(node)
         self.nodes[node.id] = node
         self.info["current"] = node.id

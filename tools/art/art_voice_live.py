@@ -32,7 +32,7 @@ from homeai import gpu_mode as G  # noqa: E402
 from homeai.art import voice as AV  # noqa: E402
 from homeai.avatar.bus import EventBus  # noqa: E402
 
-SCRIPT = ("switch to art mode", "draw a samurai with red armor and a dragon behind him", "make it night time",
+SCRIPT = ("switch to art mode", "draw a samurai with red armor and a dragon behind him", "make the dragon green",
           "again", "turn off the lights", "I'm done drawing")
 
 
@@ -76,11 +76,14 @@ def main() -> int:
                 shots += 1
             steps.append(row)
             print(f"{said!r:58} -> {spoken!r} ({reply_s}s, done {done_s}s)", flush=True)
-        saved = sorted(p.name for p in (out / "Pictures").glob("*.png"))
+        saved = sorted(p.name for p in (out / "Pictures").rglob("*.png"))
         checks["entered by voice"] = steps[0]["spoken"] == AV.MSG_READY
         checks["window open in art mode"] = all(s["viewer_up"] for s in steps[:5])
-        checks["three pictures saved"] = len(saved) == 3
-        checks["window showed each picture"] = len(list((out / "window").glob("*.png"))) >= shots
+        checks["three pictures saved"] = len([n for n in saved if "samurai" in n]) == 3     # a queued job from an earlier session may also finish
+        checks["window showed each picture"] = len(list((out / "window").glob("window-*.png"))) >= shots
+        checks["features window drawn"] = any((out / "window").glob("features-*.png"))
+        checks["three pictures saved for Adam"] = len(list((out / "Pictures" / "adam").glob("*samurai*.png"))) == 3
+        checks["each with its description"] = len(list((out / "Pictures" / "adam").glob("*samurai*.json"))) == 3
         checks["house talk passed on"] = steps[4]["spoken"] is None
         checks["left by voice"] = steps[5]["spoken"] == AV.MSG_LEFT
         checks["window closed"] = not unit_active(AV.VIEWER_UNIT)

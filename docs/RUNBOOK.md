@@ -163,7 +163,13 @@ homeai-mode voice     # ComfyUI stopped, coder back (~7 s warm, ~27 s cold)
   "go back", "keep that", "what prompt made this", "cancel that".
   "I'm done drawing" goes back to voice mode (~25 s for the coder to reload,
   in the background). 20 minutes with nothing said or drawing does the same.
-- Every finished picture is saved to `~/Pictures/homeai/<project>-<node>.png`
+- The picture is described by lettered features (A, B, C...) shown in a second
+  window; "make the dragon red" rewrites the dragon's letter, "remove C" drops one,
+  "change B to a knight" works by letter. A complaint ("it has two heads") draws four
+  new tries, numbered in the picture window: "the second one" picks.
+- Every finished picture is saved to `~/Pictures/homeai/<name>/<project>-<node>.png`
+  (`guest/` for voices Jarvis doesn't know) with a `.json` beside it: the features,
+  the prompt, seed, model and who asked
   (the folder must exist: the service can only write there if it does).
   Projects live in `~/.local/share/homeai/art/projects/`.
 - Everyone can draw. Registered adults (`HOMEAI_ART_ADULTS`, default `Adam`,

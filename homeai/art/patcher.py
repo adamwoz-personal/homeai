@@ -13,9 +13,9 @@ import logging
 import time
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from homeai.art.prompt_spec import FIELDS, PATCH_SCHEMA, TEXT_FIELDS, SpecError, apply_patch
+from homeai.art.prompt_spec import FIELDS, PATCH_SCHEMA, SIZES, TEXT_FIELDS, SpecError, apply_patch
 
 log = logging.getLogger("homeai.art.patcher")
 
@@ -45,6 +45,65 @@ class PatchResult:
     message: str = ""
     seconds: float = 0.0
     detail: str = ""
+    changed: list = field(default_factory=list)     # feature letters touched (feature specs only)
+
+
+FEATURE_SYSTEM = """You keep the list of features that describe a picture. You get the current features
+(letter, kind, text) and what the person said. Answer with operations on the list:
+- change: rewrite one existing feature. Give its letter and the full new text. Use change whenever the person adjusts
+  something already in the picture: "make the dragon red" changes the dragon's feature to "a single red dragon ...".
+  Never add a second feature for something that already has one.
+- add: something new, with its kind.
+- remove: take a feature out, by letter.
+If the person names a letter ("change B to a knight", "remove C"), act on that letter.
+Kinds: subject (the main thing: exactly one, usually the biggest), element (anything else, placed relative to the
+subject: "one samurai sitting on the dragon's back"), setting (where and when), style, colour, lighting, camera,
+composition.
+Write each feature as a short plain phrase. State counts and body parts plainly ("a single head", "four legs",
+"one rider"). Write what should be there, never what shouldn't. If the person complains that something came out
+wrong (two heads, an extra rider, a leg in the wrong place), change that feature to say the right thing plainly.
+For a new picture (no features yet), make one subject feature and add only what the person described; don't invent
+a style, colours, lighting or camera they didn't ask for.
+If the person rambles or corrects themselves ("a dragon, no wait, a wyvern, um, green"), use what they ended up meaning.
+Set aspect only if they ask for a shape (square, portrait, landscape, wide)."""
+
+
+def feature_messages(spec: dict, instruction: str) -> list[dict]:
+    from homeai.art import features as F
+    current = [f"{f.id} ({f.kind}): {f.text}" for f in F.features_of(spec)] if spec else []
+    listing = "\n".join(current) if current else "(none yet: this is a new picture)"
+    return [{"role": "system", "content": FEATURE_SYSTEM},
+            {"role": "user", "content": f"Current features:\n{listing}\nThe person said: {instruction}"}]
+
+
+def features_patch_for(spec: dict, instruction: str, chat=None, clock=time.monotonic) -> PatchResult:
+    """Operations on the lettered features for ``instruction``; on any failure, ``spec`` unchanged, ``ok`` False."""
+    from homeai.art import features as F
+    chat = chat or ollama_chat
+    start = clock()
+    raw = ""
+    try:
+        before = F.features_of(spec) if spec else []
+        ops = F.letter_command(instruction)
+        aspect = None
+        if ops is None:
+            raw = chat(feature_messages(spec, instruction), F.OPS_SCHEMA)
+            answer = json.loads(raw)
+            if not isinstance(answer, dict) or not isinstance(answer.get("ops"), list):
+                raise SpecError("no operations")
+            ops, aspect = answer["ops"], answer.get("aspect")
+        if not ops and not aspect:
+            raise SpecError("empty change")
+        used = set(spec.get("letters_used") or []) if spec else set()
+        after, changed = F.apply_ops(before, ops, used)
+        new = {"features": F.dump(after), "aspect": aspect if aspect in SIZES else (spec or {}).get("aspect", "square"),
+               "letters_used": sorted(used | {f.id for f in before} | {f.id for f in after}),
+               "seed": (spec or {}).get("seed")}
+    except (urllib.error.URLError, OSError, TimeoutError, KeyError, ValueError) as exc:
+        detail = f"{type(exc).__name__}: {exc}; model said {raw[:200]!r}"[:400]
+        log.warning("features for %r not caught: %s", instruction, detail)
+        return PatchResult(spec, {}, False, MSG_NOT_CAUGHT, round(clock() - start, 2), detail)
+    return PatchResult(new, {"ops": ops, "aspect": aspect}, True, "", round(clock() - start, 2), changed=changed)
 
 
 def ollama_chat(messages: list[dict], schema: dict, timeout: float = TIMEOUT_S) -> str:

@@ -21,6 +21,7 @@ the latest ``art`` event on the event bus; the avatar window is not touched.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -126,6 +127,12 @@ def export_name(project: str, node: str) -> str:
     return f"{project}-{node}.png"
 
 
+def folder_name(person: str | None) -> str:
+    """A registered person's own folder under ~/Pictures/homeai; everyone else shares guest/."""
+    name = re.sub(r"[^a-z0-9_-]+", "", (person or "").lower())
+    return name if name and name != "guest" else "guest"
+
+
 class ArtVoice:
     """``build(owner, notify)`` returns (session, queue) wired to the real studio; tests pass fakes."""
 
@@ -184,6 +191,7 @@ class ArtVoice:
                 return None                                  # house talk and other questions: Jarvis answers
             self._last = self._clock()
             self.session.rules = self.rules_for(speaker)
+            self.session.speaker = speaker or "guest"
             # Everything else in art mode is about the picture, even without a drawing verb
             # ("let's start with the dragon", "let's make it cyberpunk"): in Adam's first
             # session those went to the chat model, which looked things up instead.
@@ -207,6 +215,7 @@ class ArtVoice:
         self.owner = speaker
         self.session, self.queue = self._build((speaker or "guest").lower(), self._on_job)
         self.session.rules = self.rules_for(speaker)
+        self.session.speaker = speaker or "guest"
         self._resume_recent()
         self.queue.start()
         self.viewer.start()
@@ -358,14 +367,29 @@ class ArtVoice:
         self._publish_state()
 
     def _export(self, event: dict) -> None:
+        """The picture into the asker's own folder, with its description as JSON beside it."""
+        node = None
+        project = self.session.project if self.session is not None else None
+        if project is not None and project.id == event.get("project"):
+            node = project.nodes.get(event["node"])
+        who = folder_name((node.meta.get("by") if node else None) or (project.info.get("owner") if project else None))
+        folder = self.pictures / who
         try:
-            self.pictures.mkdir(parents=True, exist_ok=True)
-            target = self.pictures / export_name(event["project"], event["node"])
+            folder.mkdir(parents=True, exist_ok=True)
+            target = folder / export_name(event["project"], event["node"])
             tmp = target.with_suffix(".png.tmp")
             shutil.copyfile(event["image"], tmp)
             os.replace(tmp, target)
+            if node is not None:
+                sidecar = {"project": event["project"], "node": node.id, "parent": node.parent, "by": who,
+                           "instruction": node.instruction, "created": node.created, **{
+                               k: node.meta.get(k) for k in ("prompt", "model", "seed", "size")},
+                           "description": {k: v for k, v in node.spec.items() if k != "seed"}}
+                tmp_json = target.with_suffix(".json.tmp")
+                tmp_json.write_text(json.dumps(sidecar, indent=1))
+                os.replace(tmp_json, target.with_suffix(".json"))
         except OSError as exc:
-            log.warning("could not save the picture to %s: %s", self.pictures, exc)
+            log.warning("could not save the picture to %s: %s", folder, exc)
 
     def state(self) -> dict:
         """The ``art`` event: everything the picture window shows (latest wins on the bus)."""
@@ -385,6 +409,14 @@ class ArtVoice:
             out["lineage"].append({"node": node.id, "instruction": node.instruction, "state": node.state,
                                    "image": str(image) if image.exists() else None})
         out["current"] = out["lineage"][-1] if out["lineage"] else None
+        node = project.nodes.get(project.current)
+        if node is not None:
+            from homeai.art import features as F
+            try:
+                out["features"] = F.dump(F.features_of(node.spec))
+            except ValueError:
+                out["features"] = []
+            out["changed"] = list(getattr(session, "last_changed", []))
         grid = [n for n in getattr(session, "grid", []) if n in project.nodes]
         if len(grid) > 1:
             out["options"] = []

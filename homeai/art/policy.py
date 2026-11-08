@@ -82,6 +82,9 @@ class KidSafe:
     name = "kid-safe"
 
     def _text(self, spec: dict) -> str:
+        if "features" in spec:
+            from homeai.art.features import text_of
+            return text_of(spec)
         return " ".join(str(v) for k, v in spec.items() if isinstance(v, str))
 
     def check_request(self, text: str, profile: str) -> Decision:
@@ -91,6 +94,8 @@ class KidSafe:
         text = self._text(spec)
         if KID_BLOCKED.search(text):
             return Decision("deny", MSG_KID_DENIED)
+        if "features" in spec:
+            return self._steer_features(spec, text)
         safe = dict(spec)
         style = str(safe.get("style") or "")
         if KID_STYLE not in style:
@@ -99,6 +104,22 @@ class KidSafe:
         if PEOPLE.search(text) and KID_CLOTHED not in details:
             safe["details"] = f"{details}, {KID_CLOTHED}" if details else KID_CLOTHED
         return Decision("rewrite", spec=safe) if safe != spec else ALLOW
+
+    def _steer_features(self, spec: dict, text: str) -> Decision:
+        """Lettered features: family-friendly goes in as a style feature, clothes as an element (once each)."""
+        from homeai.art import features as F
+        current = F.features_of(spec)
+        ops = []
+        if KID_STYLE not in text.lower():
+            ops.append({"op": "add", "kind": "style", "text": KID_STYLE})
+        if PEOPLE.search(text) and KID_CLOTHED not in text.lower():
+            ops.append({"op": "add", "kind": "element", "text": KID_CLOTHED})
+        if not ops:
+            return ALLOW
+        used = set(spec.get("letters_used") or [])
+        after, _ = F.apply_ops(current, ops, used)
+        return Decision("rewrite", spec={**spec, "features": F.dump(after),
+                                         "letters_used": sorted(used | {f.id for f in after})})
 
     def check_image(self, path: Path, profile: str) -> Decision:
         return ALLOW
