@@ -641,7 +641,7 @@ def test_verified_wake_sends_the_question_without_the_wake_word(quick) -> None:
 def test_wake_word_alone_is_silent(quick) -> None:
     turn = _verified_turn(quick, "Hey Jarvis.")
     quick.agent.ask.assert_not_called()
-    assert turn.verdict == "wake-only"
+    assert turn.verdict == "wake-only" and turn.total_ms > 0      # early exits are timed too
 
 
 def test_verification_can_be_disabled(quick) -> None:
