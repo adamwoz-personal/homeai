@@ -222,7 +222,7 @@ class VoiceAssistant:
                 self._followup_armed.clear()
                 utterance = []
                 cursor = self.mic.buffer.total_written
-                self.machine.on_wake(time.monotonic())
+                self.machine.on_wake(time.monotonic(), long=self._long_capture())
                 source = "bargein"
                 self.presence.state("listening")
                 log.info("barge-in: capturing follow-up")
@@ -233,7 +233,8 @@ class VoiceAssistant:
                 utterance = []
                 cursor = self.mic.buffer.total_written
                 self.machine.on_wake(
-                    time.monotonic(), lead_in_s=self.cfg.wake.followup_lead_in_s
+                    time.monotonic(), lead_in_s=self.cfg.wake.followup_lead_in_s,
+                    long=self._long_capture(),
                 )
                 source = "followup"
                 self.presence.state("followup")
@@ -272,7 +273,7 @@ class VoiceAssistant:
                                 log.info("wake word detected")
                             else:
                                 log.info("wake word detected (score %.3f)", wake_score)
-                            self.machine.on_wake(now)
+                            self.machine.on_wake(now, long=self._long_capture())
                             self.presence.state("listening")
                             utterance = []
                             source = "wake"
@@ -916,6 +917,10 @@ class VoiceAssistant:
         self._say_turn(turn, done_msg.format(name=enrolment.name), total)
 
     # -- art mode ------------------------------------------------------------
+
+    def _long_capture(self) -> bool:
+        """In art mode, people describe scenes: allow pauses and long descriptions."""
+        return self.art is not None and self.art.active
 
     def _build_art(self):
         if not self.cfg.art.voice:

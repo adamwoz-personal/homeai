@@ -32,11 +32,19 @@ def _number(word: str | None, default: int = 1) -> int:
     return int(word) if word.isdigit() else NUMBERS[word]
 
 
+# How people end a long description in art mode: "...on a cliff. That's it, go ahead and draw it."
+SIGN_OFF = re.compile(r"(?:[.,!?]?\s*(?:and |okay |ok |so |um |uh )?(?:that'?s it|that'?s all|that'?s everything|"
+                      r"go ahead(?: and draw it)?|draw it(?: now)?|draw that(?: now)?|you can draw it(?: now)?))+[.!?]*$")
+
+
 def _tidy(text: str) -> str:
     text = text.lower().strip()
     text = re.sub(r"^(hey jarvis|jarvis)[, ]+", "", text)
     text = re.sub(r"^(please|can you|could you|now)[, ]+", "", text)
     text = re.sub(r"[, ]+please$", "", text)
+    trimmed = SIGN_OFF.sub("", text).strip()
+    if len(trimmed) > 2:
+        text = trimmed
     return re.sub(r"[.!?]+$", "", text).strip()
 
 

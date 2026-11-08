@@ -373,3 +373,33 @@ def test_only_the_missing_cuda_warning_is_silenced():
         warnings.warn("Specified provider 'OtherExecutionProvider' is not in available provider names.", UserWarning)
     assert [str(w.message)[:40] for w in seen] == ["Specified provider 'OtherExecutionProvid"]
 
+
+
+# -- art mode: long descriptions with thinking pauses (ART_FEATURES_PLAN F3) ---------------------
+
+def test_long_capture_waits_through_a_thinking_pause() -> None:
+    cfg = WakeConfig(silence_s=0.7, long_silence_s=2.5, max_utterance_s=15.0, long_max_utterance_s=90.0)
+    m = CaptureMachine(cfg=cfg)
+    m.on_wake(0.0, long=True)
+    m.feed(_leadin_loud(), 1.0)
+    assert m.feed(_leadin_quiet(), 3.0) is False          # a 2 s pause to think: still listening
+    m.feed(_leadin_loud(), 3.2)
+    assert m.feed(_leadin_quiet(), 5.8) is True           # 2.6 s of quiet: done
+
+
+def test_long_capture_allows_a_long_description_but_still_ends() -> None:
+    cfg = WakeConfig(silence_s=0.7, long_silence_s=2.5, max_utterance_s=15.0, long_max_utterance_s=90.0)
+    m = CaptureMachine(cfg=cfg)
+    m.on_wake(0.0, long=True)
+    assert m.feed(_leadin_loud(), 60.0) is False
+    assert m.feed(_leadin_loud(), 90.1) is True
+
+
+def test_the_next_capture_is_short_again() -> None:
+    cfg = WakeConfig(silence_s=0.7, long_silence_s=2.5)
+    m = CaptureMachine(cfg=cfg)
+    m.on_wake(0.0, long=True)
+    m.reset(1.0)
+    m.on_wake(10.0)
+    m.feed(_leadin_loud(), 10.5)
+    assert m.feed(_leadin_quiet(), 11.3) is True

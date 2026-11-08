@@ -608,3 +608,25 @@ def test_an_ordinary_change_keeps_the_seed_and_shows_no_options(art):
 def test_viewer_numbers_the_options():
     state = {"options": [{"n": 1, "node": "002"}, {"n": 2, "node": "003"}], "lineage": [{"node": "001"}]}
     assert [t["n"] for t in V.thumbs_of(state)] == [1, 2]
+
+
+# -- F3: describing at length ------------------------------------------------------------------------
+
+@pytest.mark.parametrize("said, tidy", [
+    ("a red dragon on a cliff at sunset. That's it, go ahead and draw it.", "a red dragon on a cliff at sunset"),
+    ("draw a castle. okay that's all", "draw a castle"),
+    ("a fox in the snow, you can draw it now", "a fox in the snow"),
+    ("draw it", "draw it"),
+    ("that's it", "that's it")])
+def test_sign_offs_are_trimmed(said, tidy):
+    from homeai.art import grammar
+    assert grammar._tidy(said) == tidy
+
+
+def test_daemon_listens_longer_in_art_mode(assistant):
+    assistant.art = type("A", (), {"active": False})()
+    assert not assistant._long_capture()
+    assistant.art.active = True
+    assert assistant._long_capture()
+    assistant.art = None
+    assert not assistant._long_capture()

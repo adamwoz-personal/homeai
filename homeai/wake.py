@@ -214,6 +214,7 @@ class CaptureMachine:
     _started_at: float = field(default=0.0, repr=False)
     _refractory_until: float = field(default=0.0, repr=False)
     _lead_in_s: float | None = field(default=None, repr=False)
+    _long: bool = field(default=False, repr=False)
 
     @property
     def heard_speech(self) -> bool:
@@ -245,15 +246,18 @@ class CaptureMachine:
         """False while still inside the post-capture refractory window."""
         return now >= self._refractory_until
 
-    def on_wake(self, now: float, lead_in_s: float | None = None) -> None:
+    def on_wake(self, now: float, lead_in_s: float | None = None, long: bool = False) -> None:
         """Start capturing. ``lead_in_s`` overrides the configured grace period
         for this capture only -- a follow-up answer gets longer to begin than
-        a question asked straight after the wake word."""
+        a question asked straight after the wake word. ``long`` (art mode)
+        allows thinking pauses and a long description: describing a scene
+        takes far longer than asking a question (Adam, 2026-11-07)."""
         self.state = State.LISTENING
         self._started_at = now
         self._speech_last_seen = now
         self._heard_speech = False
         self._lead_in_s = lead_in_s
+        self._long = long
 
     def feed(self, frame: np.ndarray, now: float) -> bool:
         """Feed one frame while LISTENING. Returns True when the utterance ends.
@@ -269,7 +273,8 @@ class CaptureMachine:
             self._speech_last_seen = now
             self._heard_speech = True
 
-        if now - self._started_at >= self.cfg.max_utterance_s:
+        max_s = self.cfg.long_max_utterance_s if self._long else self.cfg.max_utterance_s
+        if now - self._started_at >= max_s:
             log.info("utterance hit max duration")
             return True
 
@@ -281,7 +286,8 @@ class CaptureMachine:
         # the field: an interrupt succeeded but the follow-up question was
         # never captured.
         lead_in = self.cfg.lead_in_s if self._lead_in_s is None else self._lead_in_s
-        limit = self.cfg.silence_s if self._heard_speech else lead_in
+        silence = self.cfg.long_silence_s if self._long else self.cfg.silence_s
+        limit = silence if self._heard_speech else lead_in
         if now - self._speech_last_seen >= limit:
             if not self._heard_speech:
                 log.info("no speech within lead-in; closing capture")

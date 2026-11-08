@@ -163,6 +163,9 @@ homeai-mode voice     # ComfyUI stopped, coder back (~7 s warm, ~27 s cold)
   "go back", "keep that", "what prompt made this", "cancel that".
   "I'm done drawing" goes back to voice mode (~25 s for the coder to reload,
   in the background). 20 minutes with nothing said or drawing does the same.
+- In art mode Jarvis waits for 2.5 s of quiet before deciding you've finished
+  (0.7 s otherwise), and listens for up to 90 s (`HOMEAI_LONG_SILENCE_S`,
+  `HOMEAI_LONG_MAX_UTTERANCE_S`). "That's it, go ahead" at the end is ignored.
 - The picture is described by lettered features (A, B, C...) shown in a second
   window; "make the dragon red" rewrites the dragon's letter, "remove C" drops one,
   "change B to a knight" works by letter. A complaint ("it has two heads") draws four

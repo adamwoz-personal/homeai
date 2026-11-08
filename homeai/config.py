@@ -247,6 +247,9 @@ class WakeConfig:
     lead_in_s: float = field(default_factory=lambda: _env_float("HOMEAI_LEAD_IN_S", 2.5))
     # Hard ceiling on one utterance, so a stuck-open mic cannot capture forever.
     max_utterance_s: float = field(default_factory=lambda: _env_float("HOMEAI_MAX_UTTERANCE_S", 15.0))
+    # Art mode: time to think while describing a scene (pauses) and to describe a lot of it.
+    long_silence_s: float = field(default_factory=lambda: _env_float("HOMEAI_LONG_SILENCE_S", 2.5))
+    long_max_utterance_s: float = field(default_factory=lambda: _env_float("HOMEAI_LONG_MAX_UTTERANCE_S", 90.0))
     # Deaf window after a capture ends. Stops the just-captured wake word from
     # re-triggering the detector out of its internal audio context.
     refractory_s: float = field(default_factory=lambda: _env_float("HOMEAI_REFRACTORY_S", 1.5))
