@@ -111,6 +111,27 @@ class Transcriber:
 
         return Transcript(ok=True, text=text)
 
+    def words(self, audio: np.ndarray, sample_rate: int) -> list[tuple[float, float, str]]:
+        """Each word with its start and end in seconds (whisper ``-ml 1 -sow``); [] on any failure.
+
+        Only for splitting a recording two people spoke into (homeai/speaker_split.py); costs a
+        second whisper run (~1 s), so it is called only when the audio is already known to be mixed.
+        """
+        from .speaker_split import parse_words
+        if not self.available()[0] or audio is None or audio.size == 0:
+            return []
+        with tempfile.TemporaryDirectory(prefix="homeai-stt-") as tmp:
+            wav_path = Path(tmp) / "utterance.wav"
+            try:
+                write_wav(wav_path, audio, sample_rate)
+                proc = subprocess.run([str(self._cfg.binary), "-m", str(self._cfg.model), "-f", str(wav_path),
+                                       "-t", str(self._cfg.threads), "-ml", "1", "-sow", "--no-prints"],
+                                      capture_output=True, text=True, timeout=self._cfg.timeout_s)
+            except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+                log.warning("word timings failed: %s", exc)
+                return []
+        return parse_words(proc.stdout) if proc.returncode == 0 else []
+
     def transcribe_audio(self, audio: np.ndarray, sample_rate: int) -> Transcript:
         """Transcribe an in-memory buffer by staging it to a temporary WAV."""
         if audio is None or audio.size == 0:

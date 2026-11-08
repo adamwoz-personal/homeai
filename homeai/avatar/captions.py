@@ -18,7 +18,7 @@ import numpy as np
 ELLIPSIS = "\u2026"
 MAX_LINES = {"jarvis": 3, "user": 2, "status": 1, "script": 7}
 SCALE = {"jarvis": 1 / 20, "user": 1 / 26, "status": 1 / 22, "script": 1 / 19}  # font px per window px (height)
-TINT = {"jarvis": (235, 245, 255), "user": (160, 175, 190), "status": (190, 180, 230), "script": (255, 236, 170)}
+TINT = {"jarvis": (235, 245, 255), "user": (160, 175, 190), "status": (190, 180, 230), "script": (255, 72, 60)}  # script: red (Adam 2026-11-08)
 MARGIN = 0.06               # of the width, each side
 ALPHA_STEPS = 20            # fades re-rasterise at most this many times
 

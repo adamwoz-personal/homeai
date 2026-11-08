@@ -551,7 +551,7 @@ class VoiceAssistant:
         if self._handle_status(turn, transcript.text, ident, total):
             return
 
-        if self._handle_art(turn, transcript.text, ident, total, emb):
+        if self._handle_art(turn, transcript.text, ident, total, emb, audio):
             return
 
         if self._handle_home(turn, transcript.text, source, total):
@@ -953,7 +953,7 @@ class VoiceAssistant:
         self._say_turn(turn, reply, total)
         return True
 
-    def _handle_art(self, turn: Turn, text: str, ident, total: Stopwatch, emb=None) -> bool:
+    def _handle_art(self, turn: Turn, text: str, ident, total: Stopwatch, emb=None, audio=None) -> bool:
         """Drawing sentences, and entering or leaving art mode. False: not about art."""
         if self.art is None:
             return False
@@ -962,6 +962,8 @@ class VoiceAssistant:
         owner = getattr(self.art, "owner", None)
         if getattr(self.art, "active", False) and owner and self.voice_id is not None and ident is not None:
             other, _ = self.voice_id.is_someone_else(owner, ident, emb)
+            if not other and audio is not None:
+                text, other = self._owner_words(owner, audio, text)
         try:
             reply = self.art.handle(text, speaker, other=other)
         except Exception:  # noqa: BLE001 - a broken art mode must not take Jarvis down
@@ -978,6 +980,36 @@ class VoiceAssistant:
         turn.verdict = "art"
         self._say_turn(turn, reply, total, listen=reply.endswith("?"))
         return True
+
+    def _owner_words(self, owner: str, audio: np.ndarray, text: str) -> tuple[str, bool]:
+        """Art mode: drop the words another voice said into the owner's recording (ART_FEATURES_PLAN S1).
+
+        Returns (text to use, whether nothing of the owner's is left). Any failure keeps the text as heard.
+        """
+        from . import speaker_split as split
+        try:
+            vid_ = self.voice_id
+            profile = vid_.registry.get(owner)
+            if profile is None:
+                return text, False
+
+            def similarity(chunk):
+                emb = vid_.embedder.embed(chunk)
+                return None if emb is None else vid_.similarity_to(owner, emb)
+
+            sims = split.window_sims(similarity, audio)
+            spans = split.other_spans(sims, vid_.cfg.different_below)
+            if not split.is_mixed(sims, spans, vid_.cfg.threshold):
+                return text, False
+            words = self.stt.words(audio, self.cfg.audio.sample_rate)
+            if not words:
+                return text, False
+            kept, dropped = split.keep_owner_words(words, spans)
+            log.info("art: another voice in %s's recording: kept %r, dropped %r", owner, kept, dropped)
+            return (kept, False) if kept else (text, True)
+        except Exception:  # noqa: BLE001 - never lose the owner's sentence to a split failure
+            log.exception("splitting the recording failed")
+            return text, False
 
     def _say_turn(self, turn: Turn, text: str, total: Stopwatch, listen: bool = False) -> None:
         """Speak a fixed reply, log the turn, and optionally listen without

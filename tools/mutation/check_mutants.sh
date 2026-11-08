@@ -40,7 +40,7 @@ MUTANTS=(
   "artvoice-leave-stays-art|homeai/art/voice.py|s/^        self._background(back_to_voice)$/        pass/|tests/test_art_voice.py -k leaving"
   "artvoice-idle-ignores-work|homeai/art/voice.py|s/return not self.queue.waiting() and not self._drawing()/return True/|tests/test_art_voice.py -k idle"
   "artvoice-saves-refused|homeai/art/voice.py|s/^        if refused:$/        if False:/|tests/test_art_voice.py -k refused"
-  "artvoice-not-consulted|homeai/daemon.py|s/if self._handle_art(turn, transcript.text, ident, total, emb):/if False:/|tests/test_art_voice.py -k daemon"
+  "artvoice-not-consulted|homeai/daemon.py|s/if self._handle_art(turn, transcript.text, ident, total, emb, audio):/if False:/|tests/test_art_voice.py -k daemon"
   "artvoice-crash-fatal|homeai/daemon.py|s/^            reply = \"Something went wrong in art mode.\"/            raise/|tests/test_art_voice.py -k crash"
   "artvoice-tests-unguarded|tests/conftest.py|s/^os.environ\[\"HOMEAI_ART_VOICE\"\] = \"0\"/pass/|tests/test_art_voice.py -k off_in_tests"
   "viewer-snapshot-ignored|homeai/art/viewer.py|s/.get(\"art\") or {}$/.get(\"nothing\") or {}/|tests/test_art_voice.py -k snapshot"
@@ -657,6 +657,14 @@ MUTANTS=(
   "art-what-skips-meta|homeai/art/session.py|s/node.meta.get(\"prompt\") or //|tests/test_art_features.py -k hidden_steering"
   "vid-reenrol-voices-missed|homeai/voice_id.py|s/my voices?/my voice/|tests/test_voice_id.py -k more_ways"
   "daemon-weak-owner-cannot-reenrol|homeai/daemon.py|s/^        return not close$/        return True/|tests/test_daemon.py -k weak_profile"
+  "split-one-window-enough|homeai/speaker_split.py|s/^MIN_WINDOWS = 2$/MIN_WINDOWS = 1/|tests/test_speaker_split.py"
+  "split-mixed-without-owner|homeai/speaker_split.py|s/return bool(spans) and any(/return bool(spans) or any(/|tests/test_speaker_split.py"
+  "split-keeps-everything|homeai/speaker_split.py|s/(dropped if any(/(kept if any(/|tests/test_speaker_split.py"
+  "daemon-split-skipped|homeai/daemon.py|s/^                text, other = self._owner_words(owner, audio, text)$/                pass/|tests/test_speaker_split.py"
+  "daemon-split-empty-kept|homeai/daemon.py|s/return (kept, False) if kept else (text, True)/return (kept, False)/|tests/test_speaker_split.py"
+  "daemon-split-crash|homeai/daemon.py|s/^            log.exception(\"splitting the recording failed\")$/            raise/|tests/test_speaker_split.py"
+  "daemon-split-always|homeai/daemon.py|s/^            if not split.is_mixed(sims, spans, vid_.cfg.threshold):$/            if False:/|tests/test_speaker_split.py"
+  "caption-script-not-red|homeai/avatar/captions.py|s/\"script\": (255, 72, 60)/\"script\": (255, 236, 170)/|tests/test_avatar_captions.py -k script_is_red"
 )
 
 filter="${1:-}"

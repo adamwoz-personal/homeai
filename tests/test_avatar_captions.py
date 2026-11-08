@@ -70,3 +70,11 @@ def test_script_is_drawn_from_the_top_with_room_for_a_paragraph():
 def test_bus_keeps_the_latest_script_for_a_restarted_avatar():
     from homeai.avatar.bus import COALESCED
     assert "script" in COALESCED
+
+
+def test_the_reading_script_is_red():
+    """Adam 2026-11-08: red letters are easier to read while registering; other captions keep their colours."""
+    from homeai.avatar.captions import TINT
+    r, g, b = TINT["script"]
+    assert r >= 200 and g < 120 and b < 120
+    assert all(TINT[k][1] > 150 for k in ("jarvis", "user", "status"))

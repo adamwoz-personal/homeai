@@ -188,7 +188,9 @@ homeai-mode voice     # ComfyUI stopped, coder back (~7 s warm, ~27 s cold)
   is confidently someone else is ignored (logged as `art: ignoring another voice`;
   house talk still reaches Jarvis), and a voice Jarvis can't tell apart from them
   counts as them. A session started by an unknown voice is a guest session under
-  kid rules. Words from two people in one recording can't be split yet.
+  kid rules. When someone else talks into the same recording, their words are
+  dropped (logged as `art: another voice in Adam's recording: kept ..., dropped ...`;
+  ~0.3 s per check, plus ~1 s more when a recording is mixed).
   `HOMEAI_ART_VOICE=0` turns all of this off.
 - The window is the transient unit `homeai-art-viewer`; close it with Esc or q,
   or `systemctl --user stop homeai-art-viewer`. Logs: `journalctl --user | grep "art:"`.
