@@ -1,3 +1,7 @@
+# Copyright (c) 2026 Adam Wosotowsky
+# SPDX-License-Identifier: BUSL-1.1
+# Licensed under the Business Source License 1.1; see LICENSE at the
+# repository root. Converts to Apache-2.0 on 2030-09-15.
 """Saving files so a crash leaves the old file or the new one, never half of either (CODE_REVIEW_PLAN item 2).
 
 Nine places did "write a temp file, then os.replace" six different ways; only

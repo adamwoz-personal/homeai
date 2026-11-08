@@ -44,6 +44,7 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+from homeai import gpu_info
 from homeai.httpjson import OLLAMA
 
 VOICE_SERVICE = "homeai.service"
@@ -152,16 +153,8 @@ class System:
             return []
 
     def vram_gb(self) -> tuple[float, float]:
-        best = (0.0, 0.0)
-        for total_file in Path("/sys/class/drm").glob("card*/device/mem_info_vram_total"):
-            try:
-                total = int(total_file.read_text()) / 1024**3
-                used = int((total_file.parent / "mem_info_vram_used").read_text()) / 1024**3
-            except (OSError, ValueError):
-                continue
-            if total > best[0]:
-                best = (total, used)
-        return best
+        card = gpu_info.biggest()
+        return (card.total / 1024**3, card.used / 1024**3) if card else (0.0, 0.0)
 
     def sleep(self, seconds: float) -> None:
         time.sleep(seconds)

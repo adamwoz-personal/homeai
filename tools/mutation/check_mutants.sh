@@ -705,6 +705,10 @@ MUTANTS=(
   "pause-trusts-a-loaded-voice|homeai/gpu_mode.py|s/^                if self.voice_on_gpu():$/                if True:/|tests/test_gpu_mode.py -k on_the_gpu"
   "pause-voice-off-ignored|homeai/gpu_mode.py|s/^            if voice_off:$/            if False:/|tests/test_gpu_mode.py -k voice_off"
   "gpu-check-ignores-cpu|homeai/gpu_mode.py|s/ and m.get(\"size_vram\") == m.get(\"size\")//|tests/test_gpu_mode.py -k on_the_gpu"
+  "gpuinfo-unsorted|homeai/gpu_info.py|s/for total_file in sorted(Path(drm_root)/for total_file in reversed(Path(drm_root)/|tests/test_gpu_info.py"
+  "gpuinfo-used-required|homeai/gpu_info.py|s/ if used_file.exists() else 0$//|tests/test_gpu_info.py"
+  "gpuinfo-biggest-is-first|homeai/gpu_info.py|s/max(amd_cards(drm_root), key=lambda c: c.total, default=None)/(amd_cards(drm_root) or [None])[0]/|tests/test_gpu_info.py"
+  "gpumode-vram-in-gb|homeai/gpu_mode.py|s/card.total \/ 1024\*\*3, card.used \/ 1024\*\*3/card.total \/ 1e9, card.used \/ 1e9/|tests/test_gpu_info.py"
   "ha-env-world-readable|homeai/install/ha_setup.py|s/TOKEN={token}\\\\n\", mode=0o600)/TOKEN={token}\\\\n\")/|tests/"
 )
 

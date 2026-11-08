@@ -20,6 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from homeai import gpu_info  # noqa: E402
 from homeai.httpjson import OLLAMA, post_json  # noqa: E402,F401 - OLLAMA re-exported for contention_bench
 
 ROOT = Path.home() / ".local/share/homeai/comfyui"
@@ -216,15 +217,8 @@ http = post_json
 
 def vram_used_gb() -> float:
     """VRAM in use on the 7900 XT, the biggest card."""
-    best = 0, 0
-    for card in Path("/sys/class/drm").glob("card[0-9]/device"):
-        try:
-            total = int((card / "mem_info_vram_total").read_text())
-            used = int((card / "mem_info_vram_used").read_text())
-        except OSError:
-            continue
-        best = max(best, (total, used))
-    return round(best[1] / 1e9, 2)
+    card = gpu_info.biggest()
+    return round(card.used / 1e9, 2) if card else 0.0
 
 
 class VramPeak:

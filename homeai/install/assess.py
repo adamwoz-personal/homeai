@@ -34,6 +34,8 @@ import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from homeai.gpu_info import amd_cards  # standard library only, like this file
+
 GIB = 1024**3
 
 # -- Thresholds ---------------------------------------------------------------
@@ -187,18 +189,7 @@ def parse_nvidia_smi(text: str) -> list[Gpu]:
 
 def read_amd_sysfs(drm_root: Path = Path("/sys/class/drm")) -> list[Gpu]:
     """AMD exposes VRAM in sysfs; no ROCm tooling is needed to read it."""
-    gpus = []
-    for total_file in sorted(drm_root.glob("card*/device/mem_info_vram_total")):
-        device = total_file.parent
-        try:
-            total = int(total_file.read_text().strip())
-            used_file = device / "mem_info_vram_used"
-            used = int(used_file.read_text().strip()) if used_file.exists() else 0
-        except (OSError, ValueError):
-            continue
-        name = device.parent.name
-        gpus.append(Gpu("amd", name, round(total / GIB, 1), round(used / GIB, 1)))
-    return gpus
+    return [Gpu("amd", c.name, round(c.total / GIB, 1), round(c.used / GIB, 1)) for c in amd_cards(drm_root)]
 
 
 # -- Probes (touch the real machine) -----------------------------------------
