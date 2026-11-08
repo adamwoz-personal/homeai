@@ -288,3 +288,34 @@ def test_what_prompt_includes_hidden_steering_words(tmp_path):
     s = ArtSession(Store(tmp_path), Queue(), "guest", rules=policy.load("kid-safe"), patch=patch)
     s.handle("draw a knight")
     assert s.handle("what prompt made this").spoken == s.project.nodes["001"].meta["prompt"]
+
+
+def test_a_dropped_colour_is_put_back():
+    lost = [F.Feature("A", "subject", "a dragon"), F.Feature("B", "element", "a samurai sitting on the dragon's back")]
+    after, changed = F.keep_details("draw a samurai with red armor riding a dragon", lost, ["A", "B"])
+    assert after[1].text == "a samurai sitting on the dragon's back, in red armor" and changed == ["A", "B"]
+    kept = [F.Feature("A", "subject", "a dragon"), F.Feature("B", "element", "a samurai in red armor")]
+    assert F.keep_details("draw a samurai with red armor riding a dragon", kept, [])[0] == kept
+    assert F.keep_details("a castle with blue towers", lost, [])[0] == lost           # nothing names the castle
+    after, changed = F.keep_details("make the knight wearing gold armor", [F.Feature("A", "subject", "a knight")], [])
+    assert after[0].text == "a knight, in gold armor" and changed == ["A"]
+
+
+def test_the_patcher_keeps_the_colour(tmp_path):
+    said = json.dumps({"about_picture": True, "ops": [
+        {"op": "add", "id": "", "kind": "subject", "text": "a dragon"},
+        {"op": "add", "id": "", "kind": "element", "text": "a samurai sitting on the dragon's back"}]})
+    result = features_patch_for({}, "draw a samurai with red armor riding a dragon", chat=lambda m, s: said)
+    assert "red armor" in F.features_of(result.spec)[1].text
+
+
+def test_chatter_is_not_a_change():
+    said = json.dumps({"about_picture": False, "ops": [{"op": "change", "id": "A", "kind": "subject", "text": "x"}]})
+    result = features_patch_for(spec_of(DRAGON), "oh my gosh, what's that", chat=lambda m, s: said)
+    assert not result.ok and result.spec == spec_of(DRAGON)
+
+
+def test_placeholders_are_not_features():
+    after, changed = F.apply_ops(DRAGON[:1], [{"op": "add", "kind": "setting", "text": "nowhere specific"},
+                                              {"op": "add", "kind": "style", "text": "None"}])
+    assert after == DRAGON[:1] and changed == []

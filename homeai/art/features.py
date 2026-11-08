@@ -36,6 +36,7 @@ LETTERS = string.ascii_uppercase
 OPS_SCHEMA = {
     "type": "object",
     "properties": {
+        "about_picture": {"type": "boolean"},
         "ops": {"type": "array", "maxItems": 8, "items": {
             "type": "object",
             "properties": {
@@ -44,11 +45,14 @@ OPS_SCHEMA = {
                 "kind": {"type": "string", "enum": list(KINDS)},
                 "text": {"type": "string", "maxLength": MAX_TEXT},
             },
-            "required": ["op"],
+            # All required: without "text" the model sent bare {"op": "add", "kind": "subject"} for every
+            # "draw a samurai with red armor riding a dragon" (0/5, 2026-11-08); requiring only "text" made it
+            # drop "id" (32/45). An add ignores its id, a remove its text.
+            "required": ["op", "id", "kind", "text"],
         }},
         "aspect": {"type": ["string", "null"], "enum": [*SIZES, None]},
     },
-    "required": ["ops"],
+    "required": ["about_picture", "ops"],
 }
 
 
@@ -60,6 +64,10 @@ class Feature:
 
     def to_json(self) -> dict:
         return {"id": self.id, "kind": self.kind, "text": self.text}
+
+
+PLACEHOLDER = re.compile(r"^(none|nothing|n/?a|unspecified|unknown|not specified|nowhere( specific| in particular)?|"
+                         r"anywhere|no (setting|style|background)|default|generic|any)$")
 
 
 def _clean(text: str) -> str:
@@ -110,6 +118,8 @@ def apply_ops(features: list[Feature], ops: list[dict], used: set[str] | None = 
             # A change with no letter is the model guessing: one replaced the dragon with "A to a steampunk
             # battleship" and another failed the whole change (live and eval, 2026-11-07). Skip it, keep the rest.
             continue
+        if kind == "add" and PLACEHOLDER.match(_clean(op.get("text", "")).lower()):
+            continue                    # "nowhere specific", "none": the model filling a slot, not a feature
         if kind == "add":
             text, fkind = _clean(op.get("text", "")), op.get("kind") or "element"
             if not text or fkind not in KINDS:
@@ -140,6 +150,39 @@ def apply_ops(features: list[Feature], ops: list[dict], used: set[str] | None = 
     if not any(f.kind == "subject" for f in current):
         raise SpecError("a picture needs a main subject")
     return current, changed
+
+
+COLOURS = ("red", "orange", "yellow", "green", "blue", "purple", "violet", "pink", "black", "white", "grey", "gray",
+           "brown", "gold", "golden", "silver", "bronze", "teal", "crimson", "scarlet")
+_COLOUR = "(?:" + "|".join(COLOURS) + ")"
+# "a samurai with red armor": owner word, then the coloured thing. "not/without/instead of" before it: skipped.
+_WITH_COLOUR = re.compile(r"\b([a-z]+) (?:with|in|wearing) (?:a |an |some )?(" + _COLOUR + r" [a-z]+)\b")
+_NEGATED = re.compile(r"\b(?:not|no|without|instead of|rather than)\s+(?:a |an |the )?$")
+
+
+def keep_details(instruction: str, features: list[Feature], changed: list[str]) -> tuple[list[Feature], list[str]]:
+    """Put back a colour the person said that the model dropped (live and eval, 2026-11-08: "a samurai with
+    red armor riding a dragon" came back as "a samurai sitting on the dragon's back").
+
+    Only "<thing> with/in/wearing <colour> <noun>", only onto the feature that names the thing, and only when
+    no feature already has that colour. Model output is never trusted to keep every word; this is the cheap
+    deterministic net for the most visible kind of loss.
+    """
+    said = instruction.lower()
+    out, touched = list(features), list(changed)
+    for match in _WITH_COLOUR.finditer(said):
+        owner, phrase = match.group(1), match.group(2)
+        colour = phrase.split()[0]
+        if _NEGATED.search(said[:match.start(2)]) or any(re.search(rf"\b{colour}\b", f.text) for f in out):
+            continue
+        index = next((i for i, f in enumerate(out) if re.search(rf"\b{owner}s?\b", f.text.lower())), None)
+        if index is None:
+            continue
+        f = out[index]
+        out[index] = Feature(f.id, f.kind, _clean(f"{f.text}, in {phrase}"))
+        if f.id not in touched:
+            touched.append(f.id)
+    return out, touched
 
 
 def render(features: list[Feature], aspect: str = "square", steer: list[str] | tuple = ()):

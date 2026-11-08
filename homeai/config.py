@@ -412,6 +412,8 @@ class ArtConfig:
     # Registered adults draw with no limits; every other voice (registered kids, unknown) under kid-safe rules.
     adults: tuple[str, ...] = field(default_factory=lambda: tuple(
         u.strip() for u in _env_str("HOMEAI_ART_ADULTS", "Adam").split(",") if u.strip()))
+    # Count heads and riders with a vision model and redraw wrong pictures before showing them (F4).
+    check: bool = field(default_factory=lambda: _env_bool("HOMEAI_ART_CHECK", True))
 
 
 @dataclass(frozen=True)

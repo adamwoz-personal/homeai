@@ -934,8 +934,12 @@ class VoiceAssistant:
         from homeai import gpu_mode
         from homeai.art.voice import ArtVoice, build_studio
         switcher = gpu_mode.ModeSwitcher(gpu_mode.System(), log=lambda line: log.info("mode: %s", line))
+        checker = None
+        if self.cfg.art.check:
+            from homeai.art import checker as art_checker
+            checker = art_checker.ollama_ask
         return ArtVoice(switcher, build_studio, self.presence.publish, adults=self.cfg.art.adults,
-                        on_state=self.presence.state)
+                        on_state=self.presence.state, checker=checker)
 
     def _handle_status(self, turn: Turn, text: str, ident, total: Stopwatch) -> bool:
         """'Status update': built from the voice registry, doorbell history and weather, no agent."""

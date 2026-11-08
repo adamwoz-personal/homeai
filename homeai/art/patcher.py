@@ -63,14 +63,18 @@ Write each feature as a short plain phrase. State counts and body parts plainly 
 "one rider"). Write what should be there, never what shouldn't. If the person complains that something came out
 wrong (two heads, an extra rider, a leg in the wrong place), change that feature to say the right thing plainly.
 For a new picture (no features yet), make one subject feature and add only what the person described; don't invent
-a style, colours, lighting or camera they didn't ask for.
+a style, colours, lighting, setting or camera they didn't ask for. Keep every detail they said (colours, clothes,
+armour) in the feature it belongs to, and add no detail they didn't say. Whatever is ridden or carries the others is
+the subject; a rider is an element "sitting on the <subject>'s back".
+For an add, set id to "". For a remove, set text to "".
 If the person rambles or corrects themselves ("a dragon, no wait, a wyvern, um, green"), use what they ended up meaning.
 Each thing is described in exactly one feature: never mention an element's thing inside another feature (the rider
 belongs in its own feature, not also in the dragon's).
 Sizes: when the person says something is too small or too big, write its size relative to the subject in its own
 feature ("a huge steam-powered battleship, many times bigger than the dragon").
-Ignore words that aren't about the picture (exclamations, questions or remarks to other people in the room). If
-nothing said is about the picture, answer with no operations.
+Ignore words that aren't about the picture (exclamations, questions or remarks to other people in the room).
+First set about_picture: true only if the person asks for something in the picture to be drawn, added, changed or
+removed; false for chatter like "oh my gosh, what's that" or "you're talking with my husband" (then no operations).
 Set aspect only if they ask for a shape (square, portrait, landscape, wide)."""
 
 
@@ -97,11 +101,14 @@ def features_patch_for(spec: dict, instruction: str, chat=None, clock=time.monot
             answer = json.loads(raw)
             if not isinstance(answer, dict) or not isinstance(answer.get("ops"), list):
                 raise SpecError("no operations")
+            if answer.get("about_picture") is False:
+                raise SpecError("not about the picture")
             ops, aspect = answer["ops"], answer.get("aspect")
         if not ops and not aspect:
             raise SpecError("empty change")
         used = set(spec.get("letters_used") or []) if spec else set()
         after, changed = F.apply_ops(before, ops, used)
+        after, changed = F.keep_details(instruction, after, changed)
         new = {"features": F.dump(after), "aspect": aspect if aspect in SIZES else (spec or {}).get("aspect", "square"),
                "letters_used": sorted(used | {f.id for f in before} | {f.id for f in after}),
                "seed": (spec or {}).get("seed")}

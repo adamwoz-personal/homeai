@@ -95,13 +95,15 @@ class ArtSession:
             return None
         return self.project.nodes[self.project.current]
 
-    def _draw(self, instruction: str, spec: dict, parent: str | None, preview: bool = False) -> str:
+    def _draw(self, instruction: str, spec: dict, parent: str | None, preview: bool = False,
+              meta: dict | None = None) -> str:
         spec = {**spec, "seed": spec.get("seed") if spec.get("seed") is not None else self._seed()}
         steer = getattr(self.rules, "steer", None)
         rendered = render_spec(spec, steer(F.text_of(spec)) if steer and "features" in spec else ())
         node = self.project.add(instruction, spec, parent=parent,
                                 meta={"prompt": rendered.text, "model": MODEL, "seed": spec["seed"],
-                                      "size": [rendered.width, rendered.height], "by": self.speaker or self.owner})
+                                      "size": [rendered.width, rendered.height], "by": self.speaker or self.owner,
+                                      **(meta or {})})
         graph = workflows.klein9(rendered.text, spec["seed"], rendered.width, rendered.height,
                                  prefix=f"art/{self.project.id}")
         job = self.queue.submit(self.project.id, node.id, graph,
@@ -178,6 +180,26 @@ class ArtSession:
             return Reply(f"Fixing it: {TRIES_AFTER_COMPLAINT} new tries. Say which one you like.", "edit", jobs)
         spec = {**spec, "seed": node.spec.get("seed")}      # same seed: only the change should change
         return Reply(said, "edit", [self._draw(intent.text, spec, node.id)])
+
+    def redraw(self, node_id: str, reason: str) -> str | None:
+        """A checked picture came out wrong: mark it failed and draw it again with a new seed (F4).
+
+        The new try takes the old one's place (current, and its slot among numbered options).
+        Returns the new job id, or None if the picture isn't in this project any more.
+        """
+        if self.project is None or node_id not in self.project.nodes:
+            return None
+        node = self.project.nodes[node_id]
+        before = self.project.current
+        self.project.fail(node_id, reason)
+        job = self._draw(node.instruction, {**node.spec, "seed": None}, node.parent,
+                         meta={"tries": node.meta.get("tries", 0) + 1, "redraw_of": node_id,
+                               **({"by": node.meta["by"]} if node.meta.get("by") else {})})
+        new = self.project.current
+        self.grid = [new if n == node_id else n for n in self.grid]
+        if before != node_id and before in self.project.nodes:
+            self.project.select(before)         # the person had moved on: don't pull them back
+        return job
 
     def _on_fresh(self, intent, text):
         self.project, self.grid = None, []

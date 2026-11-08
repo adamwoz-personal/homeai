@@ -145,7 +145,9 @@ class ArtVoice:
                  adults: tuple[str, ...] = ("Adam",), pictures: Path = PICTURES, idle_s: float = IDLE_EXIT_S,
                  clock: Callable[[], float] = time.monotonic, on_state: Callable[[str], None] | None = None,
                  background: Callable[[Callable[[], None]], None] | None = None,
-                 wall: Callable[[], float] = time.time) -> None:
+                 wall: Callable[[], float] = time.time,
+                 checker: Callable[[Path, str], str] | None = None,
+                 warm_voice: Callable[[], None] | None = None) -> None:
         self.switcher, self._build, self._publish = switcher, build, publish
         self.viewer = viewer or Viewer()
         self.adults = tuple(u.lower() for u in adults)
@@ -154,6 +156,8 @@ class ArtVoice:
         self._background = background or (lambda fn: threading.Thread(target=fn, name="art-leave",
                                                                       daemon=True).start())
         self._wall = wall
+        self.checker = checker                  # ask(image, question) -> answer; None: pictures aren't checked
+        self._warm_voice = warm_voice or _warm_voice_model
         self.session = None
         self.queue = None
         self.owner: str | None = None
@@ -375,18 +379,60 @@ class ArtVoice:
         if refused:
             self.status = refused
         elif event.get("state") == "done" and event.get("image"):
-            self._export(event)
-            self.status = "Done."
+            issues, redrawn = self._check(session, event)
+            if redrawn:
+                self._publish_state()
+                return
+            self._export(event, session)        # the session it was drawn in, even if art mode just ended
+            self.status = f"Best I could do: {', '.join(issues)}." if issues else "Done."
         elif event.get("state") == "running":
             self.status = "Drawing..."
         elif event.get("state") in ("failed", "cancelled") and event.get("message"):
             self.status = event["message"]
         self._publish_state()
 
-    def _export(self, event: dict) -> None:
+    def _check(self, session, event: dict) -> tuple[list[str], bool]:
+        """(what's wrong, whether it is being redrawn) for a finished picture (ART_FEATURES_PLAN F4).
+
+        A picture whose heads or riders don't match its features is redrawn with a new seed, up to
+        MAX_REDRAWS times, before it is shown. Any failure of the checker shows the picture as it is.
+        """
+        from homeai.art import checker as CK
+        from homeai.art import features as F
+        project = session.project
+        if self.checker is None or project is None or project.id != event.get("project"):
+            return [], False
+        node = project.nodes.get(event.get("node"))
+        if node is None or "features" not in node.spec:
+            return [], False
+        try:
+            checks = CK.checklist(F.features_of(node.spec))
+            if not checks:
+                return [], False
+            self.status = "Checking..."
+            self._publish_state()
+            issues = CK.problems(Path(event["image"]), checks, self.checker)
+        except Exception as exc:  # noqa: BLE001 - an unchecked picture beats no picture
+            log.warning("checking %s/%s failed: %s", project.id, node.id, exc)
+            self._background(self._warm_voice)
+            return [], False
+        log.info("art: checked %s/%s: %s", project.id, node.id, ", ".join(issues) or "ok")
+        if issues and node.meta.get("tries", 0) < CK.MAX_REDRAWS:
+            with self._lock:
+                if self.session is not session:
+                    return issues, False
+                job = session.redraw(node.id, "checked: " + ", ".join(issues))
+            if job is not None:
+                self.status = f"Redrawing: it came out with {', '.join(issues)}."
+                return issues, True
+        self._background(self._warm_voice)      # the vision model pushed Jarvis's voice model out; bring it back
+        return issues, False
+
+    def _export(self, event: dict, session=None) -> None:
         """The picture into the asker's own folder, with its description as JSON beside it."""
         node = None
-        project = self.session.project if self.session is not None else None
+        session = session or self.session
+        project = session.project if session is not None else None
         if project is not None and project.id == event.get("project"):
             node = project.nodes.get(event["node"])
         who = folder_name((node.meta.get("by") if node else None) or (project.info.get("owner") if project else None))
@@ -448,6 +494,21 @@ class ArtVoice:
             self._publish("art", self.state())
         except Exception:  # noqa: BLE001 - the window is a nicety; drawing carries on
             log.warning("art state publish failed", exc_info=True)
+
+
+def _warm_voice_model() -> None:
+    """Load the voice model again after a check (Ollama holds one model): ~1.9 s, off the speaking path."""
+    import urllib.request
+    from homeai.art.patcher import MODEL, OLLAMA
+    payload = {"model": MODEL, "messages": [{"role": "user", "content": "ok"}], "stream": False, "keep_alive": -1,
+               "options": {"num_predict": 1}}
+    try:
+        req = urllib.request.Request(f"{OLLAMA}/api/chat", data=json.dumps(payload).encode(),
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=120) as reply:
+            reply.read()
+    except OSError as exc:
+        log.warning("could not reload the voice model: %s", exc)
 
 
 def build_studio(owner: str, notify: Callable[[dict], None]):

@@ -58,7 +58,9 @@ CASES = [
     ("new rider", {}, "draw a dragon with a samurai riding on its back",
      [lambda s, c: count(s, "subject") == 1 or "not one subject",
       lambda s, c: has_word(s, "samurai") or "no samurai",
-      lambda s, c: not has_word(s, "neon", "cyberpunk", "lighting") or "invented a look"]),
+      lambda s, c: not has_word(s, "neon", "cyberpunk", "lighting") or "invented a look",
+      # prompt examples leaked into this case twice ("red armor", "a blue cape"), 2026-11-08
+      lambda s, c: not has_word(s, "red", "blue", "cape", "armor", "armour", "knight", "horse") or "invented details"]),
     ("red merges", DRAGON, "make the dragon red",
      [lambda s, c: "red" in text(s, "A") or f"A is {text(s, 'A')!r}",
       lambda s, c: count(s) == 4 or f"{count(s)} features (added one?)"]),
@@ -89,6 +91,17 @@ CASES = [
      [lambda s, c: has_word(s, "battleship") or "no battleship", lambda s, c: count(s, "subject") == 1 or "subjects",
       lambda s, c: "samurai" not in text(s, "A") or "samurai copied into A",
       lambda s, c: "dragon" in text(s, "A") or f"lost the dragon: A is {text(s, 'A')!r}"]),
+    ("samurai rides", {}, "draw a samurai with red armor riding a dragon",      # live 2026-11-08: ops with no text
+     [lambda s, c: count(s, "subject") == 1 or "subjects", lambda s, c: has_word(s, "samurai") or "no samurai",
+      lambda s, c: has_word(s, "dragon") or "no dragon", lambda s, c: has_word(s, "red") or "lost red armor",
+      lambda s, c: has_word(s, "riding", "back", "astride", "on the dragon", "on a dragon") or "lost riding",
+      lambda s, c: count(s) <= 3 or "invented features",
+      lambda s, c: not has_word(s, "nowhere", "unspecified") or "placeholder"]),
+    ("new green", {"features": [{"id": "A", "kind": "subject", "text": "a single dragon"},
+                                {"id": "B", "kind": "element", "text": "one samurai in red armor sitting on the dragon's back"}],
+                   "aspect": "square"}, "make the dragon green",
+     [lambda s, c: "green" in text(s, "A") and "dragon" in text(s, "A") or f"A is {text(s, 'A')!r}",
+      lambda s, c: "samurai" in text(s, "B") or f"B is {text(s, 'B')!r}"]),
     ("chatter", BATTLE, "oh gosh, it's fake again. oh my gosh, what's that", NO_CHANGE),
     ("aside", BATTLE, "sure. yeah, you're talking with my husband", NO_CHANGE),
 ]

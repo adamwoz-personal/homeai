@@ -29,10 +29,11 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
 from homeai import gpu_mode as G  # noqa: E402
+from homeai.art import checker as CK  # noqa: E402
 from homeai.art import voice as AV  # noqa: E402
 from homeai.avatar.bus import EventBus  # noqa: E402
 
-SCRIPT = ("switch to art mode", "draw a samurai with red armor and a dragon behind him", "make the dragon green",
+SCRIPT = ("switch to art mode", "draw a samurai with red armor riding a dragon", "make the dragon green",
           "again", "turn off the lights", "I'm done drawing")
 
 
@@ -56,17 +57,27 @@ def main() -> int:
         fn()
         left.append(round(time.monotonic() - start, 1))
 
+    asked: list[str] = []
+
+    def checker(image, question):                           # the real vision model, counted
+        asked.append(question)
+        return CK.ollama_ask(image, question)
     art = AV.ArtVoice(switcher, AV.build_studio, bus.publish, viewer=AV.Viewer(socket=str(out / "events.sock"), shots=str(out / "window")),
-                      pictures=out / "Pictures", background=background)
+                      pictures=out / "Pictures", background=background, checker=checker)
     steps, checks, shots, saved = [], {}, 0, []
+    project_ids: set[str] = set()                            # only this run's pictures count (a leftover job may finish)
     try:
         for said in SCRIPT:
             start = time.monotonic()
             spoken = art.handle(said, "Adam")
             reply_s = round(time.monotonic() - start, 2)
             jobs = list(art.session.jobs) if art.session else []
-            while art.queue and any((j := art.queue.get(job)) and j.state not in ("done", "failed", "cancelled")
-                                    for job in jobs):
+
+            def busy():                                      # redraws after a failed check add jobs later
+                live = list(art.session.jobs) if art.session else []
+                return art.queue and (any((j := art.queue.get(job)) and j.state not in ("done", "failed", "cancelled")
+                                          for job in live) or art.status.startswith(("Redrawing", "Checking", "Drawing")))
+            while busy():
                 time.sleep(0.2)
             done_s = round(time.monotonic() - start, 2)
             row = {"said": said, "spoken": spoken, "reply_s": reply_s, "done_s": done_s,
@@ -74,21 +85,27 @@ def main() -> int:
             if spoken and jobs and art.active:
                 time.sleep(1.5)                              # the window polls at 10 fps
                 shots += 1
+            if art.session and art.session.project:
+                project_ids.add(art.session.project.id)
             steps.append(row)
             print(f"{said!r:58} -> {spoken!r} ({reply_s}s, done {done_s}s)", flush=True)
         saved = sorted(p.name for p in (out / "Pictures").rglob("*.png"))
         checks["entered by voice"] = steps[0]["spoken"] == AV.MSG_READY
         checks["window open in art mode"] = all(s["viewer_up"] for s in steps[:5])
-        checks["three pictures saved"] = len([n for n in saved if "samurai" in n]) == 3     # a queued job from an earlier session may also finish
+        ours = [n for n in saved if any(n.startswith(pid) for pid in project_ids)]
+        checks["three pictures saved"] = len(ours) == 3
         checks["window showed each picture"] = len(list((out / "window").glob("window-*.png"))) >= shots
         checks["features window drawn"] = any((out / "window").glob("features-*.png"))
-        checks["three pictures saved for Adam"] = len(list((out / "Pictures" / "adam").glob("*samurai*.png"))) == 3
-        checks["each with its description"] = len(list((out / "Pictures" / "adam").glob("*samurai*.json"))) == 3
+        adam = [p for p in (out / "Pictures" / "adam").glob("*") if any(p.name.startswith(pid) for pid in project_ids)]
+        checks["three pictures saved for Adam"] = len([p for p in adam if p.suffix == ".png"]) == 3
+        checks["each with its description"] = len([p for p in adam if p.suffix == ".json"]) == 3
         checks["house talk passed on"] = steps[4]["spoken"] is None
         checks["left by voice"] = steps[5]["spoken"] == AV.MSG_LEFT
         checks["window closed"] = not unit_active(AV.VIEWER_UNIT)
         checks["back in voice mode"] = switcher.mode() == "voice"
         checks["coder healthy"] = switcher.coder_healthy()
+        checks["pictures checked"] = len(asked) >= 6               # heads and riders, three pictures at least
+        checks["voice model back"] = switcher.voice_loaded()
         checks["Jarvis up"] = switcher.status().jarvis
     finally:
         if art.active:

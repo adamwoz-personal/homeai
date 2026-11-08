@@ -2035,3 +2035,14 @@ Bake-off and routines (2026-11-06):
 - A voice-ID phrase the parser didn't know went to the agent, which invented a 30-minute "re-enrollment" timer.
   Fixed: re-enrol/enrol/re-register/retrain/update my voice(s). A weak-but-closest owner may refresh their own
   profile (not confidently someone else); a different voice still can't take the name.
+
+## Structured outputs: what's required is what you get (2026-11-08)
+- With only "op" required, llama31-voice sent bare `{"op": "add", "kind": "subject"}` for a plain sentence
+  (0/5). Requiring "text" made it drop "id" instead (32/45). Requiring every field (empty string when unused)
+  fixed both (48/48). Lesson: with Ollama structured outputs, mark every field required and say what to put
+  in unused ones.
+- Concrete examples in a prompt leak into answers on an 8B model ("red armor", "a blue cape" appeared in
+  sentences that never said them). Keep rules abstract and add an eval check for invented words.
+- A deterministic net beats more prompt for one visible failure: dropped colours are put back in code.
+- An eval that only checks "has a samurai and a dragon" passed while the live picture lost "red armor" and
+  "riding": eval checks must cover every detail the sentence gives.
