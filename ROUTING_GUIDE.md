@@ -4,7 +4,7 @@
 with Claude (paid). Updated as evidence accumulates. Every rule here comes from an
 observed outcome on this box, not from theory.
 
-Last updated: 2026-11-07
+Last updated: 2026-11-08
 
 ---
 
@@ -2046,3 +2046,7 @@ Bake-off and routines (2026-11-06):
 - A deterministic net beats more prompt for one visible failure: dropped colours are put back in code.
 - An eval that only checks "has a samurai and a dragon" passed while the live picture lost "red armor" and
   "riding": eval checks must cover every detail the sentence gives.
+- 2026-11-08 (F5 multi-subject bake-off): a model that draws nearly the same picture for every seed (Boogu,
+  Krea, Z-Image) defeats "redraw with a new seed": the defect comes back. Measure seed variety along with
+  defect rates before pairing a model with the F4 checker. Count checks also miss what counting can't see
+  (scale, a wizard drawn as a second knight): keep looking at the sheets.

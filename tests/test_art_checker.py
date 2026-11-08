@@ -177,3 +177,15 @@ def test_daemon_checks_pictures_unless_turned_off(assistant, monkeypatch):
     assert assistant._build_art().checker is CK.ollama_ask
     assistant.cfg = dataclasses.replace(assistant.cfg, art=ArtConfig(voice=True, check=False))
     assert assistant._build_art().checker is None
+
+
+def test_the_multi_subject_bakeoff_asks_what_its_scenes_promise():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools" / "art"))
+    from tools.art import bakeoff_multi as B
+    got = {s: [(c.kind, c.expect) for c in B.checks_of(s)] for s in B.SCENES}
+    assert got == {"rider": [("heads", 1), ("riders", 1)], "two_riders": [("heads", 1), ("riders", 2)],
+                   "battleship": [("heads", 1)], "two_people": [("humans", 2)],
+                   "fruit": [("apples", 3), ("pears", 2)]}
+    assert B.prompt_of("battleship").text.startswith("A single green dragon with one head.")
