@@ -840,7 +840,13 @@ class VoiceAssistant:
         if not name or self.voice_id is None:
             return False
         existing = self.voice_id.registry.get(name)
-        return existing is not None and (ident is None or ident.name != existing.name)
+        if existing is None or (ident is not None and ident.name == existing.name):
+            return False
+        # A weak profile is why people re-enrol: Adam's own voice can score below the threshold. Closest to that
+        # profile and not confidently someone else lets them refresh it; a different voice still can't.
+        close = (ident is not None and ident.best == existing.name
+                 and ident.score >= self.voice_id.cfg.different_below)
+        return not close
 
     def _end_enrolment(self) -> None:
         if self._enrolment is not None and self._enrolment.method == "read":

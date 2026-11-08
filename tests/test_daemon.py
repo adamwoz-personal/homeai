@@ -945,6 +945,13 @@ def test_another_voice_cannot_take_an_existing_name(voiced) -> None:
     assert voiced.voice_id.registry.get("Adam").embedding.tolist() == pytest.approx(ADAM.tolist())
 
 
+def test_adam_with_a_weak_profile_can_still_re_enrol(voiced) -> None:
+    import homeai.voice_id as vid
+    weak_adam = _unit(0.4, 0, 0.92)                 # closest to Adam, below the threshold, not someone else
+    _, spoken = _speak_as(voiced, weak_adam, "Hey Jarvis, re-enroll my voice, Adam.")
+    assert spoken == [vid.MSG_ENROL_HOW.format(name="Adam")]
+
+
 def test_adam_can_re_enrol_himself(voiced) -> None:
     import homeai.voice_id as vid
     _, spoken = _speak_as(voiced, ADAM, "Hey Jarvis, remember my voice as Adam.")

@@ -71,7 +71,9 @@ MSG_WHO_NOBODY = "I don't know anyone's voice yet. Say: remember my voice as, an
 MSG_FORGOTTEN = "Okay, {name}. I've forgotten your voice."
 MSG_FORGET_UNKNOWN = "I don't recognise your voice, so there's nothing to forget."
 
-_ENROL = re.compile(r"\b(?:remember|learn|memori[sz]e|save)\b.{0,20}\bmy voice\b", re.I)
+# "re-enroll my voices, Adam" went to the agent, which set a 30-minute timer called re-enrollment (2026-11-08).
+_ENROL = re.compile(r"\b(?:remember|learn|memori[sz]e|save|re-? ?enrol+s?|enrol+s?|in ?roll|re-? ?register|redo|"
+                    r"re-? ?train|re-? ?learn|re-? ?record|update|refresh)\b.{0,20}\bmy voices?\b", re.I)
 _WORD = re.compile(r"[a-z][a-z'\-]*", re.I)
 # Words that can sit between "my voice" and the name. Whisper hears "as
 # Adam" as "is Adam" (live 2026-10-08), so this is generous on purpose.
@@ -81,7 +83,7 @@ _FILLER = {"as", "is", "it's", "its", "for", "under", "with", "to", "be", "i", "
            "yeah", "sure", "hi", "hey", "hello", "you", "can", "should", "remember"}
 _WHO = re.compile(r"\b(?:who am i|do you know who i am|do you recogni[sz]e (?:me|my voice)|"
                   r"who(?:'s| is) (?:this|speaking|talking))\b", re.I)
-_ENROL_MORE = re.compile(r"\b(?:register\b.{0,12}\b(?:me|my voice|myself)|"
+_ENROL_MORE = re.compile(r"\b(?:(?:re-? ?)?(?:register|enrol+)\b.{0,12}\b(?:me|my voice|myself)|"
                          r"(?:create|make|set up|setup|add)\b.{0,12}\b(?:voice )?profile|"
                          r"(?:learn|know) (?:who i am|my voice))\b", re.I)
 _NAME_AFTER = re.compile(r"\b(?:as|called|named|i'?m|i am)\s+([a-z][a-z'\-]*)", re.I)
@@ -120,7 +122,7 @@ def parse_command(text: str) -> Command | None:
     if _WHO.search(text):
         return Command("who")
     if _ENROL.search(text):
-        after = re.split(r"\bmy voice\b", text, maxsplit=1, flags=re.I)[-1]
+        after = re.split(r"\bmy voices?\b", text, maxsplit=1, flags=re.I)[-1]
         return Command("enrol", extract_name(after))
     if _ENROL_MORE.search(text):
         named = _NAME_AFTER.search(text)

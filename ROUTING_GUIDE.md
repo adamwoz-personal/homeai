@@ -2030,3 +2030,8 @@ Bake-off and routines (2026-11-06):
 - The child's words and Adam's arrived in one recording (scores 0.52 and 0.44 vs Adam). Whole-sentence
   speaker checks can't split those; only per-segment scoring could (ART_FEATURES_PLAN S1, not built).
 - Policy additions (kid-safe steering) belong in the prompt, not in the user-visible model of the picture.
+
+## "Re-enroll my voices" set an Alexa timer (2026-11-08)
+- A voice-ID phrase the parser didn't know went to the agent, which invented a 30-minute "re-enrollment" timer.
+  Fixed: re-enrol/enrol/re-register/retrain/update my voice(s). A weak-but-closest owner may refresh their own
+  profile (not confidently someone else); a different voice still can't take the name.

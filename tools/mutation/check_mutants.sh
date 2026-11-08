@@ -82,7 +82,7 @@ MUTANTS=(
   "spec-describe-reads-all|homeai/art/prompt_spec.py|s/        elif len(str(shown).split()) <= 4:/        elif True:/|tests/test_art_prompt_spec.py -k describe"
   "enrol-more-ways-off|homeai/voice_id.py|s/    if _ENROL_MORE.search(text):/    if False:/|tests/test_voice_id.py -k more_ways"
   "enrol-always-talk|homeai/voice_id.py|s/        return \"read\"/        return \"talk\"/|tests/test_voice_id.py -k talk_or_read"
-  "enrol-name-not-guarded|homeai/daemon.py|s/        return existing is not None and (ident is None or ident.name != existing.name)/        return False/|tests/test_daemon.py -k existing_name"
+  "enrol-name-not-guarded|homeai/daemon.py|s/^        if existing is None or (ident is not None and ident.name == existing.name):$/        if True:/|tests/test_daemon.py -k existing_name"
   "enrol-offer-any-voice|homeai/daemon.py|s/            same_voice = not enrolment.offered or self._strangers.matches(self._offer_voice, emb)/            same_voice = True/|tests/test_daemon.py -k must_come_from"
   "enrol-script-not-cleared|homeai/daemon.py|s/            self.presence.publish(\"script\", {\"text\": \"\"})/            pass/|tests/test_daemon.py -k script"
   "enrol-script-not-shown|homeai/daemon.py|s/            self.presence.publish(\"script\", {\"text\": vid.ENROL_SCRIPT})/            pass/|tests/test_daemon.py -k reading_a_script"
@@ -655,6 +655,8 @@ MUTANTS=(
   "daemon-art-silent-speaks|homeai/daemon.py|s/^        if reply == \"\":$/        if False:/|tests/test_art_voice.py -k stays_quiet_for_another"
   "art-mishear-mize|homeai/art/voice.py|s/mize/mxze/|tests/test_art_voice.py -k misheard"
   "art-what-skips-meta|homeai/art/session.py|s/node.meta.get(\"prompt\") or //|tests/test_art_features.py -k hidden_steering"
+  "vid-reenrol-voices-missed|homeai/voice_id.py|s/my voices?/my voice/|tests/test_voice_id.py -k more_ways"
+  "daemon-weak-owner-cannot-reenrol|homeai/daemon.py|s/^        return not close$/        return True/|tests/test_daemon.py -k weak_profile"
 )
 
 filter="${1:-}"

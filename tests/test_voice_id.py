@@ -143,12 +143,18 @@ def test_extract_name(answer, name):
 
 @pytest.mark.parametrize("said, name", [("register me", None), ("register my voice", None),
                                         ("create a profile for me", None), ("set up my voice profile", None),
-                                        ("register me as Sam", "Sam"), ("make a profile, I'm Lily", "Lily")])
+                                        ("register me as Sam", "Sam"), ("make a profile, I'm Lily", "Lily"),
+                                        # live 2026-11-08: this one set a 30-minute Alexa timer instead
+                                        ("Hey Jarvis, re-enroll my voices, Adam.", "Adam"),
+                                        ("reenroll my voice", None), ("re enroll me", None),
+                                        ("enroll my voice as Adam", "Adam"), ("update my voice", None),
+                                        ("re-register me as Adam", "Adam"), ("retrain my voice, Adam", "Adam")])
 def test_more_ways_to_ask_for_enrolment(said, name):
     assert parse_command(said) == Command("enrol", name)
 
 
-@pytest.mark.parametrize("said", ["register the car", "create a shopping list", "what's my profile picture"])
+@pytest.mark.parametrize("said", ["register the car", "create a shopping list", "what's my profile picture",
+                                  "update the shopping list", "set a timer for my voice lesson"])
 def test_not_enrolment(said):
     assert parse_command(said) is None
 
