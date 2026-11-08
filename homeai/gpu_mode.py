@@ -32,6 +32,7 @@ sequencing and rollback are unit-tested without touching the machine.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import fcntl
 import json
 import os
@@ -66,6 +67,7 @@ DEFAULT_CPU_MOE = 0
 CODER_START_TIMEOUT_S = 300.0
 UNLOAD_TIMEOUT_S = 30.0
 LOAD_ATTEMPTS = 3
+PAUSE_RELOADS = 6        # after a benchmark: tries to get the voice model wholly back on the GPU
 
 
 class ModeError(Exception):
@@ -372,6 +374,65 @@ class ModeSwitcher:
             self.log(f"WARNING: something reloaded {VOICE_MODEL}; the coder may be slow")
         self.log(f"coding mode: KV {kv}, experts on CPU {cpu_moe}"
                  + (f", context {ctx}" if ctx else ""))
+
+    def voice_on_gpu(self) -> bool:
+        """The voice model is loaded and none of it sits on the CPU (image jobs pushed 13% there, 2026-11-05)."""
+        code, body = self.sys.http(f"{OLLAMA}/api/ps")
+        try:
+            models = json.loads(body).get("models", []) if code == 200 else []
+        except (ValueError, AttributeError):
+            return False
+        return any(m.get("name", "").split(":")[0] == VOICE_MODEL and m.get("size_vram") == m.get("size")
+                   for m in models)
+
+    @contextlib.contextmanager
+    def coder_paused(self, voice_off: bool = False):
+        """The coder stopped for a benchmark's ``with`` block (tools that run their own ComfyUI).
+
+        Only from voice mode, and not while the coder is answering someone. ``voice_off`` also stops
+        Jarvis and unloads the voice model, for image models that need the whole card (Adam agreed).
+        Afterwards, whatever happened in the block: the coder, then the voice model reloaded until it
+        sits wholly on the GPU, then Jarvis.
+        """
+        mode = self.mode()
+        if mode != "voice":
+            raise ModeError(f"in {mode} mode; benchmarks start from voice mode")
+        if self.coder_busy():
+            raise ModeError("the coder is busy; try again when it's idle")
+        self.log(f"stopping {CODER_SERVICE} for the benchmark")
+        self.sys.systemctl("stop", CODER_SERVICE)
+        try:
+            if voice_off:
+                self.log(f"stopping {VOICE_SERVICE} (this model needs the whole card)")
+                self.sys.systemctl("stop", VOICE_SERVICE)
+                self._unload_voice()
+            yield self
+        finally:
+            self._resume_after_pause()
+
+    def _resume_after_pause(self) -> None:
+        try:
+            self.log(f"starting {CODER_SERVICE}")
+            self.sys.systemctl("start", CODER_SERVICE)
+            if not self._wait(self.coder_healthy, CODER_START_TIMEOUT_S):
+                self.log(f"WARNING: {CODER_SERVICE} is not healthy; the voice model loads on Jarvis's next question")
+                return
+            for attempt in range(1, PAUSE_RELOADS + 1):
+                # Reload even if loaded: it may sit partly on the CPU. The coder can still be claiming VRAM
+                # after /health answers, so a load can fail; wait and try again.
+                try:
+                    self._unload_voice()
+                    self.sys.sleep(3)
+                    self._load_voice()
+                except ModeError as exc:
+                    self.log(f"voice model reload {attempt}: {exc}")
+                if self.voice_on_gpu():
+                    return
+                self.sys.sleep(10)
+            self.log(f"WARNING: {VOICE_MODEL} is not wholly on the GPU; check: ollama ps")
+        finally:
+            self.log(f"starting {VOICE_SERVICE}")
+            self.sys.systemctl("start", VOICE_SERVICE)
 
     def voice(self) -> None:
         self._stop_comfy()

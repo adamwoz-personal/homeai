@@ -69,7 +69,11 @@ class FakeSystem:
 
     def http(self, url, payload=None, timeout=10.0):
         if url.endswith("/api/ps"):
-            models = [{"name": "llama31-voice:latest"}] if self.voice_is_loaded else []
+            cpu = getattr(self, "voice_on_cpu", 0)
+            models = ([{"name": "llama31-voice:latest", "size": 10, "size_vram": 10 - cpu}]
+                      if self.voice_is_loaded else [])
+            if cpu and payload is None and getattr(self, "cpu_heals", False) and "ollama keep_alive=-1" in self.actions:
+                self.voice_on_cpu = 0
             return 200, json.dumps({"models": models})
         if url.endswith("/api/generate"):
             self.actions.append(f"ollama keep_alive={payload['keep_alive']}")
@@ -374,3 +378,65 @@ class TestRestartComfy:
         fake.comfy_healthy = False
         with pytest.raises(G.ModeError, match="after a restart"):
             sw.restart_comfy()
+
+
+# -- benchmarks: the coder paused for a with block (code review item 3) ---------------------------------
+
+def paused(fs, **kw):
+    return G.ModeSwitcher(fs, log=lambda line: None).coder_paused(**kw)
+
+
+def test_coder_paused_stops_the_coder_and_brings_everything_back():
+    fs = FakeSystem()
+    with paused(fs):
+        assert fs.actions == [f"systemctl stop {G.CODER_SERVICE}"] and fs.jarvis
+    assert fs.actions[1:] == [f"systemctl start {G.CODER_SERVICE}", "ollama keep_alive=0", "ollama keep_alive=-1",
+                              f"systemctl start {G.VOICE_SERVICE}"]
+    assert fs.coder_up and fs.voice_is_loaded and fs.jarvis
+
+
+def test_voice_off_stops_jarvis_and_unloads_the_voice_model_first():
+    fs = FakeSystem()
+    with paused(fs, voice_off=True):
+        assert fs.actions == [f"systemctl stop {G.CODER_SERVICE}", f"systemctl stop {G.VOICE_SERVICE}",
+                              "ollama keep_alive=0"]
+        assert not fs.jarvis and not fs.voice_is_loaded
+    assert fs.jarvis and fs.voice_is_loaded and fs.coder_up
+
+
+def test_a_failing_benchmark_still_gets_everything_back():
+    fs = FakeSystem()
+    with pytest.raises(RuntimeError, match="boom"):
+        with paused(fs, voice_off=True):
+            raise RuntimeError("boom")
+    assert fs.jarvis and fs.voice_is_loaded and fs.coder_up
+
+
+@pytest.mark.parametrize("kw, why", [({"coder_busy": True}, "busy"), ({"comfy": True}, "art mode"),
+                                     ({"dropin": True}, "coding mode")])
+def test_coder_paused_refuses_unless_idle_in_voice_mode(kw, why):
+    fs = FakeSystem(**kw)
+    with pytest.raises(G.ModeError, match=why):
+        with paused(fs):
+            pass
+    assert fs.actions == []
+
+
+def test_a_voice_model_left_on_the_cpu_is_reloaded_until_it_is_on_the_gpu():
+    fs = FakeSystem()
+    fs.voice_on_cpu, fs.cpu_heals = 1, False
+    with paused(fs):
+        pass
+    assert fs.actions.count("ollama keep_alive=-1") == G.PAUSE_RELOADS and fs.jarvis
+    fs = FakeSystem()
+    fs.voice_on_cpu, fs.cpu_heals = 1, True
+    with paused(fs):
+        pass
+    assert fs.actions.count("ollama keep_alive=-1") == 1
+
+
+def test_a_coder_that_never_comes_back_still_gets_jarvis_back():
+    fs = FakeSystem(voice_loaded=False, coder_starts=False)
+    with paused(fs):
+        pass
+    assert fs.actions[-1] == f"systemctl start {G.VOICE_SERVICE}" and "ollama keep_alive=-1" not in fs.actions

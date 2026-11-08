@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from homeai.httpjson import OLLAMA, post_json  # noqa: E402
+from homeai.httpjson import OLLAMA, post_json  # noqa: E402,F401 - OLLAMA re-exported for contention_bench
 
 ROOT = Path.home() / ".local/share/homeai/comfyui"
 URL = "http://127.0.0.1:8188"
@@ -306,67 +306,10 @@ class Comfy:
         http(f"{URL}/free", {"unload_models": True, "free_memory": True})
 
 
-def coder_idle() -> bool:
-    try:
-        return not any(s.get("is_processing") for s in http("http://127.0.0.1:8080/slots", timeout=5))
-    except (urllib.error.URLError, OSError, ValueError):
-        return True
-
-
-def voice_on_gpu() -> bool:
-    """True if the voice model is loaded and wholly on the GPU."""
-    models = http(f"{OLLAMA}/api/ps").get("models", [])
-    return any(m["name"].startswith(VOICE) and m.get("size_vram") == m.get("size") for m in models)
-
-
-def restore_voice() -> bool:
-    """Reload the voice model once the coder is up, the order homeai-mode uses: image jobs can push it partly onto the
-    CPU (13% on 2026-11-05), which slows Jarvis until it is reloaded."""
-    end = time.monotonic() + 180
-    while time.monotonic() < end:
-        try:
-            http("http://127.0.0.1:8080/health", timeout=3)
-            break
-        except (urllib.error.URLError, OSError, ValueError):
-            time.sleep(2)
-    ok = False
-    for _ in range(6):                  # the coder can still be claiming VRAM after /health answers: Ollama then fails
-        try:
-            http(f"{OLLAMA}/api/generate", {"model": VOICE, "keep_alive": 0}, timeout=30)
-            time.sleep(3)
-            http(f"{OLLAMA}/api/generate", {"model": VOICE, "keep_alive": -1}, timeout=120)
-            ok = voice_on_gpu()
-        except (urllib.error.URLError, OSError):
-            ok = False
-        if ok:
-            break
-        time.sleep(10)
-    print("voice model", "back on the GPU" if ok else "NOT fully on the GPU: check `ollama ps`", flush=True)
-    return ok
-
-
-class CoderStopped:
-    """llama-server stopped for the ``with`` block and started again after. Refuses if the coder is busy.
+def CoderStopped(voice_off: bool = False):  # noqa: N802 - kept the name the tools use
+    """The coder stopped for the ``with`` block, then voice mode restored: ``gpu_mode.ModeSwitcher.coder_paused``.
 
     ``voice_off`` also stops Jarvis and unloads the voice model, for models that need the whole card (Adam agreed).
     """
-
-    def __init__(self, voice_off: bool = False) -> None:
-        self.voice_off = voice_off
-
-    def __enter__(self):
-        if not coder_idle():
-            raise RuntimeError("the coder is busy; try again when it's idle")
-        subprocess.run(["systemctl", "--user", "stop", "llama-server"], check=True)
-        if self.voice_off:
-            subprocess.run(["systemctl", "--user", "stop", "homeai"], check=True)
-            http(f"{OLLAMA}/api/generate", {"model": VOICE, "keep_alive": 0}, timeout=30)
-        return self
-
-    def __exit__(self, *exc) -> None:
-        try:
-            subprocess.run(["systemctl", "--user", "start", "llama-server"], check=True)
-            restore_voice()
-        finally:                        # whatever else went wrong, Jarvis comes back
-            if self.voice_off:
-                subprocess.run(["systemctl", "--user", "start", "homeai"], check=False)
+    from homeai import gpu_mode as G
+    return G.ModeSwitcher(G.System(), log=lambda line: print("  ", line, flush=True)).coder_paused(voice_off)

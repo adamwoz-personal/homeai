@@ -699,6 +699,12 @@ MUTANTS=(
   "fsutil-mode-ignored|homeai/fsutil.py|s/0o666 if mode is None else mode/0o666/|tests/test_fsutil.py"
   "fsutil-umask-trims-secret|homeai/fsutil.py|s/^            os.chmod(tmp, mode) .*/            pass/|tests/test_fsutil.py"
   "speaker-profiles-world-readable|homeai/speaker.py|s/indent=1, mode=0o600)/indent=1)/|tests/test_speaker.py"
+  "pause-any-mode|homeai/gpu_mode.py|s/^        if mode != \"voice\":$/        if False:/|tests/test_gpu_mode.py -k coder_paused"
+  "pause-no-restore|homeai/gpu_mode.py|s/^            self._resume_after_pause()$/            pass/|tests/test_gpu_mode.py"
+  "pause-jarvis-left-off|homeai/gpu_mode.py|s/^            self.sys.systemctl(\"start\", VOICE_SERVICE)$/            pass/|tests/test_gpu_mode.py"
+  "pause-trusts-a-loaded-voice|homeai/gpu_mode.py|s/^                if self.voice_on_gpu():$/                if True:/|tests/test_gpu_mode.py -k on_the_gpu"
+  "pause-voice-off-ignored|homeai/gpu_mode.py|s/^            if voice_off:$/            if False:/|tests/test_gpu_mode.py -k voice_off"
+  "gpu-check-ignores-cpu|homeai/gpu_mode.py|s/ and m.get(\"size_vram\") == m.get(\"size\")//|tests/test_gpu_mode.py -k on_the_gpu"
   "ha-env-world-readable|homeai/install/ha_setup.py|s/TOKEN={token}\\\\n\", mode=0o600)/TOKEN={token}\\\\n\")/|tests/"
 )
 
