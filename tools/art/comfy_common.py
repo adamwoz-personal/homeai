@@ -11,15 +11,19 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import threading
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from homeai.httpjson import OLLAMA, post_json  # noqa: E402
+
 ROOT = Path.home() / ".local/share/homeai/comfyui"
 URL = "http://127.0.0.1:8188"
-OLLAMA = "http://127.0.0.1:11434"
 MODELS = ("klein", "klein_base", "zimage", "sdxl", "dreamshaper", "qwen", "qwen_turbo", "krea", "ernie", "hidream", "chroma",
           "moss", "boogu", "flux3", "klein9", "klein9_base", "ideogram", "animagine", "noobai")
 # Adam 2026-11-05: SDXL out. 2026-11-06, after the bake-off: Ideogram blanked 39 of 60 ordinary prompts with a safety
@@ -207,12 +211,7 @@ def comfy_command(extra: tuple[str, ...] = ()) -> list[str]:
             "--disable-auto-launch", "--disable-pinned-memory", *extra]
 
 
-def http(url: str, payload: dict | None = None, timeout: float = 30.0) -> dict:
-    data = json.dumps(payload).encode() if payload is not None else None
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"} if data else {})
-    with urllib.request.urlopen(req, timeout=timeout) as reply:
-        body = reply.read()
-    return json.loads(body) if body else {}
+http = post_json
 
 
 def vram_used_gb() -> float:

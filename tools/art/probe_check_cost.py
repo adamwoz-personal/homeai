@@ -39,7 +39,7 @@ from homeai.art import workflows  # noqa: E402
 from homeai.art.patcher import MODEL as VOICE_MODEL  # noqa: E402
 from tools.art.probe_vision_check import ask  # noqa: E402
 
-OLLAMA = "http://127.0.0.1:11434"
+from homeai.httpjson import OLLAMA  # noqa: E402
 PROMPT = ("A single red dragon with one head and four legs, flying. One samurai in full armor sitting on the "
           "dragon's back. Over the ocean.")
 QUESTION = "How many heads does the dragon have? Answer with a number only."

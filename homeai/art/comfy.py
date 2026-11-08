@@ -12,6 +12,8 @@ import json
 import time
 import urllib.error
 import urllib.request
+
+from homeai.httpjson import post_json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -45,12 +47,7 @@ class Result:
     seconds: float
 
 
-def _http(url: str, payload: dict | None = None, timeout: float = 30.0) -> dict:
-    data = json.dumps(payload).encode() if payload is not None else None
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"} if data else {})
-    with urllib.request.urlopen(req, timeout=timeout) as reply:
-        body = reply.read()
-    return json.loads(body) if body else {}
+_http = post_json
 
 
 def dangling_links(graph: dict) -> list[str]:

@@ -178,7 +178,7 @@ MUTANTS=(
   "patch-seed-allowed|homeai/art/patcher.py|s/        if \"seed\" in patch or \"strength\" in patch:/        if False:/|tests/test_art_prompt_spec.py"
   "patch-empty-allowed|homeai/art/patcher.py|s/        if not isinstance(patch, dict) or not patch:/        if not isinstance(patch, dict):/|tests/test_art_prompt_spec.py"
   "patch-subject-null-kept|homeai/art/patcher.py|s/            del patch\[\"subject\"\]/            pass/|tests/test_art_prompt_spec.py"
-  "patch-unpins-voice|homeai/art/patcher.py|s/\"keep_alive\": -1,/\"keep_alive\": \"5m\",/|tests/test_art_prompt_spec.py"
+  "patch-unpins-voice|homeai/art/patcher.py|s/keep_alive=-1, options/keep_alive=\"5m\", options/|tests/test_art_prompt_spec.py"
   "patch-shows-seed|homeai/art/patcher.py|s/and k not in (\"seed\", \"strength\")}/}/|tests/test_art_prompt_spec.py"
   "grammar-house-to-art|homeai/art/grammar.py|s/    if HOUSE.search(said):/    if False:/|tests/test_art_grammar.py"
   "grammar-make-it-new|homeai/art/grammar.py|s/ (?!(it\x7c/ (?!(xx\x7c/|tests/test_art_grammar.py"
@@ -688,6 +688,12 @@ MUTANTS=(
   "grid-check-not-recorded|homeai/art/session.py|s/^        self.project.note(node_id, checked=list(issues))$/        pass/|tests/test_art_checker.py -k option"
   "grid-status-says-best|homeai/art/voice.py|s/if issues and len(grid) > 1 and/if False and/|tests/test_art_checker.py -k not_redrawn_while"
   "viewer-option-problems-hidden|homeai/art/viewer.py|s/if problems else str/if False else str/|tests/test_art_checker.py -k viewer_labels"
+  "httpjson-get-posts|homeai/httpjson.py|s/if payload is not None else None/if True else None/|tests/test_httpjson.py"
+  "httpjson-no-content-type|homeai/httpjson.py|s/{\"Content-Type\": \"application\/json\"} if data else {}/{}/|tests/test_httpjson.py"
+  "httpjson-empty-body-crashes|homeai/httpjson.py|s/ if body else {}$//|tests/test_httpjson.py"
+  "httpjson-unpinned|homeai/httpjson.py|s/\"keep_alive\": keep_alive}/\"keep_alive\": 0}/|tests/test_httpjson.py"
+  "httpjson-format-dropped|homeai/httpjson.py|s/payload\[\"format\"\] = fmt/pass/|tests/test_httpjson.py"
+  "checker-pins-vision|homeai/art/checker.py|s/keep_alive=\"2m\"/keep_alive=-1/|tests/test_httpjson.py"
 )
 
 filter="${1:-}"

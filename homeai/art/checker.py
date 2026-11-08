@@ -20,17 +20,15 @@ Pure apart from ``ollama_ask``.
 from __future__ import annotations
 
 import base64
-import json
 import logging
 import re
-import urllib.request
+from homeai import httpjson
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
 log = logging.getLogger("homeai.art.checker")
 
-OLLAMA = "http://127.0.0.1:11434"
 MODEL = "minicpm-v"
 MAX_REDRAWS = 3
 TIMEOUT_S = 60
@@ -112,10 +110,6 @@ def problems(image: Path, checks: list[Check], ask: Callable[[Path, str], str]) 
 
 
 def ollama_ask(image: Path, question: str, model: str = MODEL) -> str:
-    payload = {"model": model, "stream": False, "options": {"temperature": 0}, "keep_alive": "2m",
-               "messages": [{"role": "user", "content": question,
-                             "images": [base64.b64encode(Path(image).read_bytes()).decode()]}]}
-    req = urllib.request.Request(f"{OLLAMA}/api/chat", data=json.dumps(payload).encode(),
-                                 headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=TIMEOUT_S) as reply:
-        return json.loads(reply.read())["message"]["content"].strip()
+    messages = [{"role": "user", "content": question, "images": [base64.b64encode(Path(image).read_bytes()).decode()]}]
+    return httpjson.ollama_chat(model, messages, keep_alive="2m", options={"temperature": 0},
+                                timeout=TIMEOUT_S).strip()

@@ -43,10 +43,11 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+from homeai.httpjson import OLLAMA
+
 VOICE_SERVICE = "homeai.service"
 CODER_SERVICE = "llama-server.service"
 VOICE_MODEL = "llama31-voice"
-OLLAMA = "http://127.0.0.1:11434"
 CODER_HEALTH = "http://127.0.0.1:8080/health"
 DROPIN_NAME = "homeai-coding-mode.conf"
 COMFY_UNIT = "homeai-comfyui.service"

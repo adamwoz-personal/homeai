@@ -22,6 +22,8 @@ import urllib.error
 import urllib.request
 from typing import Any, Callable
 
+from homeai.httpjson import post_json
+
 log = logging.getLogger(__name__)
 
 
@@ -166,11 +168,8 @@ class OllamaHelper(Helper):
 
 
 def _post_json(url: str, body: dict, timeout: float) -> dict:
-    req = urllib.request.Request(url, data=json.dumps(body).encode(),
-                                 headers={"Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read())
+        return post_json(url, body, timeout)
     except urllib.error.HTTPError as exc:
         return {"error": f"HTTP {exc.code}: {exc.read()[:200].decode(errors='replace')}"}
 

@@ -32,7 +32,7 @@ sys.path.insert(0, str(REPO))
 
 from homeai import gpu_mode as G  # noqa: E402
 
-OLLAMA = "http://127.0.0.1:11434"
+from homeai.httpjson import OLLAMA  # noqa: E402
 # Labels by eye, checked at full size (thumbnails misled: a first pass called old-005 one-headed, and all
 # three vision models disagreed correctly). Per picture: riders on the dragon, dragon heads, seated astride.
 LABELS = {
