@@ -24,11 +24,9 @@ the latest ``art`` event on the event bus; the avatar window is not touched.
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
-import shutil
 import subprocess
 import sys
 import threading
@@ -37,6 +35,7 @@ from pathlib import Path
 from typing import Callable
 
 from homeai.art import grammar, policy
+from homeai.fsutil import atomic_copy, atomic_write_json
 
 log = logging.getLogger("homeai.art.voice")
 
@@ -444,17 +443,13 @@ class ArtVoice:
         try:
             folder.mkdir(parents=True, exist_ok=True)
             target = folder / export_name(event["project"], event["node"])
-            tmp = target.with_suffix(".png.tmp")
-            shutil.copyfile(event["image"], tmp)
-            os.replace(tmp, target)
+            atomic_copy(event["image"], target)
             if node is not None:
                 sidecar = {"project": event["project"], "node": node.id, "parent": node.parent, "by": who,
                            "instruction": node.instruction, "created": node.created, **{
                                k: node.meta.get(k) for k in ("prompt", "model", "seed", "size")},
                            "description": {k: v for k, v in node.spec.items() if k != "seed"}}
-                tmp_json = target.with_suffix(".json.tmp")
-                tmp_json.write_text(json.dumps(sidecar, indent=1))
-                os.replace(tmp_json, target.with_suffix(".json"))
+                atomic_write_json(target.with_suffix(".json"), sidecar, indent=1)
         except OSError as exc:
             log.warning("could not save the picture to %s: %s", folder, exc)
 

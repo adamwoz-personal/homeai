@@ -146,7 +146,7 @@ MUTANTS=(
   "comfy-down-generic|homeai/art/comfy.py|s/raise ComfyError(MSG_NOT_RUNNING, str(exc))/raise ComfyError(MSG_FAILED, str(exc))/|tests/test_art_comfy.py"
   "store-new-not-current|homeai/art/store.py|s/        self.info\[\"current\"\] = node.id$/        pass/|tests/test_art_store.py"
   "store-back-off-by-one|homeai/art/store.py|s/target = chain\[max(0, len(chain) - 1 - steps)\]/target = chain[max(0, len(chain) - steps)]/|tests/test_art_store.py"
-  "store-temp-left|homeai/art/store.py|s/        Path(tmp).unlink(missing_ok=True)/        pass/|tests/test_art_store.py"
+  "store-temp-left|homeai/fsutil.py|s/^        tmp.unlink(missing_ok=True)$/        pass/|tests/test_art_store.py"
   "store-damage-fatal|homeai/art/store.py|s/            except (ValueError, KeyError, TypeError) as exc:/            except KeyError as exc:/|tests/test_art_store.py"
   "store-schema-unchecked|homeai/art/store.py|s/info.get(\"schema\") != SCHEMA:/False:/|tests/test_art_store.py"
   "store-back-into-deleted|homeai/art/store.py|s/chain = \[n for n in self.lineage() if not n.deleted\]/chain = self.lineage()/|tests/test_art_store.py"
@@ -694,6 +694,12 @@ MUTANTS=(
   "httpjson-unpinned|homeai/httpjson.py|s/\"keep_alive\": keep_alive}/\"keep_alive\": 0}/|tests/test_httpjson.py"
   "httpjson-format-dropped|homeai/httpjson.py|s/payload\[\"format\"\] = fmt/pass/|tests/test_httpjson.py"
   "checker-pins-vision|homeai/art/checker.py|s/keep_alive=\"2m\"/keep_alive=-1/|tests/test_httpjson.py"
+  "fsutil-temp-left|homeai/fsutil.py|s/^        tmp.unlink(missing_ok=True)$/        pass/|tests/test_fsutil.py"
+  "fsutil-no-fsync|homeai/fsutil.py|s/^                os.fsync(handle.fileno())$/                pass/|tests/test_fsutil.py"
+  "fsutil-mode-ignored|homeai/fsutil.py|s/0o666 if mode is None else mode/0o666/|tests/test_fsutil.py"
+  "fsutil-umask-trims-secret|homeai/fsutil.py|s/^            os.chmod(tmp, mode) .*/            pass/|tests/test_fsutil.py"
+  "speaker-profiles-world-readable|homeai/speaker.py|s/indent=1, mode=0o600)/indent=1)/|tests/test_speaker.py"
+  "ha-env-world-readable|homeai/install/ha_setup.py|s/TOKEN={token}\\\\n\", mode=0o600)/TOKEN={token}\\\\n\")/|tests/"
 )
 
 filter="${1:-}"

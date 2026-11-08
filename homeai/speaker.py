@@ -18,14 +18,14 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import tempfile
 import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
+
+from homeai.fsutil import atomic_write_json
 
 log = logging.getLogger(__name__)
 
@@ -354,16 +354,8 @@ class SpeakerRegistry:
             if self._corrupt and self.path.exists():
                 self.path.replace(self.path.with_suffix(f".corrupt-{int(time.time())}"))
                 self._corrupt = False
-            fd, tmp = tempfile.mkstemp(dir=self.path.parent, prefix=".speakers-")
-            try:
-                with os.fdopen(fd, "w") as fh:
-                    json.dump(data, fh, indent=1)
-                os.chmod(tmp, 0o600)
-                os.replace(tmp, self.path)
-                self._stamp = self._file_stamp()
-            except BaseException:
-                Path(tmp).unlink(missing_ok=True)
-                raise
+            atomic_write_json(self.path, data, indent=1, mode=0o600)
+            self._stamp = self._file_stamp()
 
 
 def _find(profiles: dict, name: str) -> str | None:

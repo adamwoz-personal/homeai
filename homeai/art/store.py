@@ -13,13 +13,12 @@ Standard library only.
 from __future__ import annotations
 
 import json
-import os
 import re
-import shutil
-import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from homeai.fsutil import atomic_copy, atomic_write_json
 
 SCHEMA = 1
 ROOT = Path.home() / ".local/share/homeai/art/projects"
@@ -32,17 +31,7 @@ class StoreError(Exception):
 
 def write_json(path: Path, data: dict) -> None:
     """Write ``data`` so a crash leaves either the old file or the new one, never half of either."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w") as handle:
-            json.dump(data, handle, indent=1)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(tmp, path)
-    except BaseException:
-        Path(tmp).unlink(missing_ok=True)
-        raise
+    atomic_write_json(path, data, indent=1)
 
 
 def slug(text: str, limit: int = 30) -> str:
@@ -147,9 +136,7 @@ class Project:
         """Copy ``image`` in as the node's picture and mark it done."""
         node = self._node(node_id)
         target = self.image(node_id)
-        tmp = target.with_suffix(".png.tmp")
-        shutil.copyfile(image, tmp)
-        os.replace(tmp, target)
+        atomic_copy(image, target)
         node.state, node.meta = "done", {**node.meta, **meta}
         self._save_node(node)
         return node

@@ -38,6 +38,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Iterable
 
+from .fsutil import atomic_write_text
 from .ha_client import HAClient, HAError
 
 log = logging.getLogger("homeai.home")
@@ -167,9 +168,7 @@ def runtime_dir() -> Path:
 
 
 def _write_atomic(path: Path, text: str) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(text)
-    os.replace(tmp, path)
+    atomic_write_text(path, text)
 
 
 class EchoQuiet:

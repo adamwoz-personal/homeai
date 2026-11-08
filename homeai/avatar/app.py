@@ -25,6 +25,7 @@ import time
 import warnings
 from pathlib import Path
 
+from ..fsutil import atomic_write_json
 from .client import BusClient
 from .scene import Scene
 from .tour import TOUR, staged, tour_index
@@ -111,10 +112,7 @@ def load_geometry(path: Path = GEOMETRY_PATH) -> dict:
 def save_geometry(geo: dict, path: Path = GEOMETRY_PATH) -> None:
     """Atomic write; a failure is logged, never raised (it's only window placement)."""
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(geo))
-        os.replace(tmp, path)
+        atomic_write_json(path, geo)
     except OSError as exc:
         log.warning("could not save window geometry: %s", exc)
 

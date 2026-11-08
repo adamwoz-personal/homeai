@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Callable
 
 from .. import ha_client
+from ..fsutil import atomic_write_text
 from ..ha_client import HAAuthError, HAClient, HAError, HASettings
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -210,13 +211,7 @@ def write_env_file(path: Path, url: str, token: str) -> None:
     """Write HA_URL/HA_TOKEN atomically, mode 600 from the first byte."""
     if not token or any(c.isspace() for c in token):
         raise ValueError("the token must be one non-empty word")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as handle:
-        handle.write(f"HA_URL={url}\nHA_TOKEN={token}\n")
-    os.replace(tmp, path)
-    os.chmod(path, 0o600)
+    atomic_write_text(path, f"HA_URL={url}\nHA_TOKEN={token}\n", mode=0o600)
 
 
 def _prompt_token() -> str | None:

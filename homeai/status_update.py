@@ -14,12 +14,13 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
+
+from homeai.fsutil import atomic_write_json
 
 log = logging.getLogger("homeai.status_update")
 
@@ -90,10 +91,7 @@ class Ledger:
         data = self._read()
         data[person.lower()] = when
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = self.path.with_suffix(".tmp")
-            tmp.write_text(json.dumps(data))
-            os.replace(tmp, self.path)
+            atomic_write_json(self.path, data)
         except OSError as exc:
             log.warning("could not save the status ledger: %s", exc)
 
