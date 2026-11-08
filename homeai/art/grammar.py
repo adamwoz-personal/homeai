@@ -67,10 +67,32 @@ HOUSE = re.compile(r"\b(lights?|lamps?|timers?|alarms?|volume|music|song|thermos
                    r"fans?|doors?|locks?|echo|alexa|weather|remind(er)?|list|shopping|calendar|notes?)\b")
 
 
+# "Let's start with a new picture. Let's go with a medieval frigate..." was taken as an edit of the dragon
+# (Adam, 2026-11-07). A fresh start, with or without what to draw next.
+FRESH = re.compile(r"\b(?:start|begin|do|make|try|draw|want)?\s*(?:with |on )?(?:a )?(?:brand )?new "
+                   r"(?:picture|drawing|image|painting)\b[.,:;!]*\s*(?P<rest>.*)$")
+LEAD_IN = re.compile(r"^(?:of |with )?(?:(?:let'?s|we'?ll|i'?d like to|i want to) )?(?:go with|do|have|make it|try|draw|paint)?\s*"
+                     r"(?:(?:a )?(?:picture|drawing|image) of )?")
+# A complaint about what the model drew (extra heads, riders, merged limbs): redraw with new seeds, not the same one.
+COMPLAINT = re.compile(r"\b(?:ended up with|came out with|there'?s|it has|it'?s got|has|got) (?:a |an )?"
+                       r"(?:second|third|extra|another|two|three|four|multiple|too many)\b|"
+                       r"\b(?:extra|too many|second|third|two|three|duplicate) (?:heads?|riders?|legs?|arms?|tails?|"
+                       r"wings?|hands?|feet|eyes|people|faces?)\b|\b(?:merged|fused|melted|growing out of|"
+                       r"stuck to|attached to)\b|\bneeds? to go\b|\bcame out (?:wrong|weird|broken)\b")
+
+
+def is_complaint(text: str) -> bool:
+    return bool(COMPLAINT.search(_tidy(text)))
+
+
 def parse(text: str) -> Intent | None:
     said = _tidy(text)
     if not said:
         return None
+    fresh = FRESH.search(said)
+    if fresh:
+        rest = LEAD_IN.sub("", fresh.group("rest").strip()).strip(" .,")
+        return Intent("new", text=f"draw {rest}") if len(rest) > 2 else Intent("fresh")
     for kind, pattern in PATTERNS:
         match = pattern.match(said)
         if not match:

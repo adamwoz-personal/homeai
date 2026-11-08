@@ -63,8 +63,17 @@ def test_render_reads_as_sentences():
                      "palette": "blue", "lighting": "moonlit", "camera": "low angle", "negative": "people",
                      "aspect": "landscape"})
     assert out.text == ("A red fox, in deep snow. Ears up. Watercolour style, blue colours, moonlit lighting. "
-                        "Low angle. Avoid people.")
+                        "Low angle.")
+    assert "people" not in out.text, "negatives aren't rendered: naming them adds them (FLUX has no negative prompt)"
     assert (out.width, out.height) == (1216, 832)
+
+
+def test_render_does_not_double_words():
+    out = PS.render({"subject": "a dragon", "style": "cyberpunk style", "palette": "neon colours",
+                     "lighting": "high contrast lighting"})
+    assert out.text == "A dragon. Cyberpunk style, neon colours, high contrast lighting."
+    assert PS.render({"subject": "a fox", "lighting": "soft light"}).text == "A fox. Soft light."
+    assert "soft light lighting" not in PS.render({"subject": "a fox", "lighting": "soft light"}).text
 
 
 def test_render_keeps_names_as_written():

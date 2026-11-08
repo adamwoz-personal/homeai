@@ -134,6 +134,16 @@ class Rendered:
     height: int
 
 
+def _with_word(value: str | None, word: str, already: tuple[str, ...] = ()) -> str:
+    """"blue" -> "blue colours", but "neon colours" stays as it is (it rendered "neon colours colours")."""
+    if not value:
+        return ""
+    low = value.lower()
+    if any(w in low for w in (word.rstrip("s"), *already)):
+        return value
+    return f"{value} {word}"
+
+
 def render(spec: dict) -> Rendered:
     """The prompt text for the kept models, all of which read natural sentences (klein, Boogu, Qwen)."""
     spec = validate(spec)
@@ -143,16 +153,16 @@ def render(spec: dict) -> Rendered:
     sentences = [_cap(lead) + "."]
     if spec.get("details"):
         sentences.append(_cap(spec["details"].rstrip(".")) + ".")
-    look = [f"{spec['style']} style" if spec.get("style") else "",
-            f"{spec['palette']} colours" if spec.get("palette") else "",
-            f"{spec['lighting']} lighting" if spec.get("lighting") else ""]
+    look = [_with_word(spec.get("style"), "style"), _with_word(spec.get("palette"), "colours", ("colour", "color")),
+            _with_word(spec.get("lighting"), "lighting", ("light",))]
     look = [part for part in look if part]
     if look:
         sentences.append(_cap(", ".join(look)) + ".")
     for name in ("camera", "composition"):
         if spec.get(name):
             sentences.append(_cap(spec[name].rstrip(".")) + ".")
-    if spec.get("negative"):
-        sentences.append(f"Avoid {spec['negative'].rstrip('.')}.")
+    # "negative" is kept in the spec but not rendered: klein (FLUX family) has no negative prompt, so
+    # "Avoid two heads." puts "two heads" in the prompt. Adam's dragon session (2026-11-07) ended every
+    # prompt with "Avoid cyberpunk samurai's right hand." Say what should be there instead.
     width, height = SIZES[spec["aspect"]]
     return Rendered(" ".join(sentences), width, height)

@@ -2006,4 +2006,11 @@ Bake-off and routines (2026-11-06):
      instead of refusing the change (suspected cause, unverified: the eval couldn't reproduce it).
   6. Adam's wake turns scored 0.26-0.73 against his own profile; two were refused as "not Adam". His profile is
      weak (one short enrolment). Re-enrolling with the script should help (unverified).
+- 2026-11-07, rider bench (`tools/art/bench_rider.py`, klein 9B, 4 seeds per prompt, judged by eye on
+  ~/homeai-bench/rider-20261107-185818/sheet.png): the prompts as sent in Adam's session gave two riders 4/4
+  ("...with two riders and two heads") or a samurai standing into the dragon with his legs where its legs should be
+  (our "Oriental undead samurai. Riding an oriental undead dragon..."). A prompt that puts the mount first, states
+  the counts ("a single head and four legs", "one samurai... sits on its back, holding the reins with both hands")
+  was clean 4/4. Lesson: for multi-subject scenes the prompt structure matters more than the model; the subject
+  of the sentence must be the big thing, with the other placed relative to it. Small sample; F4's checker will count properly.
 

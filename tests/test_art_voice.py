@@ -548,3 +548,63 @@ def test_adopt_does_nothing_in_voice_mode(art, monkeypatch):
     import time as _time
     _time.sleep(0.05)
     assert art.switcher.calls == []
+
+
+# -- F0: fresh starts and complaints (Adam's dragon session) -----------------------------------
+
+def test_new_picture_with_what_to_draw_starts_a_new_project(art):
+    art.handle("art mode", "Adam")
+    art.handle("draw a red fox", "Adam")
+    first = art.session.project.id
+    reply = art.handle("let's start with a new picture. let's go with a medieval frigate on the open ocean", "Adam")
+    assert reply == "Drawing a medieval frigate on the open ocean."
+    assert art.session.project.id != first and art.session.project.nodes["001"].parent is None
+
+
+def test_new_picture_alone_asks_what_to_draw(art):
+    from homeai.art.session import MSG_FRESH
+    art.handle("art mode", "Adam")
+    art.handle("draw a red fox", "Adam")
+    assert art.handle("new picture", "Adam") == MSG_FRESH and art.session.project is None
+    assert art.handle("make it blue", "Adam").startswith("There's no picture yet")
+
+
+def blue_patch(spec, instruction):
+    from homeai.art.patcher import PatchResult
+    from homeai.art import prompt_spec
+    if not spec:
+        return PatchResult(prompt_spec.validate({"subject": "a dragon"}), {"subject": "a dragon"}, True)
+    new = prompt_spec.apply_patch(spec, {"details": "a single head, one rider"})
+    return PatchResult(new, {"details": "a single head, one rider"}, True)
+
+
+@pytest.mark.parametrize("said", ["we ended up with a second head and a second rider this time",
+                                  "the samurai's leg is merged with the dragon's leg",
+                                  "there's an extra head"])
+def test_a_complaint_draws_four_new_tries_to_pick_from(art, said):
+    art.handle("art mode", "Adam")
+    art.session._patch = blue_patch
+    art.handle("draw a dragon", "Adam")
+    seed = art.session.project.nodes["001"].spec["seed"]
+    reply = art.handle(said, "Adam")
+    assert reply == "Fixing it: 4 new tries. Say which one you like."
+    tries = [art.session.project.nodes[n] for n in art.session.grid]
+    assert len(tries) == 4 and all(t.parent == "001" for t in tries)
+    assert seed not in {t.spec["seed"] for t in tries} and len({t.spec["seed"] for t in tries}) == 4
+    state = art.state()
+    assert [o["n"] for o in state["options"]] == [1, 2, 3, 4]
+    assert art.handle("the third one", "Adam") == "That one." and art.session.project.current == tries[2].id
+
+
+def test_an_ordinary_change_keeps_the_seed_and_shows_no_options(art):
+    art.handle("art mode", "Adam")
+    art.session._patch = blue_patch
+    art.handle("draw a dragon", "Adam")
+    art.handle("make it a bit darker", "Adam")
+    nodes = art.session.project.nodes
+    assert nodes["002"].spec["seed"] == nodes["001"].spec["seed"] and "options" not in art.state()
+
+
+def test_viewer_numbers_the_options():
+    state = {"options": [{"n": 1, "node": "002"}, {"n": 2, "node": "003"}], "lineage": [{"node": "001"}]}
+    assert [t["n"] for t in V.thumbs_of(state)] == [1, 2]

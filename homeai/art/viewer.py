@@ -74,7 +74,9 @@ def art_state(event: dict, current: dict) -> dict:
 
 
 def thumbs_of(state: dict) -> list[dict]:
-    """The last MAX_THUMBS steps of the lineage, oldest first."""
+    """Numbered options to pick from when there are some ("say which one you like"), else the last steps."""
+    if state.get("options"):
+        return list(state["options"])[:MAX_THUMBS]
     return list(state.get("lineage") or [])[-MAX_THUMBS:]
 
 
@@ -148,6 +150,9 @@ def main() -> int:
                     screen.blit(thumb, (x + (w - thumb.get_width()) // 2, y))
                 colour = FG if step.get("node") == current else DIM
                 pygame.draw.rect(screen, colour, (x, y, w, h - 4), 2 if step.get("node") == current else 1)
+                if step.get("n"):                        # options: the number to say
+                    label = font.render(str(step["n"]), True, FG, BG)
+                    screen.blit(label, (x + 6, y + 4))
             pygame.display.flip()
             shown = (state.get("current") or {}).get("image") if picture is not None else None
             if shots and shown and shown != shot_of:

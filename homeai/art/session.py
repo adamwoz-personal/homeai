@@ -22,6 +22,8 @@ MSG_NOTHING_YET = "There's no picture yet. Say draw, and what you'd like."
 MSG_NOT_YET = "I can't do that one yet."
 MSG_NOTHING_TO_STOP = "Nothing is drawing."
 MSG_NO_GRID = "There's no set of options to pick from."
+MSG_FRESH = "Okay, a new picture. What shall I draw?"
+TRIES_AFTER_COMPLAINT = 4
 
 
 LEAD = re.compile(r"^(?:let'?s )?(?:draw|paint|sketch|generate|create|make)(?: me)? "
@@ -122,9 +124,22 @@ class ArtSession:
         verdict, spec = self._allowed(text, result.spec)
         if not verdict.allowed:
             return Reply(verdict.reason, "denied")
+        changes = prompt_spec.describe(prompt_spec.diff(node.spec, {**spec, "seed": node.spec.get("seed")}))
+        if grammar.is_complaint(intent.text):
+            # The same seed keeps the same broken layout (two heads stayed through four edits, 2026-11-07):
+            # draw several new tries and let the person pick.
+            jobs, self.grid = [], []
+            for _ in range(TRIES_AFTER_COMPLAINT):
+                jobs.append(self._draw(intent.text, {**spec, "seed": None}, node.id))
+                self.grid.append(self.project.current)
+            self.project.select(self.grid[0])
+            return Reply(f"Fixing it: {TRIES_AFTER_COMPLAINT} new tries. Say which one you like.", "edit", jobs)
         spec = {**spec, "seed": node.spec.get("seed")}      # same seed: only the change should change
-        changes = prompt_spec.describe(prompt_spec.diff(node.spec, spec))
         return Reply(f"Changing {changes}.", "edit", [self._draw(intent.text, spec, node.id)])
+
+    def _on_fresh(self, intent, text):
+        self.project, self.grid = None, []
+        return Reply(MSG_FRESH, "fresh")
 
     def _on_again(self, intent, text):
         node = self._current()

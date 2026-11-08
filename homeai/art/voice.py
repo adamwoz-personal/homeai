@@ -385,6 +385,13 @@ class ArtVoice:
             out["lineage"].append({"node": node.id, "instruction": node.instruction, "state": node.state,
                                    "image": str(image) if image.exists() else None})
         out["current"] = out["lineage"][-1] if out["lineage"] else None
+        grid = [n for n in getattr(session, "grid", []) if n in project.nodes]
+        if len(grid) > 1:
+            out["options"] = []
+            for number, node_id in enumerate(grid, 1):
+                image = project.image(node_id)
+                out["options"].append({"n": number, "node": node_id, "state": project.nodes[node_id].state,
+                                       "image": str(image) if image.exists() else None})
         return out
 
     def _publish_state(self) -> None:
