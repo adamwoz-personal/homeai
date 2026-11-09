@@ -440,3 +440,43 @@ def test_a_coder_that_never_comes_back_still_gets_jarvis_back():
     with paused(fs):
         pass
     assert fs.actions[-1] == f"systemctl start {G.VOICE_SERVICE}" and "ollama keep_alive=-1" not in fs.actions
+
+
+# -- voice-model evals: Jarvis paused, the coder left up (LLM_UPGRADE_PLAN) --------------------------------
+
+def jarvis_paused(fs):
+    return G.ModeSwitcher(fs, log=lambda line: None).jarvis_paused()
+
+
+def test_jarvis_paused_stops_only_jarvis_and_brings_it_back_on_the_gpu():
+    fs = FakeSystem()
+    with jarvis_paused(fs):
+        assert fs.actions == [f"systemctl stop {G.VOICE_SERVICE}"] and not fs.jarvis and fs.coder_up
+        fs.voice_is_loaded = False   # a candidate took its place on the card
+    assert fs.actions[1:] == ["ollama keep_alive=-1", f"systemctl start {G.VOICE_SERVICE}"]
+    assert fs.jarvis and fs.voice_is_loaded and fs.coder_up
+
+
+def test_a_failing_eval_still_gets_jarvis_back():
+    fs = FakeSystem()
+    with pytest.raises(RuntimeError, match="boom"):
+        with jarvis_paused(fs):
+            raise RuntimeError("boom")
+    assert fs.jarvis and fs.voice_is_loaded
+
+
+def test_jarvis_comes_back_even_when_the_voice_model_will_not_load():
+    fs = FakeSystem()
+    fs.voice_on_cpu, fs.cpu_heals = 1, False
+    with jarvis_paused(fs):
+        pass
+    assert fs.actions.count("ollama keep_alive=-1") == G.PAUSE_RELOADS and fs.actions[-1].endswith(G.VOICE_SERVICE)
+
+
+@pytest.mark.parametrize("kw, why", [({"comfy": True}, "art mode"), ({"dropin": True}, "coding mode")])
+def test_jarvis_paused_refuses_outside_voice_mode(kw, why):
+    fs = FakeSystem(**kw)
+    with pytest.raises(G.ModeError, match=why):
+        with jarvis_paused(fs):
+            pass
+    assert fs.actions == []

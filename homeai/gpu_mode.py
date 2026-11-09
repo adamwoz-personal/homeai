@@ -410,22 +410,48 @@ class ModeSwitcher:
             if not self._wait(self.coder_healthy, CODER_START_TIMEOUT_S):
                 self.log(f"WARNING: {CODER_SERVICE} is not healthy; the voice model loads on Jarvis's next question")
                 return
-            for attempt in range(1, PAUSE_RELOADS + 1):
-                # Reload even if loaded: it may sit partly on the CPU. The coder can still be claiming VRAM
-                # after /health answers, so a load can fail; wait and try again.
-                try:
-                    self._unload_voice()
-                    self.sys.sleep(3)
-                    self._load_voice()
-                except ModeError as exc:
-                    self.log(f"voice model reload {attempt}: {exc}")
-                if self.voice_on_gpu():
-                    return
-                self.sys.sleep(10)
-            self.log(f"WARNING: {VOICE_MODEL} is not wholly on the GPU; check: ollama ps")
+            self._reload_voice_on_gpu()
         finally:
             self.log(f"starting {VOICE_SERVICE}")
             self.sys.systemctl("start", VOICE_SERVICE)
+
+    @contextlib.contextmanager
+    def jarvis_paused(self):
+        """Jarvis stopped for a voice-model eval's ``with`` block (tools/eval_tool_misfire.py).
+
+        Candidates take the voice model's place on the card; a question to Jarvis meanwhile would
+        reload it and skew the timings. The coder stays up: that is the card the candidates must share.
+        Afterwards, whatever happened: the voice model reloaded until wholly on the GPU, then Jarvis.
+        """
+        mode = self.mode()
+        if mode != "voice":
+            raise ModeError(f"in {mode} mode; evals start from voice mode")
+        self.log(f"stopping {VOICE_SERVICE} for the eval")
+        self.sys.systemctl("stop", VOICE_SERVICE)
+        try:
+            yield self
+        finally:
+            try:
+                self._reload_voice_on_gpu()
+            finally:
+                self.log(f"starting {VOICE_SERVICE}")
+                self.sys.systemctl("start", VOICE_SERVICE)
+
+    def _reload_voice_on_gpu(self) -> None:
+        """Reload the voice model until none of it sits on the CPU (PAUSE_RELOADS tries)."""
+        for attempt in range(1, PAUSE_RELOADS + 1):
+            # Reload even if loaded: it may sit partly on the CPU. The coder can still be claiming VRAM
+            # after /health answers, so a load can fail; wait and try again.
+            try:
+                self._unload_voice()
+                self.sys.sleep(3)
+                self._load_voice()
+            except ModeError as exc:
+                self.log(f"voice model reload {attempt}: {exc}")
+            if self.voice_on_gpu():
+                return
+            self.sys.sleep(10)
+        self.log(f"WARNING: {VOICE_MODEL} is not wholly on the GPU; check: ollama ps")
 
     def voice(self) -> None:
         self._stop_comfy()
