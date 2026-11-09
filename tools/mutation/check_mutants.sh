@@ -726,6 +726,17 @@ MUTANTS=(
   "gpumode-systemctl-always-user|homeai/gpu_mode.py|s/subprocess.run(service_scope.systemctl(\*args)/subprocess.run([\"systemctl\", \"--user\", *args]/|tests/test_service_scope.py"
   "speaker-restart-always-user|homeai/speaker_admin.py|s/run(service_scope.systemctl(\"restart\", \"homeai\")/run([\"systemctl\", \"--user\", \"restart\", \"homeai\"]/|tests/test_service_scope.py"
   "tests-scope-not-pinned|tests/conftest.py|s/monkeypatch.setenv(\"HOMEAI_SERVICE_SCOPE\", \"user\")/pass/|tests/test_service_scope.py"
+  "sysunit-start-before-user-stop|tools/install_system_service.sh|/^# User unit off and out of the way first/,/^as_owner systemctl --user daemon-reload/d;s/^run systemctl enable --now homeai.service/run systemctl enable --now homeai.service; as_owner systemctl --user disable --now homeai.service; mv \"\$USER_UNIT\" \"\$ASIDE\"/|tests/test_install_system_service.py"
+  "sysunit-user-unit-left|tools/install_system_service.sh|s/^if \[\[ -f \"\$USER_UNIT\" \]\]; then run mv \"\$USER_UNIT\" \"\$ASIDE\"; fi/true/|tests/test_install_system_service.py"
+  "sysunit-no-rollback|tools/install_system_service.sh|/did not stay up; going back/,/exit 1/s/^    to_user/    true/|tests/test_install_system_service.py"
+  "sysunit-undo-keeps-system|tools/install_system_service.sh|s/^    run rm -f \"\$UNIT\"/    true/|tests/test_install_system_service.py"
+  "sysunit-no-rule-check|tools/install_system_service.sh|s/^\[\[ -f \"\$RULE\" \]\] \(.*\)/true \1/|tests/test_install_system_service.py"
+  "sysunit-dry-run-acts|tools/install_system_service.sh|s/\[\[ \$DRY -eq 1 \]\] \(.*\) \"\$@\"; }/\"\$@\"; }/|tests/test_install_system_service.py"
+  "sysunit-no-linger|tools/install_system_service.sh|s/run loginctl enable-linger \"\$OWNER\"/true/|tests/test_install_system_service.py"
+  "sysunit-no-session-env|deploy/systemd/homeai.system.service.in|/^Environment=XDG_RUNTIME_DIR/d|tests/test_install_system_service.py"
+  "sysunit-bus-dir-readonly|deploy/systemd/homeai.system.service.in|s# -/run/user/@UID@/homeai##|tests/test_install_system_service.py"
+  "sysunit-bad-key|deploy/systemd/homeai.system.service.in|s/^LockPersonality=true/LockPersonalty=true/|tests/test_install_system_service.py"
+  "install-sh-reenables-user-unit|install.sh|s/    if \[\[ -f \"\$SYSTEM_UNIT\" \]\]; then/    if false; then/|tests/test_install_system_service.py"
   "polkit-any-action|deploy/polkit/50-homeai.rules.in|s/action.id !== \"org.freedesktop.systemd1.manage-units\"/false/|tests/test_polkit_rule.py"
 )
 

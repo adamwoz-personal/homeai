@@ -52,7 +52,7 @@ check "open the GPU render node"     'exec 3<>/dev/dri/renderD128; exec 3>&-'
 check "whisper transcribes a clip"   '[ -n "$CLIP" ] && "$WHISPER" -m "$MODEL" -f "$CLIP" -np -nt | grep -q "[a-z]"'
 check "Ollama on localhost"          'curl -sf --max-time 5 http://127.0.0.1:11434/api/ps'
 check "Postgres (memory store)"      'pg_isready -q'
-check "systemctl --user"             'systemctl --user is-active --quiet homeai.service'
+check "systemctl --user"             'systemctl --user is-active --quiet zeroclaw.service'
 check "systemd-run --user"           'systemd-run --user --collect --quiet --wait --unit=homeai-sandbox-probe-child true'
 check "file owner still adam"        '[ "$(stat -c %U "$REPO/README.md")" = "$(id -un)" ]'
 EOF

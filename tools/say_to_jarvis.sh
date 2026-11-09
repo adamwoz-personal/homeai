@@ -16,4 +16,5 @@ DEVICE=$(cd "$REPO" && .venv/bin/python -c 'from homeai.config import AudioConfi
 since=$(date '+%Y-%m-%d %H:%M:%S')
 aplay -q -D "$DEVICE" "$WAV"
 sleep "$WAIT"
-journalctl --user -u homeai --since "$since" --no-pager -o cat | grep -E "wake word|heard:|fragment|dismissal|perceived lag|discarding" || echo "(daemon logged nothing)"
+J=(journalctl --user); [[ -f /etc/systemd/system/homeai.service ]] && J=(journalctl)   # system unit (SANDBOX_PLAN)
+"${J[@]}" -u homeai --since "$since" --no-pager -o cat | grep -E "wake word|heard:|fragment|dismissal|perceived lag|discarding" || echo "(daemon logged nothing)"

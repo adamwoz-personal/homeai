@@ -1,0 +1,57 @@
+# Template rendered by tools/install_system_service.sh (SANDBOX_PLAN step 4):
+# @USER@ @UID@ @HOME@ @REPO@ @ZEROCLAW_DIR@ are substituted.
+#
+# Why a system unit: on this Ubuntu a *user* unit's ProtectHome is silently
+# skipped (AppArmor blocks the user namespace systemd needs), so the user
+# unit's sandbox did nothing. A system unit runs as @USER@ with the same
+# sandbox actually applied; tools/probe_sandbox.sh checks it.
+# Only Jarvis moves: zeroclaw, the coder, ComfyUI and the picture window stay
+# user units, reached through the user's bus below.
+[Unit]
+Description=Home AI voice assistant
+Documentation=file://@REPO@/README.md
+StartLimitIntervalSec=300
+StartLimitBurst=5
+# The user manager owns /run/user/@UID@ (bus, PipeWire, the event bus) and
+# zeroclaw. Wants= starts it at boot; linger keeps it up without a login.
+Wants=user@@UID@.service
+After=user@@UID@.service ollama.service postgresql.service sound.target network.target
+
+[Service]
+Type=simple
+User=@USER@
+Group=@USER@
+SupplementaryGroups=audio video render
+WorkingDirectory=@REPO@
+# The user session the daemon talks to: systemctl --user, PipeWire, D-Bus.
+Environment=HOME=@HOME@
+Environment=XDG_RUNTIME_DIR=/run/user/@UID@
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/@UID@/bus
+Environment=PYTHONUNBUFFERED=1
+# The gateway token lives here, mode 600, never in this unit and never in git.
+EnvironmentFile=-@REPO@/.env
+
+# After a reboot the event bus dir doesn't exist, and inside the sandbox
+# /run/user is read-only, so create it first ("+": outside the sandbox).
+ExecStartPre=+/usr/bin/install -d -o @USER@ -g @USER@ -m 700 /run/user/@UID@/homeai
+ExecStart=@REPO@/.venv/bin/python -m homeai.daemon
+
+TimeoutStartSec=90
+Restart=on-failure
+RestartSec=10
+
+# Hardening: the same settings as the user unit, now enforced. Kernel
+# protections (ProtectKernelTunables etc.) are possible here but untested:
+# add one at a time, with the probe.
+NoNewPrivileges=true
+PrivateTmp=false
+ProtectSystem=strict
+ProtectHome=read-only
+# "-" tolerates a path not existing yet. /run/user/@UID@/homeai is the event
+# bus and timer state; systemd/user holds the coder drop-in that voice mode removes.
+ReadWritePaths=@REPO@ /tmp @ZEROCLAW_DIR@ -@HOME@/.local/share/homeai -@HOME@/Pictures/homeai -/run/user/@UID@/homeai -/run/user/@UID@/systemd/user
+RestrictRealtime=false
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

@@ -280,6 +280,7 @@ ZC_BIN="$(command -v zeroclaw)"
 ensure_dir "$HOME/.local/share/homeai"
 
 UNIT="$HOME/.config/systemd/user/homeai.service"
+SYSTEM_UNIT="${HOMEAI_SYSTEM_UNIT:-/etc/systemd/system/homeai.service}"
 if [[ $INSTALL_SERVICE -eq 0 ]]; then
     info "skipping the service (--no-service); run: .venv/bin/python -m homeai.daemon"
 elif [[ "$SYSTEMD_USER" != "1" ]]; then
@@ -287,15 +288,20 @@ elif [[ "$SYSTEMD_USER" != "1" ]]; then
 else
     RENDERED="$(mktemp)"
     trap 'rm -f "$ASSESS_ENV" "${MODELFILE:-}" "$RENDERED"' EXIT
-    sed -e "s#@REPO@#${REPO}#g" -e "s#@ZEROCLAW_DIR@#${ZC_DIR}#g" deploy/systemd/homeai.service.in > "$RENDERED"
-    if [[ -f "$UNIT" ]] && cmp -s "$RENDERED" "$UNIT"; then
-        info "service unit up to date"
+    if [[ -f "$SYSTEM_UNIT" ]]; then
+        # SANDBOX_PLAN step 4: Jarvis is a system unit; never bring the user unit back beside it.
+        info "Jarvis runs as a system unit ($SYSTEM_UNIT); update it with: sudo tools/install_system_service.sh"
     else
-        [[ -f "$UNIT" ]] && run cp "$UNIT" "$UNIT.bak.$(date +%s)"
-        run install -D -m 644 "$RENDERED" "$UNIT"
-        run systemctl --user daemon-reload
+        sed -e "s#@REPO@#${REPO}#g" -e "s#@ZEROCLAW_DIR@#${ZC_DIR}#g" deploy/systemd/homeai.service.in > "$RENDERED"
+        if [[ -f "$UNIT" ]] && cmp -s "$RENDERED" "$UNIT"; then
+            info "service unit up to date"
+        else
+            [[ -f "$UNIT" ]] && run cp "$UNIT" "$UNIT.bak.$(date +%s)"
+            run install -D -m 644 "$RENDERED" "$UNIT"
+            run systemctl --user daemon-reload
+        fi
+        run systemctl --user enable homeai.service
     fi
-    run systemctl --user enable homeai.service
 
     # Nightly memory backup and hourly health/maintenance, only where the memory database exists.
     for f in homeai-memory-backup.service homeai-memory-backup.timer \
@@ -378,7 +384,13 @@ else
     if [[ "$USES_GPU" == "1" && "$PROC" != *"100% GPU"* ]]; then
         note "the model is not fully on the GPU (${PROC:-not loaded}); replies will be slower. Check GPU drivers/ROCm and what else is using VRAM (ollama ps)."
     fi
-    if [[ $INSTALL_SERVICE -eq 1 && "$SYSTEMD_USER" == "1" ]]; then
+    if [[ $INSTALL_SERVICE -eq 1 && -f "$SYSTEM_UNIT" ]]; then
+        run systemctl restart homeai.service   # the polkit rule allows this without a password
+        sleep 5
+        systemctl is-active --quiet homeai.service \
+            || die "homeai.service did not stay up. See: journalctl -u homeai -n 50"
+        info "homeai.service is running. Say \"Hey Jarvis\"."
+    elif [[ $INSTALL_SERVICE -eq 1 && "$SYSTEMD_USER" == "1" ]]; then
         run systemctl --user restart homeai.service
         sleep 5
         systemctl --user is-active --quiet homeai.service \
