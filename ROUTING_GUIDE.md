@@ -4,7 +4,7 @@
 with Claude (paid). Updated as evidence accumulates. Every rule here comes from an
 observed outcome on this box, not from theory.
 
-Last updated: 2026-11-08
+Last updated: 2026-11-09
 
 ---
 
@@ -2057,3 +2057,9 @@ Bake-off and routines (2026-11-06):
 - 2026-11-08 (sandbox): a user unit's ProtectHome/ProtectSystem silently do nothing on this Ubuntu: AppArmor's
   unprivileged-userns restriction denies the mount namespace (kernel audit shows it; systemd logs nothing).
   PrivateUsers=yes doesn't help. Check a sandbox from inside (findmnt, a write test), never from the unit file.
+- 2026-11-09 (sandbox, live): Jarvis now runs as a **system** unit with User=adam (SANDBOX_PLAN option A,
+  `tools/install_system_service.sh`, polkit rule for start/stop/restart). Inside it `/` is `ro` and only the six
+  ReadWritePaths are `rw`; voice turn, `art_voice_live.py` 20/20 and coding<->voice all pass. Commands for Jarvis
+  lose `--user` (`systemctl restart homeai`, `journalctl -u homeai`); everything else stays `--user`. Code that
+  controls homeai goes through `homeai/service_scope.py`. New harmless log line: onnxruntime can't persist its
+  telemetry ID (home is read-only now). `reset-failed` isn't in the polkit rule: it needs sudo.

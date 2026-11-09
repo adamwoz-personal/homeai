@@ -35,9 +35,12 @@ named `jarvis`; on the original box it is `local` (`HOMEAI_AGENT_NAME` in
 
 | Task | Command |
 |---|---|
-| Status | `systemctl --user status homeai` |
-| Logs | `journalctl --user -u homeai -f` |
-| Restart after a code change | `systemctl --user restart homeai` |
+| Status | `systemctl status homeai` |
+| Logs | `journalctl -u homeai -f` |
+| Restart after a code change | `systemctl restart homeai` |
+| Which layout (system or user unit) | `ls /etc/systemd/system/homeai.service` present = system unit (since 2026-11-09, SANDBOX_PLAN); everything else (zeroclaw, llama-server, ComfyUI, avatar) stays `--user` |
+| Back to the user unit | `sudo tools/install_system_service.sh --undo` (and again without `--undo` to return) |
+| Check the sandbox is enforced | `sudo tools/probe_sandbox.sh`, or `awk '$5=="/"{print $6}' /proc/$(systemctl show -p MainPID --value homeai)/mountinfo` starts with `ro` |
 | Check config and dependencies | `set -a; . ./.env; set +a; .venv/bin/python -m homeai.daemon --check` |
 | What is loaded on the GPU | `ollama ps` (expect `llama31-voice`, `100% GPU`, `Forever`) |
 | Recent conversations | `tail ~/.local/share/homeai/transcript.jsonl` |
@@ -80,8 +83,8 @@ shipped copy is `deploy/zeroclaw/SOUL.md`. After editing it, measure with
 | Symptom | Check | Usual fix |
 |---|---|---|
 | Never wakes | Logs show `wake detector`? The right mic? | `HOMEAI_INPUT_DEVICE`, or lower the wake threshold |
-| Jarvis not responding, no wake at all | Logs show `microphone silent` or `microphone stalled, giving up`? The watchdog reopens a silent mic after 5 s, three tries, then exits so systemd restarts it | If restarts hit the limit (5 in 5 min), replug the webcam, then `systemctl --user reset-failed homeai` and `systemctl --user start homeai` |
-| Wakes, then "Something went wrong" | `journalctl --user -u homeai -n 50` | `ollama ps`: the model isn't loaded. `ollama run llama31-voice ""` |
+| Jarvis not responding, no wake at all | Logs show `microphone silent` or `microphone stalled, giving up`? The watchdog reopens a silent mic after 5 s, three tries, then exits so systemd restarts it | If restarts hit the limit (5 in 5 min), replug the webcam, then `sudo systemctl reset-failed homeai` and `systemctl start homeai` |
+| Wakes, then "Something went wrong" | `journalctl -u homeai -n 50` | `ollama ps`: the model isn't loaded. `ollama run llama31-voice ""` |
 | Slow replies (over 5 s) | `ollama ps` shows a CPU % | Something else is using the VRAM (the coder's llama-server); see below |
 | Repeats itself or recites lists | `tools/inspect_zc_memory.py`, `tools/probe_agent_prompt.py`, `tools/eval_repeat_followup.py`; journal "dropped N sentence(s) repeating" | Make sure `memory_recall` is not in the voice profile's `allowed_tools`. Restated sentences are filtered (`dialogue.drop_repeated_sentences`, `REPEAT_OVERLAP` 0.6); "say that again" bypasses it |
 | Box froze, out of memory | `systemctl show ollama -p Environment` | Install `deploy/ollama-vram-guard.conf` (`OLLAMA_MAX_LOADED_MODELS=1`) |
@@ -215,7 +218,7 @@ utterance. Otherwise Jarvis stays silent and logs:
     unverified wake (score 0.937): Whisper heard "...", no wake word - ignoring
 
 ```bash
-journalctl --user -u homeai | grep -E "wake word detected|unverified|heard:"
+journalctl -u homeai | grep -E "wake word detected|unverified|heard:"
 ```
 - `transcript.jsonl` verdicts include `unverified`, `wake-only`,
   `pleasantry` and `closing`.
@@ -259,7 +262,7 @@ reloading or re-authenticating the Ring integration in Home Assistant (unverifie
 .venv/bin/python tools/piper_voice_samples.py --play   # hear every installed voice
 ```
 Set `HOMEAI_PIPER_VOICE=<name>` in `.env`, then run
-`systemctl --user restart homeai`. Voices are found in `vendor/piper/` or
+`systemctl restart homeai`. Voices are found in `vendor/piper/` or
 `vendor/piper/voices/`. Current voice: `en_GB-alba-medium` (chosen
 2026-10-02). Every installed voice starts speaking in about 0.6 s, so choose
 by ear.
@@ -303,7 +306,7 @@ By voice (best: same mic and distance as everyday use):
 
 Checking how it does:
 ```bash
-journalctl --user -u homeai | grep -E "speaker:|another voice|enroll"
+journalctl -u homeai | grep -E "speaker:|another voice|enroll"
 ```
 Each line shows the best match and its score, e.g. `speaker: Adam (0.62,
 margin 0.40)` or `unknown (best Adam 0.31: below threshold)`; the score is
