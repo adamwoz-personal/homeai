@@ -2054,3 +2054,6 @@ Bake-off and routines (2026-11-06):
   ran them: `art_voice_live.py` switched the card to art mode and left its picture window open (no speech, no
   house tools; restored with `homeai-mode voice` and the window stopped). Check tools with
   `tools/inspect_tool_imports.py` (imports only, never runs `main`), not by running them.
+- 2026-11-08 (sandbox): a user unit's ProtectHome/ProtectSystem silently do nothing on this Ubuntu: AppArmor's
+  unprivileged-userns restriction denies the mount namespace (kernel audit shows it; systemd logs nothing).
+  PrivateUsers=yes doesn't help. Check a sandbox from inside (findmnt, a write test), never from the unit file.
