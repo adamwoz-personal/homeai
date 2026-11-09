@@ -714,6 +714,10 @@ MUTANTS=(
   "daemon-end-turn-unlogged|homeai/daemon.py|/Every turn ends here/,/transcript.write/s/self.transcript.write(turn)/pass/|tests/test_daemon.py"
   "daemon-end-turn-untimed|homeai/daemon.py|/Every turn ends here/,/transcript.write/s/turn.total_ms = total.ms()/pass/|tests/test_daemon.py"
   "ha-env-world-readable|homeai/install/ha_setup.py|s/TOKEN={token}\\\\n\", mode=0o600)/TOKEN={token}\\\\n\")/|tests/"
+  "polkit-any-user|deploy/polkit/50-homeai.rules.in|s/subject.user !== \"@USER@\"/false/|tests/test_polkit_rule.py"
+  "polkit-any-unit|deploy/polkit/50-homeai.rules.in|s/action.lookup(\"unit\") !== \"homeai.service\"/false/|tests/test_polkit_rule.py"
+  "polkit-any-verb|deploy/polkit/50-homeai.rules.in|s/(verb === \"start\"/(verb !== \"\"/|tests/test_polkit_rule.py"
+  "polkit-any-action|deploy/polkit/50-homeai.rules.in|s/action.id !== \"org.freedesktop.systemd1.manage-units\"/false/|tests/test_polkit_rule.py"
 )
 
 filter="${1:-}"

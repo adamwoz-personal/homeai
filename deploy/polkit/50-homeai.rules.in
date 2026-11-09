@@ -1,0 +1,15 @@
+// HomeAI (SANDBOX_PLAN step 2): let @USER@ start, stop and restart the system
+// homeai.service without a password. Jarvis runs as a system unit (User=@USER@)
+// so that ProtectHome works, and mode switching and voice-ID admin restart it.
+// Nothing else: no other unit, no enable/disable, no other user.
+//
+// Install: sed "s/@USER@/$USER/" deploy/polkit/50-homeai.rules.in \
+//            | sudo tee /etc/polkit-1/rules.d/50-homeai.rules
+polkit.addRule(function (action, subject) {
+    if (action.id !== "org.freedesktop.systemd1.manage-units") return polkit.Result.NOT_HANDLED;
+    if (subject.user !== "@USER@") return polkit.Result.NOT_HANDLED;
+    if (action.lookup("unit") !== "homeai.service") return polkit.Result.NOT_HANDLED;
+    var verb = action.lookup("verb");
+    if (verb === "start" || verb === "stop" || verb === "restart") return polkit.Result.YES;
+    return polkit.Result.NOT_HANDLED;
+});
