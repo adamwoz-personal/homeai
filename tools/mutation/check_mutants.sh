@@ -757,6 +757,8 @@ MUTANTS=(
   "misfire-default-ctx|tools/eval_tool_misfire.py|s/, \"num_ctx\": 16384}/}/|tests/test_eval_tool_misfire.py"
   "misfire-tool-answers-counted|tools/eval_tool_misfire.py|s/for r in rows if r\[\"tool\"\] is None and r\[\"text\"\].strip()\]/for r in rows]/|tests/test_eval_tool_misfire.py"
   "ort-telemetry-on|homeai/__init__.py|s/^os.environ.setdefault(\"ORT_DISABLE_TELEMETRY\", \"1\")/pass/|tests/test_package_env.py"
+  "misfire-openai-ignored|tools/eval_tool_misfire.py|s/    if state.get(\"endpoint\") == \"openai\":/    if False:/|tests/test_eval_tool_misfire.py"
+  "misfire-openai-drops-tool-choice|tools/eval_tool_misfire.py|s/    body = dict(capture\[\"body\"\])/    body = {k: v for k, v in capture[\"body\"].items() if k != \"tool_choice\"}/|tests/test_eval_tool_misfire.py"
   "polkit-any-action|deploy/polkit/50-homeai.rules.in|s/action.id !== \"org.freedesktop.systemd1.manage-units\"/false/|tests/test_polkit_rule.py"
 )
 

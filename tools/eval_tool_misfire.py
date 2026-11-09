@@ -13,7 +13,13 @@ ok / misfire (a tool where none was wanted) / miss (no tool where one was) /
 wrong (another tool). Also: words per spoken answer, seconds per answer, and
 how much of the model sits on the GPU beside the coder.
 
-Never touches the house: it calls Ollama's /api/chat directly, not ZeroClaw,
+By default the request goes to Ollama's OpenAI-compatible endpoint exactly as
+ZeroClaw sends it (``--endpoint native`` uses /api/chat with thinking off; on
+2026-11-09 both routes gave the same picture). Checked against real ZeroClaw
+with ``probe_agent_prompt.py --real-reply``: llama31-voice calls a tool for
+"What's the capital of France?" there too.
+
+Never touches the house: it calls Ollama directly, not ZeroClaw,
 so a tool call is only a JSON field in the reply; nothing runs it.
 
 Jarvis is stopped for the run (each candidate takes the voice model's place on
@@ -105,8 +111,26 @@ def request_for(capture: dict, model: str, question: str, think: bool | None) ->
     return payload
 
 
+def openai_request_for(capture: dict, model: str, question: str) -> dict:
+    """The captured body exactly as ZeroClaw sends it (OpenAI-compatible endpoint), model and question swapped."""
+    body = dict(capture["body"])
+    body["messages"] = [m for m in body["messages"] if m["role"] == "system"] + [{"role": "user", "content": question}]
+    return {**body, "model": model, "stream": False}
+
+
+def ask_openai(capture: dict, model: str, question: str, post=post_json) -> dict:
+    """Jarvis's real route: no think flag, whatever the model does by default is what Jarvis would get."""
+    start = time.monotonic()
+    reply = post(f"{OLLAMA}/v1/chat/completions", openai_request_for(capture, model, question), 300)
+    message = (reply.get("choices") or [{}])[0].get("message", {})
+    return {"tool": first_tool(message), "text": message.get("content") or "",
+            "seconds": round(time.monotonic() - start, 2)}
+
+
 def ask(capture: dict, model: str, question: str, state: dict, post=post_json) -> dict:
     """One answer. Thinking is turned off where the model has it; models without it reject the flag, so drop it."""
+    if state.get("endpoint") == "openai":
+        return ask_openai(capture, model, question, post)
     think = state.get(model, False)
     start = time.monotonic()
     try:
@@ -136,9 +160,11 @@ def summary(rows: list[dict]) -> dict:
             "median_s": warm[len(warm) // 2]}
 
 
-def run(capture: dict, models: list[str], reps: int, out: Path, post=post_json, log=print) -> dict:
-    data: dict = {"questions": [[q, sorted(str(t) for t in w)] for q, w in QUESTIONS], "models": {}}
-    state: dict = {}
+def run(capture: dict, models: list[str], reps: int, out: Path, post=post_json, log=print,
+        endpoint: str = "native") -> dict:
+    data: dict = {"questions": [[q, sorted(str(t) for t in w)] for q, w in QUESTIONS], "models": {},
+                  "endpoint": endpoint}
+    state: dict = {"endpoint": endpoint}
     for model in models:
         rows = []
         for rep in range(reps):
@@ -167,16 +193,19 @@ def main() -> int:
     ap.add_argument("--model", action="append", required=True)
     ap.add_argument("--reps", type=int, default=3)
     ap.add_argument("--no-pause", action="store_true", help="leave Jarvis running (timings will be skewed)")
+    ap.add_argument("--endpoint", choices=("native", "openai"), default="openai",
+                    help="openai = /v1/chat/completions, the route ZeroClaw really uses (default); "
+                         "native = /api/chat with thinking turned off")
     args = ap.parse_args()
     capture = json.loads(Path(args.prompt).expanduser().read_text())[0]
     out = bench_path("misfire")
     out.mkdir(parents=True)
     if args.no_pause:
-        data = run(capture, args.model, args.reps, out)
+        data = run(capture, args.model, args.reps, out, endpoint=args.endpoint)
     else:
         from homeai import gpu_mode as G
         with G.ModeSwitcher(G.System(), log=lambda line: print("[mode]", line, flush=True)).jarvis_paused():
-            data = run(capture, args.model, args.reps, out)
+            data = run(capture, args.model, args.reps, out, endpoint=args.endpoint)
     print(table(data))
     print(out)
     return 0

@@ -2063,3 +2063,9 @@ Bake-off and routines (2026-11-06):
   lose `--user` (`systemctl restart homeai`, `journalctl -u homeai`); everything else stays `--user`. Code that
   controls homeai goes through `homeai/service_scope.py`. New harmless log line: onnxruntime can't persist its
   telemetry ID (home is read-only now). `reset-failed` isn't in the polkit rule: it needs sudo.
+- 2026-11-09 (model upgrade step 1): llama31-voice, given Jarvis's real prompt and tool list, called `research`
+  on 48 of 87 everyday questions, every one that needed no tool ("capital of France", "tell me a joke"); real
+  ZeroClaw confirms it. So Jarvis has been looking up almost everything, unnoticed, because the answers were right,
+  just slow. qwen3.5:9b 87/87, gemma4:e4b 84/87. Lesson: score tool choice directly (tools/eval_tool_misfire.py);
+  a right answer hides a needless lookup. Also: the sandboxed unit made onnxruntime write ":memory:.ses" into the
+  repo (home read-only); homeai now sets ORT_DISABLE_TELEMETRY=1.

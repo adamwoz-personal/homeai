@@ -86,3 +86,32 @@ def test_a_run_scores_each_model_and_only_talks_to_ollama(tmp_path, monkeypatch)
     assert {url for url, _ in fake.calls} == {f"{E.OLLAMA}/api/chat", f"{E.OLLAMA}/api/ps"}
     assert all(p["think"] is False for url, p in fake.calls if url.endswith("/api/chat"))   # spoken answers, no thinking
     assert "| m | 2/6 | 2 | 2 | 0 | 5.0 |" in E.table(data)
+
+
+class FakeOpenAI:
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, url, payload=None, timeout=30.0):
+        self.calls.append((url, payload))
+        if url.endswith("/api/ps"):
+            return {"models": []}
+        q = payload["messages"][-1]["content"]
+        if "weather" in q:
+            return {"choices": [{"message": {"content": None,
+                                             "tool_calls": [{"function": {"name": "homeai__weather"}}]}}]}
+        return {"choices": [{"message": {"content": "Paris."}}]}
+
+
+def test_the_openai_route_sends_the_captured_body_as_zeroclaw_does(tmp_path, monkeypatch):
+    monkeypatch.setattr(E, "QUESTIONS", [("What's the capital of France?", E.NONE),
+                                         ("What's the weather like right now?", frozenset({"homeai__weather"}))])
+    fake = FakeOpenAI()
+    data = E.run(CAPTURE, ["qwen3.5:9b"], 1, tmp_path, fake, log=lambda line: None, endpoint="openai")
+    chats = [p for url, p in fake.calls if url == f"{E.OLLAMA}/v1/chat/completions"]
+    assert len(chats) == 2 and data["models"]["qwen3.5:9b"]["summary"]["ok"] == 2
+    body = chats[0]
+    assert body["model"] == "qwen3.5:9b" and body["stream"] is False and "think" not in body
+    assert body["tool_choice"] == "auto" and body["temperature"] == 0.45 and body["tools"] == CAPTURE["body"]["tools"]
+    assert body["messages"] == [{"role": "system", "content": "You are Jarvis."},
+                                {"role": "user", "content": "What's the capital of France?"}]
