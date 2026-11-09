@@ -13,8 +13,9 @@
 # Order matters: the user unit is stopped and its file moved aside before the
 # system unit starts, so two Jarvises never share the microphone. If the
 # system unit doesn't stay up, the switch is undone on its own.
-# Needs the polkit rule first (deploy/polkit/50-homeai.rules.in): mode
-# switching restarts Jarvis without a password.
+# Installs the polkit rule (deploy/polkit/50-homeai.rules.in) too: mode
+# switching restarts Jarvis without a password. Safe to re-run: it updates
+# a changed unit and restarts Jarvis only then. install.sh --sudo runs it.
 #
 # Test hooks: HOMEAI_UNIT_DIR, HOMEAI_POLKIT_RULE, HOMEAI_OWNER_HOME, HOMEAI_SKIP_ROOT_CHECK=1,
 # HOMEAI_SETTLE_S (tests/test_install_system_service.py).
@@ -66,12 +67,13 @@ if [[ $UNDO -eq 1 ]]; then
     exit 0
 fi
 
-[[ -f "$RULE" ]] || die "install the polkit rule first:
-  sed \"s/@USER@/$OWNER/\" $REPO/deploy/polkit/50-homeai.rules.in | sudo tee $RULE"
+RENDERED="$(mktemp)" RULE_RENDERED="$(mktemp)"
+trap 'rm -f "$RENDERED" "$RULE_RENDERED"' EXIT
+# Polkit rule first: mode switching and voice-ID admin restart Jarvis without a password.
+sed "s/@USER@/$OWNER/g" "$REPO/deploy/polkit/50-homeai.rules.in" > "$RULE_RENDERED"
+cmp -s "$RULE_RENDERED" "$RULE" 2>/dev/null || run install -D -m 644 "$RULE_RENDERED" "$RULE"
 [[ "$(loginctl show-user "$OWNER" -p Linger --value 2>/dev/null)" == yes ]] || run loginctl enable-linger "$OWNER"
 
-RENDERED="$(mktemp)"
-trap 'rm -f "$RENDERED"' EXIT
 sed -e "s#@REPO@#$REPO#g" -e "s#@ZEROCLAW_DIR@#$ZC_DIR#g" -e "s#@HOME@#$OWNER_HOME#g" \
     -e "s#@UID@#$OWNER_UID#g" -e "s#@USER@#$OWNER#g" "$REPO/deploy/systemd/homeai.system.service.in" > "$RENDERED"
 ! grep -n '@[A-Z_]*@' "$RENDERED" || die "template placeholder left unrendered"
@@ -81,9 +83,14 @@ as_owner systemctl --user disable --now homeai.service || true
 if [[ -f "$USER_UNIT" ]]; then run mv "$USER_UNIT" "$ASIDE"; fi
 as_owner systemctl --user daemon-reload
 
-[[ -f "$UNIT" ]] && ! cmp -s "$RENDERED" "$UNIT" && run cp "$UNIT" "$UNIT.bak.$(date +%s)"
-run install -D -m 644 "$RENDERED" "$UNIT"
-run systemctl daemon-reload
+if [[ -f "$UNIT" ]] && cmp -s "$RENDERED" "$UNIT"; then
+    echo "system unit up to date"
+else
+    if [[ -f "$UNIT" ]]; then run cp "$UNIT" "$UNIT.bak.$(date +%s)"; fi
+    run install -D -m 644 "$RENDERED" "$UNIT"
+    run systemctl daemon-reload
+    run systemctl try-restart homeai.service   # a running Jarvis picks up the changed unit
+fi
 run systemctl enable --now homeai.service
 [[ $DRY -eq 1 ]] && { echo "(dry run: nothing was changed)"; exit 0; }
 sleep "$SETTLE"

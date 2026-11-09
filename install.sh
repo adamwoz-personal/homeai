@@ -27,7 +27,8 @@
 #
 # Options:
 #   --dry-run              print actions instead of performing them
-#   --sudo                 also install the Ollama VRAM guard (asks for a password)
+#   --sudo                 also install the Ollama VRAM guard and run Jarvis as a system
+#                          unit, which is what makes its sandbox work (asks for a password)
 #   --no-service           do not install or start the systemd user service
 #   --no-audio-required    allow installing on a machine without mic/speaker
 #   --agent NAME           ZeroClaw agent name (default: HOMEAI_AGENT_NAME in .env, else jarvis)
@@ -49,7 +50,7 @@ ZC_DIR="${HOME}/.zeroclaw"
 VERIFY=1
 HOME_ASSISTANT=0
 
-usage() { sed -n '4,37p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '4,38p' "$0" | sed 's/^# \{0,1\}//'; }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -288,20 +289,9 @@ elif [[ "$SYSTEMD_USER" != "1" ]]; then
 else
     RENDERED="$(mktemp)"
     trap 'rm -f "$ASSESS_ENV" "${MODELFILE:-}" "$RENDERED"' EXIT
-    if [[ -f "$SYSTEM_UNIT" ]]; then
-        # SANDBOX_PLAN step 4: Jarvis is a system unit; never bring the user unit back beside it.
-        info "Jarvis runs as a system unit ($SYSTEM_UNIT); update it with: sudo tools/install_system_service.sh"
-    else
-        sed -e "s#@REPO@#${REPO}#g" -e "s#@ZEROCLAW_DIR@#${ZC_DIR}#g" deploy/systemd/homeai.service.in > "$RENDERED"
-        if [[ -f "$UNIT" ]] && cmp -s "$RENDERED" "$UNIT"; then
-            info "service unit up to date"
-        else
-            [[ -f "$UNIT" ]] && run cp "$UNIT" "$UNIT.bak.$(date +%s)"
-            run install -D -m 644 "$RENDERED" "$UNIT"
-            run systemctl --user daemon-reload
-        fi
-        run systemctl --user enable homeai.service
-    fi
+    # shellcheck source=deploy/jarvis_unit.sh
+    . "$REPO/deploy/jarvis_unit.sh"
+    install_jarvis_unit
 
     # Nightly memory backup and hourly health/maintenance, only where the memory database exists.
     for f in homeai-memory-backup.service homeai-memory-backup.timer \

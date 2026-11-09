@@ -8,7 +8,7 @@ Day-to-day operation and fixes. The reasoning behind each decision is in
 ```bash
 git clone <this repo> ~/src/homeai && cd ~/src/homeai
 ./install.sh --dry-run     # assess the machine and list every action
-./install.sh --sudo        # install, including the Ollama VRAM guard
+./install.sh --sudo        # install, including the Ollama VRAM guard and Jarvis as a system unit (sandbox enforced)
 ```
 
 The installer aborts, listing every reason, if the machine cannot run a home

@@ -112,11 +112,28 @@ def test_undo_brings_the_user_unit_back(box):
     assert box.log()[-1] == "systemctl --user enable --now homeai.service"
 
 
-def test_no_polkit_rule_means_nothing_is_touched(box):
+def test_the_polkit_rule_is_installed_for_the_owner(box):
     box.rule.unlink()
+    assert box.run().returncode == 0
+    text = box.rule.read_text()
+    assert f'subject.user !== "{getpass.getuser()}"' in text and "@USER@" not in text
+
+
+def test_a_rerun_with_nothing_changed_restarts_nothing(box):
+    assert box.run().returncode == 0
+    before = len(box.log())
     proc = box.run()
-    assert proc.returncode == 1 and "polkit rule" in proc.stderr
-    assert box.log() == [] and box.user_unit.exists() and not box.unit.exists()
+    assert proc.returncode == 0 and "system unit up to date" in proc.stdout
+    assert not [line for line in box.log()[before:] if "restart" in line or line == "systemctl daemon-reload"]
+
+
+def test_a_changed_unit_is_installed_and_jarvis_restarted(box):
+    assert box.run().returncode == 0
+    box.unit.write_text("[Service]\n# an older unit\n")
+    before = len(box.log())
+    assert box.run().returncode == 0
+    assert "LockPersonality=true" in box.unit.read_text()
+    assert "systemctl try-restart homeai.service" in box.log()[before:]
 
 
 def test_dry_run_changes_nothing(box):
@@ -131,11 +148,11 @@ def test_linger_is_turned_on_when_off(box):
     assert f"loginctl enable-linger {getpass.getuser()}" in box.log()
 
 
-def test_install_sh_leaves_the_user_unit_alone_once_jarvis_is_a_system_unit():
+def test_install_sh_leaves_the_jarvis_unit_to_jarvis_unit_sh():
+    """The choice is tested in test_install_jarvis_unit.py; install.sh must not install homeai.service itself."""
     text = (REPO / "install.sh").read_text()
-    guard = text.index('if [[ -f "$SYSTEM_UNIT" ]]; then')
-    assert guard < text.index("run systemctl --user enable homeai.service")
-    assert guard < text.index('run install -D -m 644 "$RENDERED" "$UNIT"')
+    assert '. "$REPO/deploy/jarvis_unit.sh"' in text and "\n    install_jarvis_unit\n" in text
+    assert "systemctl --user enable homeai.service" not in text
 
 
 @pytest.mark.skipif(not Path("/usr/bin/systemd-analyze").exists(), reason="no systemd-analyze")
