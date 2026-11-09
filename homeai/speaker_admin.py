@@ -29,6 +29,7 @@ from pathlib import Path
 
 import numpy as np
 
+from . import service_scope
 from .config import PROJECT_ROOT, SpeakerConfig
 
 ENV_FILE = PROJECT_ROOT / ".env"
@@ -111,7 +112,7 @@ def read_wav(path: Path) -> np.ndarray:
 
 
 def restart_homeai(run=subprocess.run) -> str:
-    proc = run(["systemctl", "--user", "restart", "homeai"], capture_output=True, text=True)
+    proc = run(service_scope.systemctl("restart", "homeai"), capture_output=True, text=True)
     return "homeai restarted" if proc.returncode == 0 else \
         f"restart homeai yourself: {proc.stderr.strip() or 'systemctl failed'}"
 

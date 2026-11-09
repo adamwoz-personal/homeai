@@ -717,6 +717,15 @@ MUTANTS=(
   "polkit-any-user|deploy/polkit/50-homeai.rules.in|s/subject.user !== \"@USER@\"/false/|tests/test_polkit_rule.py"
   "polkit-any-unit|deploy/polkit/50-homeai.rules.in|s/action.lookup(\"unit\") !== \"homeai.service\"/false/|tests/test_polkit_rule.py"
   "polkit-any-verb|deploy/polkit/50-homeai.rules.in|s/(verb === \"start\"/(verb !== \"\"/|tests/test_polkit_rule.py"
+  "scope-file-ignored|homeai/service_scope.py|s/return \"system\" if unit_file.exists() else \"user\"/return \"user\"/|tests/test_service_scope.py"
+  "scope-env-ignored|homeai/service_scope.py|s/if forced in (\"system\", \"user\"):/if False:/|tests/test_service_scope.py"
+  "scope-bad-env-trusted|homeai/service_scope.py|s/if forced in (\"system\", \"user\"):/if forced:/|tests/test_service_scope.py"
+  "scope-moves-every-unit|homeai/service_scope.py|s/if voice and scope() == \"system\":/if scope() == \"system\":/|tests/test_service_scope.py"
+  "scope-mixed-allowed|homeai/service_scope.py|s/if voice and len(voice) != len(units):/if False:/|tests/test_service_scope.py"
+  "scope-hint-always-user|homeai/service_scope.py|s/user = \"\" if scope() == \"system\" else \" --user\"/user = \" --user\"/|tests/test_service_scope.py"
+  "gpumode-systemctl-always-user|homeai/gpu_mode.py|s/subprocess.run(service_scope.systemctl(\*args)/subprocess.run([\"systemctl\", \"--user\", *args]/|tests/test_service_scope.py"
+  "speaker-restart-always-user|homeai/speaker_admin.py|s/run(service_scope.systemctl(\"restart\", \"homeai\")/run([\"systemctl\", \"--user\", \"restart\", \"homeai\"]/|tests/test_service_scope.py"
+  "tests-scope-not-pinned|tests/conftest.py|s/monkeypatch.setenv(\"HOMEAI_SERVICE_SCOPE\", \"user\")/pass/|tests/test_service_scope.py"
   "polkit-any-action|deploy/polkit/50-homeai.rules.in|s/action.id !== \"org.freedesktop.systemd1.manage-units\"/false/|tests/test_polkit_rule.py"
 )
 

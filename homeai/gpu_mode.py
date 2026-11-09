@@ -44,7 +44,7 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-from homeai import gpu_info
+from homeai import gpu_info, service_scope
 from homeai.httpjson import OLLAMA
 
 VOICE_SERVICE = "homeai.service"
@@ -108,7 +108,7 @@ class System:
         self.dropin_dir = dropin_dir or runtime_dropin_dir()
 
     def systemctl(self, *args: str) -> bool:
-        proc = subprocess.run(["systemctl", "--user", *args], capture_output=True,
+        proc = subprocess.run(service_scope.systemctl(*args), capture_output=True,
                               text=True, check=False, timeout=120)
         return proc.returncode == 0
 
@@ -443,7 +443,7 @@ class ModeSwitcher:
             raise ModeError(f"could not start {VOICE_SERVICE}")
         self.sys.sleep(3)
         if not self.sys.is_active(VOICE_SERVICE):
-            raise ModeError(f"{VOICE_SERVICE} did not stay up; journalctl --user -u homeai -n 50")
+            raise ModeError(f"{VOICE_SERVICE} did not stay up; {service_scope.journal_hint()}")
         self.log("voice mode: Jarvis is listening")
 
 

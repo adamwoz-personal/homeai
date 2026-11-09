@@ -36,6 +36,8 @@ def _isolated_home(tmp_path, monkeypatch):
     monkeypatch.setenv("HOMEAI_LTM_HELPER_URL", "http://127.0.0.1:9")
     # No avatar event bus unless a test opts in (tests/test_avatar_presence.py).
     monkeypatch.setenv("HOMEAI_AVATAR", "0")
+    # homeai.service may be a system unit on this box; tests pick the layout themselves.
+    monkeypatch.setenv("HOMEAI_SERVICE_SCOPE", "user")
     (tmp_path / "run").mkdir(exist_ok=True)
 
 
