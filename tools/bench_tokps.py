@@ -59,6 +59,26 @@ def build_prompt(target_tokens: int) -> str:
     )
 
 
+def chat_prompt(url: str, text: str, post=None) -> str:
+    """``text`` wrapped in the served model's own chat template (llama-server's /apply-template).
+
+    Why: on a raw prompt Qwen3.6 ends with an end-of-text token after one token, which ``ignore_eos`` does not
+    block (llama.cpp 8681, 2026-11-10), and the rate came out as 1000000 tok/s. As a chat turn every model
+    answers at length. Falls back to the raw text when the server has no such endpoint.
+    """
+    post = post or _post
+    try:
+        return post(url.rstrip("/") + "/apply-template", {"messages": [{"role": "user", "content": text}]}, 30)["prompt"]
+    except (OSError, KeyError, ValueError):
+        return text
+
+
+def _post(url: str, body: dict, timeout: float) -> dict:
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read())
+
+
 def completion(url: str, prompt: str, n_predict: int, timeout: float) -> dict:
     payload = json.dumps({
         "prompt": prompt,
@@ -88,8 +108,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", help="append a JSON line with the result")
     args = ap.parse_args(argv)
 
-    prompt = build_prompt(args.ctx_tokens)
-    pp, tg, n_prompt = [], [], 0
+    prompt = chat_prompt(args.url, build_prompt(args.ctx_tokens))
+    pp, tg, n_prompt, short = [], [], 0, []
     for rep in range(args.reps):
         started = time.monotonic()
         try:
@@ -100,19 +120,27 @@ def main(argv: list[str] | None = None) -> int:
         t = data.get("timings", {})
         n_prompt = t.get("prompt_n", 0)
         pp.append(t.get("prompt_per_second", 0.0))
-        tg.append(t.get("predicted_per_second", 0.0))
+        n_gen = t.get("predicted_n", 0)
+        # A rate over a token or two is meaningless (2026-11-10: Qwen3.6 stopped after 1 token on the long
+        # prompt and this printed 1000000 tok/s). Only a run that generated what was asked counts.
+        if n_gen >= args.n_predict * 0.9:
+            tg.append(t.get("predicted_per_second", 0.0))
+        else:
+            short.append(f"rep {rep + 1}: {n_gen} tok, stop {data.get('stop_type', '?')!r}")
         print(f"rep {rep + 1}: prompt {n_prompt} tok @ {pp[-1]:7.1f} tok/s, "
-              f"gen {t.get('predicted_n', 0)} tok @ {tg[-1]:6.1f} tok/s, "
-              f"wall {time.monotonic() - started:5.1f}s")
+              f"gen {n_gen} tok @ {t.get('predicted_per_second', 0.0):6.1f} tok/s "
+              f"(stop {data.get('stop_type', '?')}), wall {time.monotonic() - started:5.1f}s")
 
     result = {
         "label": args.label, "prompt_tokens": n_prompt,
         "pp_median": round(statistics.median(pp), 1),
-        "tg_median": round(statistics.median(tg), 1),
+        "tg_median": round(statistics.median(tg), 1) if tg else None,
+        "short_runs": short,
         "reps": args.reps, "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
-    print(f"\n{args.label or 'result'}: prompt {result['pp_median']} tok/s, "
-          f"generation {result['tg_median']} tok/s (median of {args.reps})")
+    gen = (f"generation {result['tg_median']} tok/s (median of {len(tg)})" if tg
+           else f"generation NOT MEASURED: every rep stopped early ({'; '.join(short)})")
+    print(f"\n{args.label or 'result'}: prompt {result['pp_median']} tok/s, {gen}")
     if args.out:
         out = Path(args.out).expanduser()
         out.parent.mkdir(parents=True, exist_ok=True)
