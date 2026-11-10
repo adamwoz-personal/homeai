@@ -498,11 +498,10 @@ class ArtVoice:
 
 def _warm_voice_model() -> None:
     """Load the voice model again after a check (Ollama holds one model): ~1.9 s, off the speaking path."""
-    from homeai import httpjson
-    from homeai.art.patcher import MODEL
+    from homeai import httpjson, voice_model
     try:
-        httpjson.ollama_chat(MODEL, [{"role": "user", "content": "ok"}], keep_alive=-1, options={"num_predict": 1},
-                             timeout=120)
+        httpjson.ollama_chat(voice_model.current(), [{"role": "user", "content": "ok"}], keep_alive=-1,
+                             options={"num_predict": 1}, think=False, timeout=120)
     except (OSError, KeyError, ValueError) as exc:
         log.warning("could not reload the voice model: %s", exc)
 

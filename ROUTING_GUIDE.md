@@ -2073,3 +2073,12 @@ Bake-off and routines (2026-11-06):
   speculative drafter (gemma4-assistant); the real model takes 5.4 GB on the card. Lesson: measure VRAM on the card
   (sysfs, loaded minus empty), never from /api/ps alone (tools/probe_voice_fit.py). qwen3.5:9b fits beside the coder
   at 16k with 0.38 GB to spare (today's model: 0.50).
+- 2026-11-10 (voice model switch): Jarvis now runs qwen35-voice (Adam's pick by blind A/B: gemma won chat, qwen won
+  the practical answers and had 0 misfires), thinking off, spoken budget 180. Three surprises: (1) both candidates
+  THINK on Ollama's routes unless told not to, and only `reasoning_effort: "none"` works on the OpenAI route
+  (think/enable_thinking/chat_template_kwargs are ignored); on the native route qwen's thinking ran the art
+  patcher's 30 s budget out with an empty answer, so native calls now send `think: false` (400 -> retry without).
+  (2) Removing a constant (patcher.MODEL) broke two places the tests never ran: a lazy import inside a function
+  and an attribute use (`P.MODEL`) in an eval script; grep for `import NAME`, `.NAME` AND lazy imports, and run
+  the live tools (art_voice_live, eval_spec_patches) after a model change. (3) The voice model's name lived in
+  six places; now homeai/voice_model.py reads it from ZeroClaw's config and tools/switch_voice_model.py changes it.

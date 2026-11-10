@@ -119,7 +119,8 @@ def features_patch_for(spec: dict, instruction: str, chat=None, clock=time.monot
 
 
 def ollama_chat(messages: list[dict], schema: dict, timeout: float = TIMEOUT_S) -> str:
-    return httpjson.ollama_chat(voice_model.current(), messages, fmt=schema, keep_alive=-1, options={"temperature": 0},
+    return httpjson.ollama_chat(voice_model.current(), messages, fmt=schema, keep_alive=-1, think=False,
+                                options={"temperature": 0},
                                 timeout=timeout)
 
 

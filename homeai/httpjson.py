@@ -12,6 +12,7 @@ catch that"; a failed picture check shows the picture unchecked).
 from __future__ import annotations
 
 import json
+import urllib.error
 import urllib.request
 
 OLLAMA = "http://127.0.0.1:11434"
@@ -27,11 +28,25 @@ def post_json(url: str, payload: dict | None = None, timeout: float = 30.0) -> d
 
 
 def ollama_chat(model: str, messages: list[dict], *, fmt: dict | None = None, keep_alive: int | str = -1,
-                options: dict | None = None, timeout: float = 30.0) -> str:
-    """One non-streamed /api/chat answer's text. ``keep_alive`` -1 pins the model (the voice model must stay)."""
+                options: dict | None = None, timeout: float = 30.0, think: bool | None = None, post=None) -> str:
+    """One non-streamed /api/chat answer's text. ``keep_alive`` -1 pins the model (the voice model must stay).
+
+    ``think=False`` turns thinking off: on the native API qwen3.5 thinks by default, and on 2026-11-10 that ran
+    the art patcher's 30 s budget out with an empty answer. Models without thinking reject the flag with a 400,
+    so it is dropped and the request sent again.
+    """
+    post = post or post_json
     payload: dict = {"model": model, "messages": messages, "stream": False, "keep_alive": keep_alive}
     if fmt is not None:
         payload["format"] = fmt
     if options is not None:
         payload["options"] = options
-    return post_json(f"{OLLAMA}/api/chat", payload, timeout)["message"]["content"]
+    if think is not None:
+        payload["think"] = think
+    try:
+        return post(f"{OLLAMA}/api/chat", payload, timeout)["message"]["content"]
+    except urllib.error.HTTPError as exc:
+        if think is None or exc.code != 400:
+            raise
+        payload.pop("think")
+        return post(f"{OLLAMA}/api/chat", payload, timeout)["message"]["content"]

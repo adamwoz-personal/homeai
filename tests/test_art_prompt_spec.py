@@ -156,6 +156,7 @@ def test_voice_model_stays_pinned(monkeypatch):
     P.ollama_chat([{"role": "user", "content": "x"}], PS.PATCH_SCHEMA)
     assert sent["keep_alive"] == -1, "anything else unloads Jarvis"
     assert sent["format"] is not None and "tools" not in sent and sent["model"] == "llama31-voice"
+    assert sent["think"] is False, "qwen3.5 thinks by default and ran out the 30 s budget (2026-11-10)"
 
 
 def test_model_nulling_the_subject_in_passing_is_ignored():

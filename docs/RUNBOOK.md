@@ -42,8 +42,10 @@ named `jarvis`; on the original box it is `local` (`HOMEAI_AGENT_NAME` in
 | Back to the user unit | `sudo tools/install_system_service.sh --undo` (and again without `--undo` to return) |
 | Check the sandbox is enforced | `sudo tools/probe_sandbox.sh`, or `awk '$5=="/"{print $6}' /proc/$(systemctl show -p MainPID --value homeai)/mountinfo` starts with `ro` |
 | Check config and dependencies | `set -a; . ./.env; set +a; .venv/bin/python -m homeai.daemon --check` |
-| What is loaded on the GPU | `ollama ps` (expect `llama31-voice`, `100% GPU`, `Forever`) |
+| What is loaded on the GPU | `ollama ps` (expect the voice model, `qwen35-voice` since 2026-11-10, `100% GPU`, `Forever`) |
 | Recent conversations | `tail ~/.local/share/homeai/transcript.jsonl` |
+| Which voice model Jarvis uses | `.venv/bin/python -m homeai.voice_model` (read from ZeroClaw's config, the one place it is set) |
+| Switch the voice model | `.venv/bin/python tools/switch_voice_model.py <model> [--dry-run]`: checks num_ctx 16384 and that Jarvis is idle, backs up `~/.zeroclaw/config.toml`, restarts ZeroClaw, reloads the model on the GPU, rolls back if ZeroClaw fails. Back to the old one: `tools/switch_voice_model.py llama31-voice` |
 | Talk to the voice agent without a mic | `zeroclaw agent -a "$HOMEAI_AGENT_NAME" -m "..."` |
 
 ## Talking to Jarvis
@@ -59,7 +61,7 @@ named `jarvis`; on the original box it is `local` (`HOMEAI_AGENT_NAME` in
 
 | Variable | Default | Effect |
 |---|---|---|
-| `HOMEAI_SPOKEN_BUDGET_WORDS` | 110 | Words before "keep going?"; 0 disables |
+| `HOMEAI_SPOKEN_BUDGET_WORDS` | 180 | Words before "keep going?"; 0 disables |
 | `HOMEAI_AGENT_STYLE_HINT` | built in | Guidance sent with every request; `off` disables |
 | `HOMEAI_WAKE_THRESHOLD` | 0.5 | Raise it if Jarvis wakes by mistake |
 | `HOMEAI_AGENT_NAME` | local | ZeroClaw agent used for voice |
@@ -84,7 +86,7 @@ shipped copy is `deploy/zeroclaw/SOUL.md`. After editing it, measure with
 |---|---|---|
 | Never wakes | Logs show `wake detector`? The right mic? | `HOMEAI_INPUT_DEVICE`, or lower the wake threshold |
 | Jarvis not responding, no wake at all | Logs show `microphone silent` or `microphone stalled, giving up`? The watchdog reopens a silent mic after 5 s, three tries, then exits so systemd restarts it | If restarts hit the limit (5 in 5 min), replug the webcam, then `sudo systemctl reset-failed homeai` and `systemctl start homeai` |
-| Wakes, then "Something went wrong" | `journalctl -u homeai -n 50` | `ollama ps`: the model isn't loaded. `ollama run llama31-voice ""` |
+| Wakes, then "Something went wrong" | `journalctl -u homeai -n 50` | `ollama ps`: the model isn't loaded. `ollama run $(.venv/bin/python -m homeai.voice_model) ""` |
 | Slow replies (over 5 s) | `ollama ps` shows a CPU % | Something else is using the VRAM (the coder's llama-server); see below |
 | Repeats itself or recites lists | `tools/inspect_zc_memory.py`, `tools/probe_agent_prompt.py`, `tools/eval_repeat_followup.py`; journal "dropped N sentence(s) repeating" | Make sure `memory_recall` is not in the voice profile's `allowed_tools`. Restated sentences are filtered (`dialogue.drop_repeated_sentences`, `REPEAT_OVERLAP` 0.6); "say that again" bypasses it |
 | Box froze, out of memory | `systemctl show ollama -p Environment` | Install `deploy/ollama-vram-guard.conf` (`OLLAMA_MAX_LOADED_MODELS=1`) |
@@ -96,7 +98,7 @@ Ollama has no authentication: anyone on the network can use the GPU, and a big
 model they load evicts the voice model (`OLLAMA_MAX_LOADED_MODELS=1`). Check with
 `ss -ltn | grep 11434`. Undo: `sudo rm` the file, `daemon-reload`, restart ollama.
 Any Ollama restart unloads the voice model; warm it with
-`curl -s localhost:11434/api/generate -d '{"model":"llama31-voice","keep_alive":-1}'`.
+`curl -s localhost:11434/api/generate -d "{\"model\":\"$(.venv/bin/python -m homeai.voice_model)\",\"keep_alive\":-1}"`.
 The memory helper (CPU) also evicts it while it runs; afterwards the worker
 unloads the helper and re-pins the voice model (`HOMEAI_LTM_RESTORE_MODEL`,
 empty to skip). Which tools the agent called: `~/.zeroclaw/data/state/runtime-trace.jsonl`.

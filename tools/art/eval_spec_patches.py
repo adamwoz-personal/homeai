@@ -25,6 +25,7 @@ sys.path.insert(0, str(REPO))
 
 from homeai.art import patcher as P  # noqa: E402
 from homeai.art import prompt_spec as PS  # noqa: E402
+from homeai import voice_model  # noqa: E402
 from homeai.benchio import bench_path  # noqa: E402
 
 FOX = {"subject": "a red fox", "setting": "sitting in the snow"}
@@ -118,7 +119,7 @@ def main() -> int:
                   f"{'; '.join(problems)}", flush=True)
     passed = sum(r["ok"] for r in rows)
     summary = {"passed": passed, "runs": len(rows), "median_s": statistics.median(times), "max_s": max(times),
-               "model": P.MODEL}
+               "model": voice_model.current()}
     (out / "result.json").write_text(json.dumps({"summary": summary, "rows": rows}, indent=1))
     print(json.dumps(summary))
     print(out)

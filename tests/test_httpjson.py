@@ -1,6 +1,10 @@
 """homeai/httpjson.py: the one JSON-over-HTTP helper for Ollama and ComfyUI (CODE_REVIEW_PLAN item 1)."""
 from __future__ import annotations
 
+import urllib.error
+
+import io
+
 import json
 
 import pytest
@@ -70,3 +74,34 @@ def test_the_checker_asks_with_the_picture_and_lets_the_model_go(wire, tmp_path)
     assert CK.ollama_ask(image, "How many heads?") == "2"
     body = sent[0]["body"]
     assert body["model"] == "minicpm-v" and body["keep_alive"] == "2m" and body["messages"][0]["images"] == ["cG5n"]
+
+
+def _chat_fake(reject_think: bool, code: int = 400):
+    from homeai import httpjson
+    calls = []
+
+    def post(url, payload=None, timeout=30.0):
+        calls.append(dict(payload))
+        if "think" in payload and reject_think:
+            raise urllib.error.HTTPError(url, code, "does not support thinking", {}, io.BytesIO())
+        return {"message": {"content": "ok"}}
+    return httpjson, calls, post
+
+
+def test_think_false_is_sent():
+    httpjson, calls, post = _chat_fake(False)
+    assert httpjson.ollama_chat("m", [], think=False, post=post) == "ok"
+    assert calls == [{"model": "m", "messages": [], "stream": False, "keep_alive": -1, "think": False}]
+
+
+def test_a_model_without_thinking_is_asked_again_without_the_flag():
+    httpjson, calls, post = _chat_fake(True)
+    assert httpjson.ollama_chat("m", [], think=False, post=post) == "ok"
+    assert "think" in calls[0] and "think" not in calls[1] and len(calls) == 2
+
+
+def test_other_errors_are_not_retried():
+    httpjson, calls, post = _chat_fake(True, code=500)
+    with pytest.raises(urllib.error.HTTPError):
+        httpjson.ollama_chat("m", [], think=False, post=post)
+    assert len(calls) == 1
