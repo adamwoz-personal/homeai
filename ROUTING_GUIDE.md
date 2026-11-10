@@ -4,7 +4,7 @@
 with Claude (paid). Updated as evidence accumulates. Every rule here comes from an
 observed outcome on this box, not from theory.
 
-Last updated: 2026-11-09
+Last updated: 2026-11-10
 
 ---
 
@@ -2069,3 +2069,7 @@ Bake-off and routines (2026-11-06):
   just slow. qwen3.5:9b 87/87, gemma4:e4b 84/87. Lesson: score tool choice directly (tools/eval_tool_misfire.py);
   a right answer hides a needless lookup. Also: the sandboxed unit made onnxruntime write ":memory:.ses" into the
   repo (home read-only); homeai now sets ORT_DISABLE_TELEMETRY=1.
+- 2026-11-10 (model upgrade step 1b): Ollama's /api/ps reported gemma4:e4b as 0.31 GB "100% GPU": that is only its
+  speculative drafter (gemma4-assistant); the real model takes 5.4 GB on the card. Lesson: measure VRAM on the card
+  (sysfs, loaded minus empty), never from /api/ps alone (tools/probe_voice_fit.py). qwen3.5:9b fits beside the coder
+  at 16k with 0.38 GB to spare (today's model: 0.50).
