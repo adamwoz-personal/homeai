@@ -76,6 +76,7 @@ QUESTIONS: list[tuple[str, frozenset]] = [
     ("How hot is it going to get today?", frozenset({"homeai__weather"})),
     ("What's the weather like tomorrow?", frozenset({"homeai__weather"})),   # day=tomorrow (2026-11-10)
     ("Will it rain on Saturday?", frozenset({"homeai__weather"})),           # day=saturday
+    ("What will the weather be like a week from now?", frozenset({"homeai__weather"})),   # days_ahead=7
     ("Who was at the front door?", frozenset({"homeai__door"})),
     ("Did anyone ring the doorbell?", frozenset({"homeai__door"})),
     ("Set a timer for ten minutes.", frozenset({"homeai__timer"})),

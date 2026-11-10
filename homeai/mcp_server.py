@@ -68,8 +68,14 @@ def _tool_weather(arguments: dict[str, Any]) -> str:
     if not location:
         location = DEFAULT_LOCATION
     day = str(arguments.get("day") or "today").strip().lower()
-    if day != "today":
-        forecast = get_forecast(location, day)
+    try:
+        ahead = int(arguments["days_ahead"]) if arguments.get("days_ahead") is not None else None
+    except (TypeError, ValueError):
+        raise WeatherError(f"days_ahead must be a whole number, got {arguments.get('days_ahead')!r}") from None
+    if ahead == 0:
+        ahead, day = None, "today"
+    if day != "today" or ahead is not None:
+        forecast = get_forecast(location, day, days_ahead=ahead)
         def deg(v: float | None) -> str:
             return f"{v:.0f}F" if v is not None else "unknown"
         chance = f"{forecast.precipitation_chance}%" if forecast.precipitation_chance is not None else "unknown"
@@ -193,8 +199,8 @@ TOOLS: list[dict[str, Any]] = [
         "name": "weather",
         "description": (
             "Get current weather conditions and today's high and low for a "
-            "location, or the forecast for tomorrow or a day in the next week "
-            "(set day). Returns temperature in Fahrenheit and wind in miles "
+            "location, or the forecast for a day up to nine days ahead (set day "
+            "or days_ahead). Returns temperature in Fahrenheit and wind in miles "
             "per hour. If the user does not name a place, omit the location "
             "argument to use their home location."
         ),
@@ -216,6 +222,16 @@ TOOLS: list[dict[str, Any]] = [
                         "Which day: 'today' (the default; includes current "
                         "conditions), 'tomorrow', or a weekday name for one of "
                         "the next seven days. Omit for today."
+                    ),
+                },
+                "days_ahead": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9,
+                    "description": (
+                        "Days from today: 1 = tomorrow, 7 = a week from today. "
+                        "Use it for 'in N days', 'a week from now' or 'next "
+                        "Tuesday'; it overrides day."
                     ),
                 },
             },

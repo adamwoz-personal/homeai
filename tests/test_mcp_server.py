@@ -368,7 +368,8 @@ def test_weather_tomorrow_returns_the_forecast(monkeypatch) -> None:
     calls: list[tuple[str, str]] = []
     place = Place("Lilburn", 33.9, -84.1, admin="Georgia")
     forecast = DayForecast(place, "tomorrow", "2026-11-11", "light rain", 64.6, 48.4, 70)
-    monkeypatch.setattr(mcp, "get_forecast", lambda location, day: calls.append((location, day)) or forecast)
+    monkeypatch.setattr(mcp, "get_forecast",
+                        lambda location, day, days_ahead=None: calls.append((location, day)) or forecast)
     monkeypatch.setattr(mcp, "get_weather", lambda location: pytest.fail("today's conditions not wanted"))
 
     response = _call_tool("weather", {"day": "Tomorrow"})
@@ -384,4 +385,34 @@ def test_weather_day_is_offered_to_the_model() -> None:
     day = weather_tool["inputSchema"]["properties"]["day"]
     assert day["enum"][:3] == ["today", "tomorrow", "monday"] and len(day["enum"]) == 9
     assert weather_tool["inputSchema"]["required"] == []
-    assert "tomorrow" in weather_tool["description"]
+    assert "nine days ahead" in weather_tool["description"]
+    ahead = weather_tool["inputSchema"]["properties"]["days_ahead"]
+    assert (ahead["type"], ahead["minimum"], ahead["maximum"]) == ("integer", 0, 9)
+
+
+@pytest.mark.parametrize("args, expected", [
+    ({"days_ahead": 7}, ("today", 7)),
+    ({"days_ahead": "7", "day": "tuesday"}, ("tuesday", 7)),
+    ({"days_ahead": 1}, ("today", 1)),
+])
+def test_weather_days_ahead_reaches_the_forecast(monkeypatch, args, expected) -> None:
+    from homeai.weather import DayForecast, Place
+    calls = []
+    forecast = DayForecast(Place("Lilburn", 1, 2, admin="Georgia"), "tuesday the 17th", "2026-11-17", "clear", 61, 42, 10)
+    monkeypatch.setattr(mcp, "get_forecast",
+                        lambda location, day, days_ahead=None: calls.append((day, days_ahead)) or forecast)
+    monkeypatch.setattr(mcp, "get_weather", lambda location: pytest.fail("today's conditions not wanted"))
+    response = _call_tool("weather", args)
+    assert calls == [expected] and "date 2026-11-17" in _text(response)
+
+
+def test_weather_days_ahead_zero_is_today_s_conditions(monkeypatch, fake_conditions) -> None:
+    monkeypatch.setattr(mcp, "get_forecast", lambda *a, **k: pytest.fail("no forecast for today"))
+    monkeypatch.setattr(mcp, "get_weather", lambda location: fake_conditions)
+    assert "72 degrees" in _text(_call_tool("weather", {"days_ahead": 0}))
+
+
+def test_weather_days_ahead_nonsense_is_an_error_not_today(monkeypatch) -> None:
+    monkeypatch.setattr(mcp, "get_weather", lambda location: pytest.fail("must not fall back to today"))
+    response = _call_tool("weather", {"days_ahead": "next week"})
+    assert response["result"]["isError"] is True and "whole number" in _text(response)

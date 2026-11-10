@@ -301,7 +301,7 @@ class TestForecast:
         seen = {}
         monkeypatch.setattr(weather, "_get_json", lambda url, params, timeout: seen.update(params) or DAILY_OK)
         weather.fetch_forecast(Place("X", 1, 2, timezone="America/New_York"), "tomorrow")
-        assert seen["forecast_days"] == 7 and seen["temperature_unit"] == "fahrenheit"
+        assert seen["forecast_days"] == 10 and seen["temperature_unit"] == "fahrenheit"
         assert seen["timezone"] == "America/New_York" and "weather_code" in seen["daily"]
 
     def test_no_forecast_raises(self, stub_http):
@@ -325,3 +325,46 @@ class TestForecast:
         table["forecast"] = {"daily": {k: v[:1] for k, v in DAILY_OK["daily"].items()}}
         with pytest.raises(WeatherError, match="no forecast for tomorrow"):
             weather.fetch_forecast(LILBURN, "tomorrow")
+
+
+TEN = WEEK + ["2026-11-17", "2026-11-18", "2026-11-19"]
+TEN_OK = {"daily": {
+    "time": TEN,
+    "weather_code": [0, 61, 3, 95, 0, 0, 71, 2, 63, 0],
+    "temperature_2m_max": [70, 65, 60, 58, 66, 68, 50, 61.4, 57, 59],
+    "temperature_2m_min": [50, 48, 45, 44, 47, 49, 35, 42.2, 40, 41],
+    "precipitation_probability_max": [5, 70, 10, 90, 0, 0, 40, 10, 80, 0],
+}}
+
+
+class TestTenDays:
+    """2026-11-10: "seven days from now" (the eighth day) asked as "tuesday" on a Tuesday came back as today."""
+
+    def test_a_week_from_today_is_next_tuesday_with_its_date(self, stub_http):
+        table, _ = stub_http
+        table["forecast"] = TEN_OK
+        f = weather.fetch_forecast(LILBURN, "today", days_ahead=7)
+        assert (f.date, f.label, f.description, round(f.high_f)) == ("2026-11-17", "tuesday the 17th", "partly cloudy", 61)
+        assert f.spoken().startswith("Tuesday the 17th in Lilburn, Georgia, the forecast is partly cloudy")
+
+    def test_days_ahead_overrides_day(self, stub_http):
+        table, _ = stub_http
+        table["forecast"] = TEN_OK
+        assert weather.fetch_forecast(LILBURN, "tomorrow", days_ahead=9).date == "2026-11-19"
+
+    @pytest.mark.parametrize("n", [-1, 10, 16])
+    def test_beyond_nine_days_is_refused_without_asking(self, stub_http, n):
+        table, calls = stub_http
+        table["forecast"] = TEN_OK
+        with pytest.raises(WeatherError, match="9 days ahead"):
+            weather.fetch_forecast(LILBURN, "today", days_ahead=n)
+        assert calls == []
+
+    @pytest.mark.parametrize("i, iso, label", [
+        (0, "2026-11-10", "today"), (1, "2026-11-11", "tomorrow"), (6, "2026-11-16", "monday"),
+        (7, "2026-11-17", "tuesday the 17th"), (8, "2026-11-18", "wednesday the 18th"),
+        (9, "2026-12-01", "tuesday the 1st"), (9, "2026-12-02", "wednesday the 2nd"), (9, "2026-12-03", "thursday the 3rd"),
+        (9, "2026-12-11", "friday the 11th"), (9, "2026-12-12", "saturday the 12th"), (9, "2026-12-22", "tuesday the 22nd"),
+    ])
+    def test_labels(self, i, iso, label):
+        assert weather.label_for(i, iso) == label

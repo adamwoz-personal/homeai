@@ -269,14 +269,16 @@ def fetch_conditions(place: Place, timeout: float = 10.0) -> Conditions:
 
 WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 DAYS = ("today", "tomorrow") + WEEKDAYS
-FORECAST_DAYS = 7   # past a week a forecast is a guess, and guesses are what this module refuses to give
+# Today plus nine. 7 was too few: "seven days from now" is the eighth day, so the model asked for "tuesday" on a
+# Tuesday and got today (2026-11-10). Open-Meteo gives up to 16; past ~10 a forecast is mostly climatology.
+FORECAST_DAYS = 10
 
 
 @dataclass(frozen=True)
 class DayForecast:
     """One day's forecast. Added 2026-11-10: "what's the weather tomorrow?" got "I can only check today"."""
     place: Place
-    label: str                 # "today", "tomorrow" or a weekday name, as spoken
+    label: str                 # "today", "tomorrow", a weekday, or "tuesday the 17th" a week or more ahead
     date: str                  # ISO date in the place's own timezone
     description: str
     high_f: float | None
@@ -312,7 +314,23 @@ def day_index(day: str, dates: list[str]) -> int:
     raise WeatherError(f"unknown day {day!r}; use today, tomorrow or a weekday")
 
 
-def fetch_forecast(place: Place, day: str, timeout: float = 10.0) -> DayForecast:
+def _ordinal(n: int) -> str:
+    return f"{n}{'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
+
+
+def label_for(i: int, iso: str) -> str:
+    """How the day is spoken. A week or more ahead the weekday alone would sound like this week's, so add the date."""
+    if i < 2:
+        return ("today", "tomorrow")[i]
+    d = date.fromisoformat(iso)
+    weekday = WEEKDAYS[d.weekday()]
+    return f"{weekday} the {_ordinal(d.day)}" if i >= 7 else weekday
+
+
+def fetch_forecast(place: Place, day: str, timeout: float = 10.0, days_ahead: int | None = None) -> DayForecast:
+    """One day's forecast: ``days_ahead`` (0 = today) when given, else ``day`` (today, tomorrow or a weekday)."""
+    if days_ahead is not None and not 0 <= days_ahead < FORECAST_DAYS:
+        raise WeatherError(f"forecasts only go {FORECAST_DAYS - 1} days ahead")
     data = _get_json(
         _FORECAST_URL,
         {
@@ -329,7 +347,7 @@ def fetch_forecast(place: Place, day: str, timeout: float = 10.0) -> DayForecast
     dates = [str(d) for d in daily.get("time") or []]
     if not dates:
         raise WeatherError("weather service returned no forecast")
-    i = day_index(day, dates)
+    i = days_ahead if days_ahead is not None else day_index(day, dates)
     if i >= len(dates):
         raise WeatherError(f"no forecast for {day}")
 
@@ -341,16 +359,16 @@ def fetch_forecast(place: Place, day: str, timeout: float = 10.0) -> DayForecast
 
     code = _at("weather_code")
     precip = _at("precipitation_probability_max")
-    label = ("today", "tomorrow")[i] if i < 2 else WEEKDAYS[date.fromisoformat(dates[i]).weekday()]
+    label = label_for(i, dates[i])
     return DayForecast(place=place, label=label, date=dates[i],
                        description=describe_code(int(code) if code is not None else None),
                        high_f=_at("temperature_2m_max"), low_f=_at("temperature_2m_min"),
                        precipitation_chance=int(precip) if precip is not None else None)
 
 
-def get_forecast(location: str, day: str, timeout: float = 10.0) -> DayForecast:
-    """Resolve a place name and fetch one day's forecast (today up to six days ahead)."""
-    return fetch_forecast(geocode(location, timeout), day, timeout)
+def get_forecast(location: str, day: str, timeout: float = 10.0, days_ahead: int | None = None) -> DayForecast:
+    """Resolve a place name and fetch one day's forecast (today up to nine days ahead)."""
+    return fetch_forecast(geocode(location, timeout), day, timeout, days_ahead)
 
 
 def get_weather(location: str, timeout: float = 10.0) -> Conditions:
