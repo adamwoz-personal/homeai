@@ -128,3 +128,13 @@ def test_extra_fields_reach_the_request_and_thinking_is_measured(tmp_path, monke
     assert off["models"]["m"]["summary"]["median_reasoning"] == 0 and off["extra"] == {"think": False}
     assert [p.get("think") for url, p in fake.calls if p] == [None, None, False, False]
     assert E.table(plain).splitlines()[-1].endswith("| 13.0 |")
+
+
+@pytest.mark.parametrize("message, args", [
+    ({"tool_calls": [{"function": {"name": "homeai__weather", "arguments": '{"day": "tomorrow"}'}}]}, {"day": "tomorrow"}),
+    ({"tool_calls": [{"function": {"name": "homeai__weather", "arguments": {"day": "saturday"}}}]}, {"day": "saturday"}),
+    ({"tool_calls": [{"function": {"name": "x", "arguments": "not json"}}]}, {}),
+    ({"content": "Paris."}, {}),
+])
+def test_tool_arguments_are_recorded(message, args):
+    assert E.first_args(message) == args

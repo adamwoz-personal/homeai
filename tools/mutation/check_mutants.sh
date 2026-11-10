@@ -801,6 +801,7 @@ MUTANTS=(
   "forecast-chance-dropped|homeai/weather.py|s/            parts.append(f\"There's a {self.precipitation_chance} percent chance of precipitation.\")/            pass/|tests/test_weather.py"
   "mcp-day-ignored|homeai/mcp_server.py|s/    if day != \"today\":/    if False:/|tests/test_mcp_server.py"
   "mcp-day-not-offered|homeai/mcp_server.py|s/                    \"enum\": list(DAYS),/                    \"enum\": [\"today\"],/|tests/test_mcp_server.py"
+  "misfire-args-dropped|tools/eval_tool_misfire.py|s/    return parsed if isinstance(parsed, dict) else {}/    return {}/|tests/test_eval_tool_misfire.py"
   "misfire-openai-ignored|tools/eval_tool_misfire.py|s/    if state.get(\"endpoint\") == \"openai\":/    if False:/|tests/test_eval_tool_misfire.py"
   "misfire-openai-drops-tool-choice|tools/eval_tool_misfire.py|s/    body = dict(capture\[\"body\"\])/    body = {k: v for k, v in capture[\"body\"].items() if k != \"tool_choice\"}/|tests/test_eval_tool_misfire.py"
   "polkit-any-action|deploy/polkit/50-homeai.rules.in|s/action.id !== \"org.freedesktop.systemd1.manage-units\"/false/|tests/test_polkit_rule.py"

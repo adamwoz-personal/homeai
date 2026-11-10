@@ -74,6 +74,8 @@ QUESTIONS: list[tuple[str, frozenset]] = [
     ("What's the weather like right now?", frozenset({"homeai__weather"})),
     ("Do I need a jacket today?", frozenset({"homeai__weather"})),
     ("How hot is it going to get today?", frozenset({"homeai__weather"})),
+    ("What's the weather like tomorrow?", frozenset({"homeai__weather"})),   # day=tomorrow (2026-11-10)
+    ("Will it rain on Saturday?", frozenset({"homeai__weather"})),           # day=saturday
     ("Who was at the front door?", frozenset({"homeai__door"})),
     ("Did anyone ring the doorbell?", frozenset({"homeai__door"})),
     ("Set a timer for ten minutes.", frozenset({"homeai__timer"})),
@@ -96,6 +98,19 @@ def classify(called: str | None, wanted: frozenset) -> str:
 def first_tool(message: dict) -> str | None:
     calls = message.get("tool_calls") or []
     return calls[0].get("function", {}).get("name") if calls else None
+
+
+def first_args(message: dict) -> dict:
+    """The first tool call's arguments (e.g. the weather day); {} when none or unparseable."""
+    calls = message.get("tool_calls") or []
+    raw = calls[0].get("function", {}).get("arguments") if calls else None
+    if isinstance(raw, dict):
+        return raw
+    try:
+        parsed = json.loads(raw or "{}")
+    except ValueError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
 
 
 def request_for(capture: dict, model: str, question: str, think: bool | None) -> dict:
@@ -129,7 +144,7 @@ def ask_openai(capture: dict, model: str, question: str, post=post_json, extra: 
     start = time.monotonic()
     reply = post(f"{OLLAMA}/v1/chat/completions", openai_request_for(capture, model, question, extra), 300)
     message = (reply.get("choices") or [{}])[0].get("message", {})
-    return {"tool": first_tool(message), "text": message.get("content") or "",
+    return {"tool": first_tool(message), "args": first_args(message), "text": message.get("content") or "",
             "reasoning_chars": len(message.get("reasoning") or message.get("reasoning_content") or ""),
             "seconds": round(time.monotonic() - start, 2)}
 
@@ -180,7 +195,7 @@ def run(capture: dict, models: list[str], reps: int, out: Path, post=post_json, 
                 answer = ask(capture, model, question, state, post)
                 row = {"question": question, "rep": rep, **answer, "verdict": classify(answer["tool"], wanted)}
                 rows.append(row)
-                log(f"{model} | {row['verdict']:7} | {row['tool'] or '-':17} | {question} | {row['text'][:70]!r}")
+                log(f"{model} | {row['verdict']:7} | {row['tool'] or '-':17} {row.get('args') or ''} | {question} | {row['text'][:70]!r}")
         data["models"][model] = {"gpu_percent": on_gpu(model, post), "summary": summary(rows), "rows": rows}
         (out / "result.json").write_text(json.dumps(data, indent=1))
     return data
