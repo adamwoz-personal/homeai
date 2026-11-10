@@ -1,0 +1,11 @@
+# Candidate for Jarvis's conversational model (plans/LLM_UPGRADE_PLAN.md).
+# Created with:
+#   ollama create qwen35-voice -f deploy/ollama/qwen35-voice.Modelfile
+#
+# Same settings as llama31-voice.Modelfile: Jarvis's request goes through
+# Ollama's OpenAI endpoint, which cannot set the context, so it lives here.
+# Measured 2026-11-10 at 16384 beside the coder: wholly on the GPU
+# (tools/probe_voice_fit.py).
+FROM qwen3.5:9b
+PARAMETER num_ctx 16384
+PARAMETER temperature 0.45
