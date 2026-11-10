@@ -176,7 +176,9 @@ def main() -> int:
     except (SwitchError, ValueError) as exc:
         print(f"not switched: {exc}", file=sys.stderr)
         return 1
-    print(f"Jarvis: {before} -> {voice_model.current(path)}. Way back: tools/switch_voice_model.py {before}")
+    after = voice_model.current(path)
+    print(f"Jarvis: {before} -> {after}." + (f" Way back: tools/switch_voice_model.py {before}" if after != before
+                                             else " Settings updated, same model."))
     return 0
 
 
