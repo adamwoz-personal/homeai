@@ -21,11 +21,15 @@
 #     (unloads Jarvis's Ollama model for the run and reloads it, pinned, after;
 #      Jarvis answers slowly or not at all meanwhile)
 #   tools/bench_kv_configs.sh "KV=q4_0 NCPUMOE=4"   # just these configs
+#   PRESET=qwen36 tools/bench_kv_configs.sh "KV=q8_0 NCPUMOE=10"   # another llm-serve.sh preset
+#
+# Every config also reports where Jarvis's model sits: a coder that pushes it
+# partly onto the CPU fails the voice-mode requirement, however fast it is.
 #
 # Results append to ~/homeai-bench/kv.jsonl (label = config string).
 set -u
 cd "$(dirname "$0")/.."
-PY=.venv/bin/python
+PY="${PY:-.venv/bin/python}"
 OUT="${OUT:-$HOME/homeai-bench/kv.jsonl}"
 URL=http://127.0.0.1:8080
 LOG=$(mktemp /tmp/bench-kv.XXXXXX.log)
@@ -37,7 +41,9 @@ else
 fi
 
 server_pid=""
-VOICE_MODEL="${VOICE_MODEL:-llama31-voice}"
+PRESET="${PRESET:-qwen}"
+# Jarvis's model from ZeroClaw's config (homeai/voice_model.py), never a copy that could disagree.
+VOICE_MODEL="${VOICE_MODEL:-$($PY -m homeai.voice_model 2>/dev/null || echo qwen35-voice)}"
 restore() {
   [ -n "$server_pid" ] && kill "$server_pid" 2>/dev/null && wait "$server_pid" 2>/dev/null
   echo "restoring llama-server.service"
@@ -64,8 +70,17 @@ restore() {
 trap restore EXIT INT TERM
 
 vram_used_gb() {
-  rocm-smi --showmeminfo vram 2>/dev/null \
-    | awk '/GPU\[0\].*Used Memory/ {printf "%.1f", $NF/1e9}'
+  # The biggest card's own counter (homeai/gpu_info.py reads the same files).
+  local best=0 used=0 total f
+  for f in /sys/class/drm/card*/device/mem_info_vram_total; do
+    total=$(cat "$f" 2>/dev/null || echo 0)
+    if [ "$total" -gt "$best" ]; then best=$total; used=$(cat "${f%_total}_used" 2>/dev/null || echo 0); fi
+  done
+  awk -v u="$used" 'BEGIN {printf "%.2f", u/1073741824}'
+}
+
+voice_where() {
+  ollama ps 2>/dev/null | awk -v m="^$VOICE_MODEL" '$1 ~ m {for (i=1;i<=NF;i++) if ($i ~ /GPU|CPU/) {print $(i-1), $i; exit}}'
 }
 
 systemctl --user stop llama-server.service
@@ -75,7 +90,7 @@ if [ "${UNLOAD_VOICE:-0}" = 1 ]; then
 fi
 for cfg in "${CONFIGS[@]}"; do
   echo "=== $cfg"
-  env $cfg "$HOME/models/llm-serve.sh" qwen >"$LOG" 2>&1 &
+  env $cfg "$HOME/models/llm-serve.sh" "$PRESET" >"$LOG" 2>&1 &
   server_pid=$!
   ok=""
   for _ in $(seq 1 120); do
@@ -87,8 +102,12 @@ for cfg in "${CONFIGS[@]}"; do
     echo "  failed to start; last log lines:"; tail -5 "$LOG" | sed 's/^/  /'
   else
     echo "  VRAM in use: $(vram_used_gb) GB (incl. Ollama voice model)"
-    $PY tools/bench_tokps.py --label "$cfg" --out "$OUT" | tail -1 | sed 's/^/  /'
-    ollama ps 2>/dev/null | awk 'NR==2 {print "  ollama: " $1 " " $5 " " $6}'
+    $PY tools/bench_tokps.py --label "$PRESET $cfg" --out "$OUT" | tail -1 | sed 's/^/  /'
+    where="$(voice_where)"
+    echo "  $VOICE_MODEL: ${where:-not loaded}"
+    if [ "${UNLOAD_VOICE:-0}" != 1 ] && [[ "$where" != *"100% GPU"* ]]; then
+      echo "  WARNING: $VOICE_MODEL is not wholly on the GPU with this config: fails voice mode"
+    fi
   fi
   kill "$server_pid" 2>/dev/null; wait "$server_pid" 2>/dev/null; server_pid=""
   sleep 2
