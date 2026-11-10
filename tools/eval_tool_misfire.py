@@ -111,26 +111,33 @@ def request_for(capture: dict, model: str, question: str, think: bool | None) ->
     return payload
 
 
-def openai_request_for(capture: dict, model: str, question: str) -> dict:
-    """The captured body exactly as ZeroClaw sends it (OpenAI-compatible endpoint), model and question swapped."""
+def openai_request_for(capture: dict, model: str, question: str, extra: dict | None = None) -> dict:
+    """The captured body exactly as ZeroClaw sends it (OpenAI-compatible endpoint), model and question swapped.
+
+    ``extra`` is merged at the top level, as ZeroClaw's ``provider_extra`` / ``think`` would be.
+    """
     body = dict(capture["body"])
     body["messages"] = [m for m in body["messages"] if m["role"] == "system"] + [{"role": "user", "content": question}]
-    return {**body, "model": model, "stream": False}
+    return {**body, "model": model, "stream": False, **(extra or {})}
 
 
-def ask_openai(capture: dict, model: str, question: str, post=post_json) -> dict:
-    """Jarvis's real route: no think flag, whatever the model does by default is what Jarvis would get."""
+def ask_openai(capture: dict, model: str, question: str, post=post_json, extra: dict | None = None) -> dict:
+    """Jarvis's real route: no think flag, whatever the model does by default is what Jarvis would get.
+
+    Records how much the model thought: on 2026-11-10 both candidates turned out to think on this route.
+    """
     start = time.monotonic()
-    reply = post(f"{OLLAMA}/v1/chat/completions", openai_request_for(capture, model, question), 300)
+    reply = post(f"{OLLAMA}/v1/chat/completions", openai_request_for(capture, model, question, extra), 300)
     message = (reply.get("choices") or [{}])[0].get("message", {})
     return {"tool": first_tool(message), "text": message.get("content") or "",
+            "reasoning_chars": len(message.get("reasoning") or message.get("reasoning_content") or ""),
             "seconds": round(time.monotonic() - start, 2)}
 
 
 def ask(capture: dict, model: str, question: str, state: dict, post=post_json) -> dict:
     """One answer. Thinking is turned off where the model has it; models without it reject the flag, so drop it."""
     if state.get("endpoint") == "openai":
-        return ask_openai(capture, model, question, post)
+        return ask_openai(capture, model, question, post, state.get("extra"))
     think = state.get(model, False)
     start = time.monotonic()
     try:
@@ -156,15 +163,16 @@ def summary(rows: list[dict]) -> dict:
     count = {k: sum(1 for r in rows if r["verdict"] == k) for k in ("ok", "misfire", "miss", "wrong")}
     spoken = [len(r["text"].split()) for r in rows if r["tool"] is None and r["text"].strip()]
     warm = sorted(r["seconds"] for r in rows[1:]) or [0.0]
+    thought = [r.get("reasoning_chars", 0) for r in rows]
     return {**count, "n": len(rows), "median_words": statistics.median(spoken) if spoken else 0,
-            "median_s": warm[len(warm) // 2]}
+            "median_s": warm[len(warm) // 2], "median_reasoning": statistics.median(thought) if thought else 0}
 
 
 def run(capture: dict, models: list[str], reps: int, out: Path, post=post_json, log=print,
-        endpoint: str = "native") -> dict:
+        endpoint: str = "native", extra: dict | None = None) -> dict:
     data: dict = {"questions": [[q, sorted(str(t) for t in w)] for q, w in QUESTIONS], "models": {},
-                  "endpoint": endpoint}
-    state: dict = {"endpoint": endpoint}
+                  "endpoint": endpoint, "extra": extra or {}}
+    state: dict = {"endpoint": endpoint, "extra": extra}
     for model in models:
         rows = []
         for rep in range(reps):
@@ -179,11 +187,12 @@ def run(capture: dict, models: list[str], reps: int, out: Path, post=post_json, 
 
 
 def table(data: dict) -> str:
-    lines = ["| model | ok | misfire | miss | wrong | median words | median s | on GPU % |", "|---" * 8 + "|"]
+    lines = ["| model | ok | misfire | miss | wrong | median words | median s | on GPU % | median reasoning chars |",
+             "|---" * 9 + "|"]
     for model, d in data["models"].items():
         s = d["summary"]
         lines.append(f"| {model} | {s['ok']}/{s['n']} | {s['misfire']} | {s['miss']} | {s['wrong']} | "
-                     f"{s['median_words']} | {s['median_s']} | {d['gpu_percent']} |")
+                     f"{s['median_words']} | {s['median_s']} | {d['gpu_percent']} | {s.get('median_reasoning', 0)} |")
     return "\n".join(lines)
 
 
@@ -196,16 +205,18 @@ def main() -> int:
     ap.add_argument("--endpoint", choices=("native", "openai"), default="openai",
                     help="openai = /v1/chat/completions, the route ZeroClaw really uses (default); "
                          "native = /api/chat with thinking turned off")
+    ap.add_argument("--extra", type=json.loads, default=None,
+                    help='JSON merged into each openai request, e.g. \'{"reasoning_effort": "none"}\'')
     args = ap.parse_args()
     capture = json.loads(Path(args.prompt).expanduser().read_text())[0]
     out = bench_path("misfire")
     out.mkdir(parents=True)
     if args.no_pause:
-        data = run(capture, args.model, args.reps, out, endpoint=args.endpoint)
+        data = run(capture, args.model, args.reps, out, endpoint=args.endpoint, extra=args.extra)
     else:
         from homeai import gpu_mode as G
         with G.ModeSwitcher(G.System(), log=lambda line: print("[mode]", line, flush=True)).jarvis_paused():
-            data = run(capture, args.model, args.reps, out, endpoint=args.endpoint)
+            data = run(capture, args.model, args.reps, out, endpoint=args.endpoint, extra=args.extra)
     print(table(data))
     print(out)
     return 0
