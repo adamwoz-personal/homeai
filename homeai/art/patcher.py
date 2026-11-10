@@ -15,12 +15,11 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 
-from homeai import httpjson
+from homeai import httpjson, voice_model
 from homeai.art.prompt_spec import FIELDS, PATCH_SCHEMA, SIZES, TEXT_FIELDS, SpecError, apply_patch
 
 log = logging.getLogger("homeai.art.patcher")
 
-MODEL = "llama31-voice"
 TIMEOUT_S = 30.0
 MSG_NOT_CAUGHT = "I didn't catch that change, so the picture stays as it was."
 
@@ -120,7 +119,7 @@ def features_patch_for(spec: dict, instruction: str, chat=None, clock=time.monot
 
 
 def ollama_chat(messages: list[dict], schema: dict, timeout: float = TIMEOUT_S) -> str:
-    return httpjson.ollama_chat(MODEL, messages, fmt=schema, keep_alive=-1, options={"temperature": 0},
+    return httpjson.ollama_chat(voice_model.current(), messages, fmt=schema, keep_alive=-1, options={"temperature": 0},
                                 timeout=timeout)
 
 

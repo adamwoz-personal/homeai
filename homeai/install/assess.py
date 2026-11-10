@@ -16,9 +16,10 @@ Standard library only: this runs under the system Python before the
 project's virtualenv exists.
 
 The thresholds are not guesses where they could be measured. On the
-reference machine (RX 7900 XT, 21.4 GB VRAM) `ollama ps` reported the voice
+reference machine (RX 7900 XT, 21.4 GB VRAM) `ollama ps` reported the old voice
 model, llama3.1:8b, at 7.0 GB with num_ctx 16384 and 5.9 GB with 8192
-(ROUTING_GUIDE.md Session 14). The CPU-only tier is NOT measured: it is
+(ROUTING_GUIDE.md Session 14); its successor qwen3.5:9b measured 7.23 GB on the
+card at 16384 (tools/probe_voice_fit.py, 2026-11-10), still under 7.5. The CPU-only tier is NOT measured: it is
 offered with a warning rather than silently.
 """
 
@@ -54,13 +55,15 @@ MIN_CORES_CPU = 8
 # Whisper runs on the CPU in every tier. small.en is the measured choice; on
 # fewer cores it is too slow for conversation, so base.en is used instead.
 CORES_FOR_SMALL_WHISPER = 8
-# llama3.1:8b (4.9 GB) + whisper small.en (0.5 GB) + whisper.cpp build (~1 GB)
+# qwen3.5:9b (6.6 GB) + whisper small.en (0.5 GB) + whisper.cpp build (~1 GB)
 # + venv with onnxruntime/scipy (~1.5 GB) + Piper voice, with margin.
 MIN_DISK_GB = 15.0
 MIN_PYTHON = (3, 12)
 SUPPORTED_ARCH = ("x86_64", "aarch64")
 
-VOICE_BASE_MODEL = "llama3.1:8b"
+VOICE_BASE_MODEL = "qwen3.5:9b"
+# The Modelfile variant Jarvis uses (deploy/ollama/<name>.Modelfile); must match zc_config.OLLAMA_MODEL.
+VOICE_MODEL = "qwen35-voice"
 
 # command -> how to get it. A compiler is checked separately (any one will do).
 REQUIRED_COMMANDS: dict[str, str] = {
@@ -388,6 +391,7 @@ def write_env_file(result: Assessment, path: Path) -> None:
         "ASSESS_OK": "1" if result.ok else "0",
         "TIER_NAME": tier.name if tier else "",
         "VOICE_BASE_MODEL": tier.model if tier else "",
+        "VOICE_MODEL": VOICE_MODEL if tier else "",
         "NUM_CTX": str(tier.num_ctx) if tier else "",
         "WHISPER_MODEL": tier.whisper_model if tier else "",
         "USES_GPU": "1" if tier and tier.uses_gpu else "0",

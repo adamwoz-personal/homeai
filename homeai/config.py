@@ -23,6 +23,11 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 VENDOR = PROJECT_ROOT / "vendor"
 
 
+def _voice_model() -> str:
+    from .voice_model import current   # lazy: config is imported everywhere, the TOML read is only needed here
+    return current()
+
+
 def _env_str(key: str, default: str) -> str:
     value = os.environ.get(key)
     return value if value else default
@@ -127,11 +132,14 @@ class TtsConfig:
     # than ~75 words mid-sentence. This is a runaway guard, not a style limit.
     timeout_s: float = field(default_factory=lambda: _env_float("HOMEAI_TTS_TIMEOUT", 300.0))
     # Style limit, unlike timeout_s. Replies longer than this many words are
-    # cut at a sentence boundary and Jarvis offers to keep going; 110 words
-    # is under forty seconds at Piper's ~3 words/second. 0 disables. See
-    # homeai/dialogue.py split_for_budget.
+    # cut at a sentence boundary and Jarvis offers to keep going. 0 disables.
+    # See homeai/dialogue.py split_for_budget. 110 (under forty seconds at
+    # Piper's ~3 words/second) suited llama31, which repeated itself; Adam
+    # 2026-11-10: longer is fine when it is interesting and on the question,
+    # and qwen3.5's free-will answers were cut off twice at 110. 180 is about
+    # a minute.
     spoken_budget_words: int = field(
-        default_factory=lambda: _env_int("HOMEAI_SPOKEN_BUDGET_WORDS", 110)
+        default_factory=lambda: _env_int("HOMEAI_SPOKEN_BUDGET_WORDS", 180)
     )
     # "subprocess" runs the piper CLI per utterance (reloads the voice, ~0.5 s);
     # "inprocess" keeps the voice loaded and publishes lip-sync timelines.
@@ -375,7 +383,7 @@ class MemoryConfig:
     # this model is warmed again, so the next question doesn't pay a cold load.
     # Empty: leave it.
     restore_model: str = field(default_factory=lambda: _env_str(
-        "HOMEAI_LTM_RESTORE_MODEL", "llama31-voice"))
+        "HOMEAI_LTM_RESTORE_MODEL", _voice_model()))
     # Extract once nobody has spoken for this long (a "session" ended) ...
     extract_idle_s: int = field(default_factory=lambda: _env_int("HOMEAI_LTM_EXTRACT_IDLE_S", 600))
     # ... or at once when this many exchanges are waiting.

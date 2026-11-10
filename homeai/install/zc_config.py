@@ -35,7 +35,7 @@ RISK_PROFILE = "homeai_voice"
 PROVIDER = "homeai_voice"
 MCP_SERVER = "homeai"
 MCP_BUNDLE = "homeai-tools"
-OLLAMA_MODEL = "llama31-voice"
+OLLAMA_MODEL = "qwen35-voice"   # must match assess.VOICE_MODEL
 OLLAMA_URI = "http://127.0.0.1:11434/v1"
 SCHEMA_VERSION = 3
 # MCP servers for coding agents only. The voice agent answers anyone within
@@ -90,10 +90,14 @@ format = "openclaw"
 backend = "sqlite"
 """),
         (("providers", "models", "custom", PROVIDER), f"""
-# llama3.1:8b via a local Modelfile variant with a larger context; stock
+# qwen3.5:9b via a local Modelfile variant with a larger context; stock
 # Ollama serves every model at 4096 tokens, which truncates the persona.
+# reasoning_effort "none": the only field Ollama's OpenAI route honours to
+# turn thinking off (2026-11-10); thinking cost ~0.5 s per answer.
+# tools/switch_voice_model.py changes the model later.
 [providers.models.custom.{PROVIDER}]
 model = "{OLLAMA_MODEL}"
+provider_extra = {{ reasoning_effort = "none" }}
 uri = "{OLLAMA_URI}"
 context_window = {num_ctx}
 native_tools = true

@@ -212,3 +212,18 @@ class TestVoiceIsolation:
     def test_cli_needs_repo_unless_checking(self, tmp_path: Path) -> None:
         with pytest.raises(SystemExit):
             Z.main(["--config", str(tmp_path / "c.toml")])
+
+
+def test_a_fresh_install_names_one_voice_model_everywhere(tmp_path):
+    """assess (what install.sh creates), zc_config (what ZeroClaw asks for), voice_model's default and the
+    Modelfile must agree: with one model held by Ollama, a mismatch evicts Jarvis's model (2026-11-10)."""
+    from homeai import voice_model
+    from homeai.install import assess
+    repo = Path(__file__).resolve().parents[1]
+    config = tmp_path / "config.toml"
+    config.write_text(merge("").text)
+    section = voice_model.provider_section(tomllib.loads(config.read_text()))
+    assert voice_model.current(config) == Z.OLLAMA_MODEL == assess.VOICE_MODEL == voice_model.DEFAULT
+    assert section["provider_extra"] == voice_model.NO_REASONING     # thinking off
+    modelfile = (repo / "deploy" / "ollama" / f"{assess.VOICE_MODEL}.Modelfile").read_text()
+    assert f"FROM {assess.VOICE_BASE_MODEL}\n" in modelfile and "PARAMETER num_ctx 16384\n" in modelfile

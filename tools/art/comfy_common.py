@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from homeai import gpu_info  # noqa: E402
+from homeai import gpu_info, voice_model  # noqa: E402
 from homeai.httpjson import OLLAMA, post_json  # noqa: E402,F401 - OLLAMA re-exported for contention_bench
 
 ROOT = Path.home() / ".local/share/homeai/comfyui"
@@ -35,7 +35,7 @@ CHROMA_NEGATIVE = ("This low quality greyscale unfinished sketch is inaccurate a
 ANIME = {"animagine": "animagine-xl-4.0.safetensors", "noobai": "NoobAI-XL-v1.1.safetensors"}
 ANIME_NEGATIVE = "lowres, bad anatomy, bad hands, text, watermark, signature, worst quality, low quality"
 QWEN_TURBO_SIGMAS = "1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0"
-VOICE = "llama31-voice"
+VOICE = voice_model.current()   # Jarvis's model, from ZeroClaw's config
 MEMORY_CAP = "24G"
 NEGATIVE = "blurry, low quality, watermark, text artefacts, deformed"
 

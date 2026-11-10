@@ -386,7 +386,8 @@ def _spoken(assistant) -> str:
 def test_long_reply_is_cut_and_offers_to_continue(quick) -> None:
     _answer(quick, "explain free will", LONG_REPLY)
     spoken = _spoken(quick)
-    assert len(spoken.split()) < 130
+    budget = quick.cfg.tts.spoken_budget_words
+    assert len(LONG_REPLY.split()) > budget + 20 and len(spoken.split()) < budget + 20
     assert spoken.endswith("Want me to keep going?")
     assert quick._followup_armed.is_set(), "the offer must open the reply window"
 

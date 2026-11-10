@@ -44,12 +44,16 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-from homeai import gpu_info, service_scope
+from homeai import gpu_info, service_scope, voice_model
 from homeai.httpjson import OLLAMA
 
 VOICE_SERVICE = "homeai.service"
 CODER_SERVICE = "llama-server.service"
-VOICE_MODEL = "llama31-voice"
+
+
+def _voice() -> str:
+    """Jarvis's model, from ZeroClaw's config (homeai/voice_model.py): never a copy that could disagree."""
+    return voice_model.current()
 CODER_HEALTH = "http://127.0.0.1:8080/health"
 DROPIN_NAME = "homeai-coding-mode.conf"
 COMFY_UNIT = "homeai-comfyui.service"
@@ -208,7 +212,7 @@ class ModeSwitcher:
             return []
 
     def voice_loaded(self) -> bool:
-        return any(name.split(":")[0] == VOICE_MODEL for name in self.loaded_models())
+        return any(name.split(":")[0] == _voice() for name in self.loaded_models())
 
     def coder_healthy(self) -> bool:
         code, _ = self.sys.http(CODER_HEALTH, timeout=3)
@@ -271,10 +275,10 @@ class ModeSwitcher:
     def _unload_voice(self) -> None:
         if not self.voice_loaded():
             return
-        self.log(f"unloading {VOICE_MODEL}")
-        self.sys.http(f"{OLLAMA}/api/generate", {"model": VOICE_MODEL, "keep_alive": 0}, timeout=30)
+        self.log(f"unloading {_voice()}")
+        self.sys.http(f"{OLLAMA}/api/generate", {"model": _voice(), "keep_alive": 0}, timeout=30)
         if not self._wait(lambda: not self.voice_loaded(), UNLOAD_TIMEOUT_S, 1.0):
-            raise ModeError(f"{VOICE_MODEL} is still loaded in Ollama")
+            raise ModeError(f"{_voice()} is still loaded in Ollama")
 
     def _load_voice(self) -> None:
         # Only after llama-server has finished allocating: a load issued while
@@ -282,13 +286,13 @@ class ModeSwitcher:
         for attempt in range(1, LOAD_ATTEMPTS + 1):
             if self.voice_loaded():
                 return
-            self.log(f"loading {VOICE_MODEL} (pinned), attempt {attempt}")
-            self.sys.http(f"{OLLAMA}/api/generate", {"model": VOICE_MODEL, "keep_alive": -1},
+            self.log(f"loading {_voice()} (pinned), attempt {attempt}")
+            self.sys.http(f"{OLLAMA}/api/generate", {"model": _voice(), "keep_alive": -1},
                           timeout=120)
             if self.voice_loaded():
                 return
             self.sys.sleep(3)
-        raise ModeError(f"{VOICE_MODEL} did not load; Jarvis will try on the next question. "
+        raise ModeError(f"{_voice()} did not load; Jarvis will try on the next question. "
                         "Check: ollama ps")
 
     def _stop_comfy(self) -> None:
@@ -332,7 +336,7 @@ class ModeSwitcher:
                 raise ModeError(f"{exc}; rollback also failed: {rollback_exc}") from exc
             raise ModeError(f"{exc} (rolled back to voice mode)") from exc
         if not self.voice_loaded():
-            self.log(f"WARNING: {VOICE_MODEL} is not loaded; Jarvis loads it on the next question")
+            self.log(f"WARNING: {_voice()} is not loaded; Jarvis loads it on the next question")
         self.log("art mode: ComfyUI on 127.0.0.1:8188, Jarvis listening")
 
     def restart_comfy(self) -> None:
@@ -364,7 +368,7 @@ class ModeSwitcher:
                 raise ModeError(f"{exc}; rollback also failed: {rollback_exc}") from exc
             raise ModeError(f"{exc} (rolled back to voice mode)") from exc
         if self.voice_loaded():
-            self.log(f"WARNING: something reloaded {VOICE_MODEL}; the coder may be slow")
+            self.log(f"WARNING: something reloaded {_voice()}; the coder may be slow")
         self.log(f"coding mode: KV {kv}, experts on CPU {cpu_moe}"
                  + (f", context {ctx}" if ctx else ""))
 
@@ -375,7 +379,7 @@ class ModeSwitcher:
             models = json.loads(body).get("models", []) if code == 200 else []
         except (ValueError, AttributeError):
             return False
-        return any(m.get("name", "").split(":")[0] == VOICE_MODEL and m.get("size_vram") == m.get("size")
+        return any(m.get("name", "").split(":")[0] == _voice() and m.get("size_vram") == m.get("size")
                    for m in models)
 
     @contextlib.contextmanager
@@ -451,7 +455,7 @@ class ModeSwitcher:
             if self.voice_on_gpu():
                 return
             self.sys.sleep(10)
-        self.log(f"WARNING: {VOICE_MODEL} is not wholly on the GPU; check: ollama ps")
+        self.log(f"WARNING: {_voice()} is not wholly on the GPU; check: ollama ps")
 
     def voice(self) -> None:
         self._stop_comfy()

@@ -38,7 +38,25 @@ def _isolated_home(tmp_path, monkeypatch):
     monkeypatch.setenv("HOMEAI_AVATAR", "0")
     # homeai.service may be a system unit on this box; tests pick the layout themselves.
     monkeypatch.setenv("HOMEAI_SERVICE_SCOPE", "user")
+    # Never the real ZeroClaw config: the voice model comes from this one (homeai/voice_model.py).
+    zc = tmp_path / "zc-config.toml"
+    zc.write_text(VOICE_ZC_CONFIG)
+    monkeypatch.setenv("HOMEAI_ZC_CONFIG", str(zc))
     (tmp_path / "run").mkdir(exist_ok=True)
+
+
+TEST_VOICE_MODEL = "llama31-voice"
+VOICE_ZC_CONFIG = f"""
+[agents.local]
+mcp_bundles = ["homeai-tools"]
+model_provider = "custom.voice"
+
+[agents.builder]
+model_provider = "llamacpp.coder"
+
+[providers.models.custom.voice]
+model = "{TEST_VOICE_MODEL}"
+"""
 
 
 # -- threads left running at exit ---------------------------------------------

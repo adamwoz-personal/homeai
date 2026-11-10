@@ -35,7 +35,7 @@ sys.path.insert(0, str(REPO))
 from homeai import gpu_mode as G  # noqa: E402
 from homeai.art import comfy as C  # noqa: E402
 from homeai.art import workflows  # noqa: E402
-from homeai.art.patcher import MODEL as VOICE_MODEL  # noqa: E402
+from homeai.voice_model import current as _voice  # noqa: E402
 from tools.art.probe_vision_check import ask  # noqa: E402
 
 from homeai.httpjson import OLLAMA  # noqa: E402
@@ -71,7 +71,7 @@ def loaded() -> list[str]:
 
 def reload_voice() -> None:
     """The same request the art patcher makes, pinned the same way (keep_alive -1)."""
-    payload = {"model": VOICE_MODEL, "messages": [{"role": "user", "content": "Say ok."}], "stream": False,
+    payload = {"model": _voice(), "messages": [{"role": "user", "content": "Say ok."}], "stream": False,
                "keep_alive": -1, "options": {"temperature": 0, "num_predict": 2}}
     req = urllib.request.Request(f"{OLLAMA}/api/chat", data=json.dumps(payload).encode(),
                                  headers={"Content-Type": "application/json"})

@@ -16,7 +16,7 @@
 #   3. whisper.cpp built from source, plus the speech-recognition model.
 #   4. The Piper voice, and the speaker-recognition model (off until
 #      `homeai-mode speaker on`; see homeai/speaker_admin.py).
-#   5. Ollama: pull llama3.1:8b and create the `llama31-voice` variant with the
+#   5. Ollama: pull qwen3.5:9b and create the `qwen35-voice` variant with the
 #      tier's context length. The VRAM guard needs sudo: see --sudo.
 #   6. ZeroClaw: add the locked-down voice agent and copy its persona.
 #   7. .env and the systemd user service.
@@ -229,14 +229,14 @@ else
     run ollama pull "${VOICE_BASE_MODEL}"
 fi
 # Re-creating a loaded model unloads it, so only create when it differs.
-CURRENT_CTX="$(ollama show llama31-voice --parameters 2>/dev/null | awk '$1=="num_ctx" {print $2}')"
+CURRENT_CTX="$(ollama show "${VOICE_MODEL}" --parameters 2>/dev/null | awk '$1=="num_ctx" {print $2}')"
 if [[ "$CURRENT_CTX" == "$NUM_CTX" ]]; then
-    info "llama31-voice exists with num_ctx ${NUM_CTX}"
+    info "${VOICE_MODEL} exists with num_ctx ${NUM_CTX}"
 else
     MODELFILE="$(mktemp)"
     trap 'rm -f "$ASSESS_ENV" "$MODELFILE"' EXIT
-    sed "s/^PARAMETER num_ctx .*/PARAMETER num_ctx ${NUM_CTX}/" deploy/ollama/llama31-voice.Modelfile > "$MODELFILE"
-    run ollama create llama31-voice -f "$MODELFILE"
+    sed "s/^PARAMETER num_ctx .*/PARAMETER num_ctx ${NUM_CTX}/" "deploy/ollama/${VOICE_MODEL}.Modelfile" > "$MODELFILE"
+    run ollama create "${VOICE_MODEL}" -f "$MODELFILE"
 fi
 GUARD=/etc/systemd/system/ollama.service.d/homeai-vram-guard.conf
 if [[ -f "$GUARD" ]] || systemctl show ollama -p Environment 2>/dev/null | grep OLLAMA_MAX_LOADED_MODELS=1 >/dev/null; then
@@ -369,8 +369,8 @@ else
         note "the agent replied but did not answer 7+5 correctly; check the model with: zeroclaw agent -a $AGENT -m 'what is seven plus five?'"
     fi
     info "agent replied: $(printf '%s' "$REPLY_TEXT" | tr '\n' ' ' | cut -c1-80)"
-    PROC="$(ollama ps | awk '$1 ~ /^llama31-voice/ {for (i=1;i<=NF;i++) if ($i ~ /GPU|CPU/) {print $(i-1), $i; exit}}')"
-    info "ollama: llama31-voice on ${PROC:-unknown}"
+    PROC="$(ollama ps | awk -v m="^${VOICE_MODEL}" '$1 ~ m {for (i=1;i<=NF;i++) if ($i ~ /GPU|CPU/) {print $(i-1), $i; exit}}')"
+    info "ollama: ${VOICE_MODEL} on ${PROC:-unknown}"
     if [[ "$USES_GPU" == "1" && "$PROC" != *"100% GPU"* ]]; then
         note "the model is not fully on the GPU (${PROC:-not loaded}); replies will be slower. Check GPU drivers/ROCm and what else is using VRAM (ollama ps)."
     fi
