@@ -361,3 +361,27 @@ def test_door_tool(monkeypatch, tmp_path):
                                            quiet=EchoQuiet(tmp_path / "q")))
     assert "39 percent" in _text(_call_tool("door", {"question": "battery"}))
     assert "No activity" in _text(_call_tool("door", {}))
+
+
+def test_weather_tomorrow_returns_the_forecast(monkeypatch) -> None:
+    from homeai.weather import DayForecast, Place
+    calls: list[tuple[str, str]] = []
+    place = Place("Lilburn", 33.9, -84.1, admin="Georgia")
+    forecast = DayForecast(place, "tomorrow", "2026-11-11", "light rain", 64.6, 48.4, 70)
+    monkeypatch.setattr(mcp, "get_forecast", lambda location, day: calls.append((location, day)) or forecast)
+    monkeypatch.setattr(mcp, "get_weather", lambda location: pytest.fail("today's conditions not wanted"))
+
+    response = _call_tool("weather", {"day": "Tomorrow"})
+
+    assert calls == [(mcp.DEFAULT_LOCATION, "tomorrow")]
+    assert response["result"]["isError"] is False
+    assert _text(response).startswith("Tomorrow in Lilburn, Georgia, the forecast is light rain")
+    assert "date 2026-11-11, high 65F, low 48F, precipitation chance 70%" in _text(response)
+
+
+def test_weather_day_is_offered_to_the_model() -> None:
+    weather_tool = next(tool for tool in mcp.TOOLS if tool["name"] == "weather")
+    day = weather_tool["inputSchema"]["properties"]["day"]
+    assert day["enum"][:3] == ["today", "tomorrow", "monday"] and len(day["enum"]) == 9
+    assert weather_tool["inputSchema"]["required"] == []
+    assert "tomorrow" in weather_tool["description"]

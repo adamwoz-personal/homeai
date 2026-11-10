@@ -42,7 +42,7 @@ from typing import Any, Callable
 from .ha_client import HAError, is_configured
 from .home import HomeError, build_home, run_intent
 from .research import research_prompt
-from .weather import WeatherError, get_weather
+from .weather import DAYS, WeatherError, get_forecast, get_weather
 from .wake_verify import _name_words
 
 log = logging.getLogger("homeai.mcp")
@@ -67,6 +67,14 @@ def _tool_weather(arguments: dict[str, Any]) -> str:
     location = str(arguments.get("location") or "").strip()
     if not location:
         location = DEFAULT_LOCATION
+    day = str(arguments.get("day") or "today").strip().lower()
+    if day != "today":
+        forecast = get_forecast(location, day)
+        def deg(v: float | None) -> str:
+            return f"{v:.0f}F" if v is not None else "unknown"
+        chance = f"{forecast.precipitation_chance}%" if forecast.precipitation_chance is not None else "unknown"
+        return (f"{forecast.spoken()} (date {forecast.date}, high {deg(forecast.high_f)}, "
+                f"low {deg(forecast.low_f)}, precipitation chance {chance})")
 
     conditions = get_weather(location)
     # Include the numbers as well as the sentence: the model may be asked a
@@ -185,7 +193,8 @@ TOOLS: list[dict[str, Any]] = [
         "name": "weather",
         "description": (
             "Get current weather conditions and today's high and low for a "
-            "location. Returns temperature in Fahrenheit and wind in miles "
+            "location, or the forecast for tomorrow or a day in the next week "
+            "(set day). Returns temperature in Fahrenheit and wind in miles "
             "per hour. If the user does not name a place, omit the location "
             "argument to use their home location."
         ),
@@ -199,7 +208,16 @@ TOOLS: list[dict[str, Any]] = [
                         "'Lilburn, Georgia' or 'Paris, France'. Omit for the "
                         "user's home location."
                     ),
-                }
+                },
+                "day": {
+                    "type": "string",
+                    "enum": list(DAYS),
+                    "description": (
+                        "Which day: 'today' (the default; includes current "
+                        "conditions), 'tomorrow', or a weekday name for one of "
+                        "the next seven days. Omit for today."
+                    ),
+                },
             },
             "required": [],
         },

@@ -35,6 +35,7 @@ paraphrases it.
 from __future__ import annotations
 
 import json
+from datetime import date
 import logging
 import urllib.error
 import urllib.parse
@@ -264,6 +265,92 @@ def fetch_conditions(place: Place, timeout: float = 10.0) -> Conditions:
         low_f=_first("temperature_2m_min"),
         precipitation_chance=int(precip) if precip is not None else None,
     )
+
+
+WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+DAYS = ("today", "tomorrow") + WEEKDAYS
+FORECAST_DAYS = 7   # past a week a forecast is a guess, and guesses are what this module refuses to give
+
+
+@dataclass(frozen=True)
+class DayForecast:
+    """One day's forecast. Added 2026-11-10: "what's the weather tomorrow?" got "I can only check today"."""
+    place: Place
+    label: str                 # "today", "tomorrow" or a weekday name, as spoken
+    date: str                  # ISO date in the place's own timezone
+    description: str
+    high_f: float | None
+    low_f: float | None
+    precipitation_chance: int | None
+
+    def spoken(self, include_place: bool = True) -> str:
+        where = f" in {self.place.spoken_name}" if include_place else ""
+        parts = [f"{self.label.capitalize()}{where}, the forecast is {self.description}"]
+        if self.high_f is not None and self.low_f is not None:
+            parts[0] += f", with a high of {round(self.high_f)} and a low of {round(self.low_f)}."
+        else:
+            parts[0] += "."
+        if self.precipitation_chance is not None and self.precipitation_chance >= 20:
+            parts.append(f"There's a {self.precipitation_chance} percent chance of precipitation.")
+        return " ".join(parts)
+
+
+def day_index(day: str, dates: list[str]) -> int:
+    """Which of the forecast's days ``day`` means. ``dates`` start today, in the place's timezone, so "Saturday"
+    is worked out here from the service's own calendar, never by the model."""
+    day = (day or "today").strip().lower()
+    if day == "today":
+        return 0
+    if day == "tomorrow":
+        return 1
+    if day in WEEKDAYS:
+        target = WEEKDAYS.index(day)
+        for i, iso in enumerate(dates):
+            if date.fromisoformat(iso).weekday() == target:
+                return i
+        raise WeatherError(f"no forecast for {day}")
+    raise WeatherError(f"unknown day {day!r}; use today, tomorrow or a weekday")
+
+
+def fetch_forecast(place: Place, day: str, timeout: float = 10.0) -> DayForecast:
+    data = _get_json(
+        _FORECAST_URL,
+        {
+            "latitude": place.latitude,
+            "longitude": place.longitude,
+            "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+            "temperature_unit": "fahrenheit",
+            "timezone": place.timezone or "auto",
+            "forecast_days": FORECAST_DAYS,
+        },
+        timeout,
+    )
+    daily = data.get("daily") or {}
+    dates = [str(d) for d in daily.get("time") or []]
+    if not dates:
+        raise WeatherError("weather service returned no forecast")
+    i = day_index(day, dates)
+    if i >= len(dates):
+        raise WeatherError(f"no forecast for {day}")
+
+    def _at(key: str) -> float | None:
+        try:
+            return float((daily.get(key) or [])[i])
+        except (IndexError, TypeError, ValueError):
+            return None
+
+    code = _at("weather_code")
+    precip = _at("precipitation_probability_max")
+    label = ("today", "tomorrow")[i] if i < 2 else WEEKDAYS[date.fromisoformat(dates[i]).weekday()]
+    return DayForecast(place=place, label=label, date=dates[i],
+                       description=describe_code(int(code) if code is not None else None),
+                       high_f=_at("temperature_2m_max"), low_f=_at("temperature_2m_min"),
+                       precipitation_chance=int(precip) if precip is not None else None)
+
+
+def get_forecast(location: str, day: str, timeout: float = 10.0) -> DayForecast:
+    """Resolve a place name and fetch one day's forecast (today up to six days ahead)."""
+    return fetch_forecast(geocode(location, timeout), day, timeout)
 
 
 def get_weather(location: str, timeout: float = 10.0) -> Conditions:

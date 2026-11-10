@@ -254,3 +254,74 @@ class TestTransportErrors:
             weather.urllib.request, "urlopen", lambda *a, **k: FakeResponse()
         )
         assert geocode("Lilburn").name == "Lilburn"
+
+
+# 2026-11-10 is a Tuesday.
+WEEK = ["2026-11-10", "2026-11-11", "2026-11-12", "2026-11-13", "2026-11-14", "2026-11-15", "2026-11-16"]
+DAILY_OK = {"daily": {
+    "time": WEEK,
+    "weather_code": [0, 61, 3, 95, 0, 0, 71],
+    "temperature_2m_max": [70.2, 64.6, 60, 58, 66, 68, 50],
+    "temperature_2m_min": [50, 48.4, 45, 44, 47, 49, 35],
+    "precipitation_probability_max": [5, 70, 10, 90, 0, 0, 40],
+}}
+
+
+class TestForecast:
+    @pytest.mark.parametrize("day, index", [
+        ("today", 0), ("", 0), ("tomorrow", 1), ("Tomorrow ", 1), ("tuesday", 0), ("wednesday", 1),
+        ("saturday", 4), ("monday", 6),
+    ])
+    def test_days_come_from_the_service_s_own_calendar(self, day, index):
+        assert weather.day_index(day, WEEK) == index
+
+    def test_an_unknown_day_is_an_error_not_a_guess(self):
+        with pytest.raises(WeatherError, match="unknown day"):
+            weather.day_index("next month", WEEK)
+        with pytest.raises(WeatherError, match="no forecast for friday"):
+            weather.day_index("friday", WEEK[:2])
+
+    def test_tomorrow(self, stub_http):
+        table, _ = stub_http
+        table["forecast"] = DAILY_OK
+        f = weather.fetch_forecast(LILBURN, "tomorrow")
+        assert (f.label, f.date, f.description, round(f.high_f), round(f.low_f), f.precipitation_chance) \
+            == ("tomorrow", "2026-11-11", "light rain", 65, 48, 70)
+        assert f.spoken() == ("Tomorrow in Lilburn, Georgia, the forecast is light rain, with a high of 65 and a low of 48. "
+                              "There's a 70 percent chance of precipitation.")
+
+    def test_a_weekday_is_named_as_such(self, stub_http):
+        table, _ = stub_http
+        table["forecast"] = DAILY_OK
+        f = weather.fetch_forecast(LILBURN, "Saturday")
+        assert f.label == "saturday" and f.date == "2026-11-14"
+        assert f.spoken(include_place=False) == "Saturday, the forecast is clear, with a high of 66 and a low of 47."
+
+    def test_the_week_is_asked_for_in_fahrenheit_and_local_time(self, monkeypatch):
+        seen = {}
+        monkeypatch.setattr(weather, "_get_json", lambda url, params, timeout: seen.update(params) or DAILY_OK)
+        weather.fetch_forecast(Place("X", 1, 2, timezone="America/New_York"), "tomorrow")
+        assert seen["forecast_days"] == 7 and seen["temperature_unit"] == "fahrenheit"
+        assert seen["timezone"] == "America/New_York" and "weather_code" in seen["daily"]
+
+    def test_no_forecast_raises(self, stub_http):
+        table, _ = stub_http
+        table["forecast"] = {"daily": {}}
+        with pytest.raises(WeatherError, match="no forecast"):
+            weather.fetch_forecast(LILBURN, "tomorrow")
+
+    def test_a_missing_value_is_left_out_not_invented(self, stub_http):
+        table, _ = stub_http
+        daily = {k: list(v) for k, v in DAILY_OK["daily"].items()}
+        daily["temperature_2m_max"][1] = None
+        daily["precipitation_probability_max"] = []
+        table["forecast"] = {"daily": daily}
+        f = weather.fetch_forecast(LILBURN, "tomorrow")
+        assert f.high_f is None and f.precipitation_chance is None
+        assert f.spoken() == "Tomorrow in Lilburn, Georgia, the forecast is light rain."
+
+    def test_tomorrow_beyond_what_the_service_sent_is_an_error(self, stub_http):
+        table, _ = stub_http
+        table["forecast"] = {"daily": {k: v[:1] for k, v in DAILY_OK["daily"].items()}}
+        with pytest.raises(WeatherError, match="no forecast for tomorrow"):
+            weather.fetch_forecast(LILBURN, "tomorrow")
