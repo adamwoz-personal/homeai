@@ -45,7 +45,7 @@ named `jarvis`; on the original box it is `local` (`HOMEAI_AGENT_NAME` in
 | What is loaded on the GPU | `ollama ps` (expect the voice model, `qwen35-voice` since 2026-11-10, `100% GPU`, `Forever`) |
 | Recent conversations | `tail ~/.local/share/homeai/transcript.jsonl` |
 | Which voice model Jarvis uses | `.venv/bin/python -m homeai.voice_model` (read from ZeroClaw's config, the one place it is set) |
-| Switch the voice model | `.venv/bin/python tools/switch_voice_model.py <model> [--dry-run]`: checks num_ctx 16384 and that Jarvis is idle, backs up `~/.zeroclaw/config.toml`, restarts ZeroClaw, reloads the model on the GPU, rolls back if ZeroClaw fails. Back to the old one: `tools/switch_voice_model.py llama31-voice` |
+| Switch the voice model | `.venv/bin/python tools/switch_voice_model.py <model> [--dry-run]`: checks num_ctx 16384 and that Jarvis is idle, backs up `~/.zeroclaw/config.toml`, restarts ZeroClaw, reloads the model on the GPU, sets `reasoning_effort = "medium"` for a model that can think, rolls back if ZeroClaw fails. Back to the old one: `tools/switch_voice_model.py llama31-voice` |
 | Talk to the voice agent without a mic | `zeroclaw agent -a "$HOMEAI_AGENT_NAME" -m "..."` |
 
 ## Talking to Jarvis

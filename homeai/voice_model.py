@@ -25,8 +25,11 @@ log = logging.getLogger(__name__)
 
 DEFAULT = "qwen35-voice"
 BUNDLE = "homeai-tools"
-# Ollama's OpenAI route ignores think/enable_thinking; only this turns thinking off (2026-11-10, Ollama 0.34).
-NO_REASONING = {"reasoning_effort": "none"}
+# Set on the voice provider for a model that can think. Ollama's OpenAI route honours only reasoning_effort
+# (think/enable_thinking are ignored, Ollama 0.34). Measured 2026-11-10 on 93 questions: "none" answered in
+# 0.95 s but said "I don't have real-time access" instead of looking up live data (Bitcoin 3/3); "medium" got
+# 92/93 in 1.57 s. Adam chose thinking on.
+REASONING = {"reasoning_effort": "medium"}
 
 
 def config_path() -> Path:

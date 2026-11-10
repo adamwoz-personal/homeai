@@ -46,26 +46,41 @@ allowed_tools = ["calculator"]
 """
 
 
-def test_only_the_voice_model_changes_and_thinking_goes_off():
-    new = S.edit(CONFIG, "qwen35-voice")
+THINK = {"reasoning_effort": "medium"}
+
+
+def test_only_the_voice_model_changes_and_thinking_is_set():
+    new = S.edit(CONFIG, "qwen35-voice", THINK)
     cfg = tomllib.loads(new)
     assert cfg["providers"]["models"]["custom"]["voice"]["model"] == "qwen35-voice"
-    assert cfg["providers"]["models"]["custom"]["voice"]["provider_extra"] == {"reasoning_effort": "none"}
+    assert cfg["providers"]["models"]["custom"]["voice"]["provider_extra"] == THINK
     assert cfg["providers"]["models"]["llamacpp"]["coder"]["model"] == "coder-model"
     assert "# --- the voice model ---" in new and new.count("\n") == CONFIG.count("\n") + 1
-    assert S.edit(new, "llama31-voice").replace('model = "llama31-voice"', "") \
-        == new.replace('model = "qwen35-voice"', "")                     # and back: the extra line stays once
+
+
+def test_a_model_that_cannot_think_gets_no_thinking_field():
+    """The way back to llama31-voice (no thinking capability) drops the field instead of guessing how Ollama
+    treats it."""
+    back = S.edit(S.edit(CONFIG, "qwen35-voice", THINK), "llama31-voice", None)
+    assert back == CONFIG
+
+
+def test_the_old_none_setting_is_replaced():
+    old = S.edit(CONFIG, "qwen35-voice", {"reasoning_effort": "none"})
+    new = S.edit(old, "qwen35-voice", THINK)
+    assert tomllib.loads(new)["providers"]["models"]["custom"]["voice"]["provider_extra"] == THINK
+    assert new.count("provider_extra") == 1
 
 
 def test_an_edit_twice_is_a_no_op():
-    once = S.edit(CONFIG, "qwen35-voice")
-    assert S.edit(once, "qwen35-voice") == once
+    once = S.edit(CONFIG, "qwen35-voice", THINK)
+    assert S.edit(once, "qwen35-voice", THINK) == once
 
 
 def test_a_foreign_provider_extra_is_left_to_a_human():
     text = CONFIG.replace('temperature = 0.45', 'provider_extra = { route = "x" }')
     with pytest.raises(S.SwitchError):
-        S.edit(text, "qwen35-voice")
+        S.edit(text, "qwen35-voice", THINK)
 
 
 def test_a_model_without_jarvis_s_context_is_refused():
@@ -73,7 +88,10 @@ def test_a_model_without_jarvis_s_context_is_refused():
         return {"parameters": "num_ctx                        4096\ntemperature 0.45"}
     with pytest.raises(S.SwitchError, match="16384"):
         S.check_model("m", post)
-    S.check_model("m", lambda url, payload=None, timeout=30.0: {"parameters": "num_ctx                        16384"})
+    assert S.check_model("m", lambda url, payload=None, timeout=30.0: {
+        "parameters": "num_ctx                        16384", "capabilities": ["completion", "tools", "thinking"]})
+    assert not S.check_model("m", lambda url, payload=None, timeout=30.0: {
+        "parameters": "num_ctx                        16384", "capabilities": ["completion", "tools"]})
 
 
 def test_a_model_ollama_lacks_is_refused():
@@ -86,13 +104,13 @@ def test_a_model_ollama_lacks_is_refused():
 def test_a_change_beyond_the_voice_model_is_never_written():
     with pytest.raises(S.SwitchError):
         S.verify(CONFIG, CONFIG.replace('model = "coder-model"', 'model = "other"').replace(
-            'model = "llama31-voice"', 'model = "q"\nprovider_extra = { reasoning_effort = "none" }'), "q")
+            'model = "llama31-voice"', 'model = "q"\nprovider_extra = { reasoning_effort = "medium" }'), "q", THINK)
 
 
 def test_apply_backs_up_writes_and_restarts(tmp_path):
     path = tmp_path / "config.toml"
     path.write_text(CONFIG)
-    new = S.edit(CONFIG, "qwen35-voice")
+    new = S.edit(CONFIG, "qwen35-voice", THINK)
     ran = []
     backup = S.apply(path, new, run=lambda argv, check: ran.append(argv), ok=lambda: True, stamp="t",
                      log=lambda line: None)
@@ -106,7 +124,7 @@ def test_a_zeroclaw_that_fails_gets_the_old_config_back(tmp_path):
     path.write_text(CONFIG)
     ran = []
     with pytest.raises(S.SwitchError, match="restored"):
-        S.apply(path, S.edit(CONFIG, "qwen35-voice"), run=lambda argv, check: ran.append(argv), ok=lambda: False,
+        S.apply(path, S.edit(CONFIG, "qwen35-voice", THINK), run=lambda argv, check: ran.append(argv), ok=lambda: False,
                 stamp="t", log=lambda line: None)
     assert path.read_text() == CONFIG and len(ran) == 2
 

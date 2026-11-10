@@ -92,12 +92,13 @@ backend = "sqlite"
         (("providers", "models", "custom", PROVIDER), f"""
 # qwen3.5:9b via a local Modelfile variant with a larger context; stock
 # Ollama serves every model at 4096 tokens, which truncates the persona.
-# reasoning_effort "none": the only field Ollama's OpenAI route honours to
-# turn thinking off (2026-11-10); thinking cost ~0.5 s per answer.
+# reasoning_effort: the only thinking control Ollama's OpenAI route honours.
+# "medium", not "none": without thinking qwen3.5 declined live lookups
+# (2026-11-10, homeai/voice_model.py REASONING).
 # tools/switch_voice_model.py changes the model later.
 [providers.models.custom.{PROVIDER}]
 model = "{OLLAMA_MODEL}"
-provider_extra = {{ reasoning_effort = "none" }}
+provider_extra = {{ reasoning_effort = "medium" }}
 uri = "{OLLAMA_URI}"
 context_window = {num_ctx}
 native_tools = true

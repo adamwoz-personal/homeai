@@ -224,6 +224,6 @@ def test_a_fresh_install_names_one_voice_model_everywhere(tmp_path):
     config.write_text(merge("").text)
     section = voice_model.provider_section(tomllib.loads(config.read_text()))
     assert voice_model.current(config) == Z.OLLAMA_MODEL == assess.VOICE_MODEL == voice_model.DEFAULT
-    assert section["provider_extra"] == voice_model.NO_REASONING     # thinking off
+    assert section["provider_extra"] == voice_model.REASONING == {"reasoning_effort": "medium"}   # thinking on
     modelfile = (repo / "deploy" / "ollama" / f"{assess.VOICE_MODEL}.Modelfile").read_text()
     assert f"FROM {assess.VOICE_BASE_MODEL}\n" in modelfile and "PARAMETER num_ctx 16384\n" in modelfile

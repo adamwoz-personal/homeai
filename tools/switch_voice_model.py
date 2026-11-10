@@ -13,6 +13,7 @@ everything back if ZeroClaw doesn't come up.
 
 Checks first, changes nothing if any fail:
   * the model exists in Ollama with num_ctx 16384 (deploy/ollama/<name>.Modelfile);
+    whether it can think comes from Ollama's capabilities for it;
   * nobody has spoken to Jarvis in the last 2 minutes (--force skips this);
   * the edited config parses, names the new model, and differs from the old one
     only in the voice provider's ``model`` and ``provider_extra``.
@@ -21,9 +22,9 @@ config.toml, write it, restart ZeroClaw and wait for its health check; on
 failure restore the backup and restart again. Jarvis comes back with the new
 model reloaded wholly on the GPU.
 
-``provider_extra = { reasoning_effort = "none" }`` is always set: it is the only
-field that turns thinking off on Ollama's OpenAI route, and models without
-thinking accept it (measured 2026-11-10).
+``provider_extra = { reasoning_effort = "medium" }`` is set for a model that can
+think and removed for one that can't (voice_model.REASONING: with thinking off,
+qwen3.5 declined live lookups, 2026-11-10).
 
     .venv/bin/python tools/switch_voice_model.py qwen35-voice [--dry-run]
     .venv/bin/python tools/switch_voice_model.py llama31-voice      # the way back
@@ -51,24 +52,31 @@ CTX = 16384
 ZEROCLAW = "zeroclaw.service"
 HEALTH = "http://127.0.0.1:42617/health"
 IDLE_S = 120
-EXTRA_LINE = 'provider_extra = { reasoning_effort = "none" }'
 
 
 class SwitchError(Exception):
     pass
 
 
-def check_model(model: str, post=post_json) -> None:
+def check_model(model: str, post=post_json) -> bool:
+    """Refuse a model Ollama can't serve at Jarvis's context; True when it can think."""
     try:
-        params = post(f"{OLLAMA}/api/show", {"model": model}).get("parameters", "")
+        shown = post(f"{OLLAMA}/api/show", {"model": model})
+        params = shown.get("parameters", "")
     except urllib.error.HTTPError as exc:
         raise SwitchError(f"Ollama has no {model}: ollama create {model} -f deploy/ollama/{model}.Modelfile") from exc
     if not re.search(rf"^num_ctx\s+{CTX}\s*$", params, re.M):
         raise SwitchError(f"{model} is not at num_ctx {CTX} (Jarvis's prompt would be cut); fix its Modelfile")
+    return "thinking" in (shown.get("capabilities") or [])
 
 
-def edit(text: str, model: str) -> str:
-    """The config with the voice provider's model replaced and thinking turned off; nothing else touched."""
+def extra_line(extra: dict) -> str:
+    return "provider_extra = { " + ", ".join(f'{k} = "{v}"' for k, v in extra.items()) + " }\n"
+
+
+def edit(text: str, model: str, extra: dict | None) -> str:
+    """The config with the voice provider's model replaced and ``provider_extra`` set to ``extra`` (removed when
+    None); nothing else touched."""
     cfg = tomllib.loads(text)
     header = f"[providers.models.{voice_model.provider_ref(cfg)}]"
     lines = text.splitlines(keepends=True)
@@ -83,24 +91,27 @@ def edit(text: str, model: str) -> str:
     if len(model_at) != 1 or len(extra_at) > 1:
         raise SwitchError(f"{header} must have one model line and at most one provider_extra line; edit by hand")
     old_extra = voice_model.provider_section(cfg).get("provider_extra")
-    if old_extra not in (None, voice_model.NO_REASONING):
+    if old_extra is not None and set(old_extra) != {"reasoning_effort"}:
         raise SwitchError(f"{header} has provider_extra {old_extra}; merge reasoning_effort by hand")
     body[model_at[0]] = f'model = "{model}"\n'
     if extra_at:
-        body[extra_at[0]] = EXTRA_LINE + "\n"
-    else:
-        body.insert(model_at[0] + 1, EXTRA_LINE + "\n")
+        if extra:
+            body[extra_at[0]] = extra_line(extra)
+        else:
+            del body[extra_at[0]]
+    elif extra:
+        body.insert(model_at[0] + 1, extra_line(extra))
     new = "".join(lines[:start + 1] + body + lines[end:])
-    verify(text, new, model)
+    verify(text, new, model, extra)
     return new
 
 
-def verify(old: str, new: str, model: str) -> None:
+def verify(old: str, new: str, model: str, extra: dict | None) -> None:
     a, b = tomllib.loads(old), tomllib.loads(new)
     sa, sb = voice_model.provider_section(a), voice_model.provider_section(b)
-    if sb.get("model") != model or sb.get("provider_extra") != voice_model.NO_REASONING:
+    if sb.get("model") != model or sb.get("provider_extra") != extra:
         raise SwitchError("the edit did not take")
-    sa.pop("model", None), sa.pop("provider_extra", None), sb.pop("model"), sb.pop("provider_extra")
+    sa.pop("model", None), sa.pop("provider_extra", None), sb.pop("model"), sb.pop("provider_extra", None)
     if a != b:
         raise SwitchError("the edit changed more than the voice model; nothing written")
 
@@ -148,11 +159,11 @@ def main() -> int:
     path = voice_model.config_path()
     try:
         before = voice_model.current(path)
-        check_model(args.model)
+        thinks = check_model(args.model)
         text = path.read_text(encoding="utf-8")
-        new = edit(text, args.model)
+        new = edit(text, args.model, voice_model.REASONING if thinks else None)
         if new == text:
-            print(f"Jarvis already uses {args.model} with thinking off")
+            print(f"Jarvis already uses {args.model}" + (f" with {voice_model.REASONING}" if thinks else ""))
             return 0
         print("".join(difflib.unified_diff(text.splitlines(True), new.splitlines(True), str(path), "new")))
         if args.dry_run:
