@@ -142,6 +142,30 @@ class TestCoding:
         text = G.render_dropin(G.DEFAULT_KV, G.DEFAULT_CPU_MOE, None)
         assert "KV=q4_0" in text and "NCPUMOE=0" in text and "CTX" not in text
 
+    @pytest.mark.parametrize("text, want", [("qwen\n", ("q4_0", 0)), ("qwen36\n", ("q8_0", 6)),
+                                            ("", ("q4_0", 0)), ("newcoder", ("q8_0", 6))])
+    def test_defaults_follow_the_coder_preset(self, tmp_path, text, want):
+        """qwen36 (22.4 GB) cannot load with every expert on the GPU; an unknown coder gets the safe offload."""
+        (tmp_path / "p").write_text(text)
+        assert G.coding_defaults(tmp_path / "p") == want
+
+    def test_no_preset_file_means_llm_serve_s_fallback(self, tmp_path):
+        assert G.coding_defaults(tmp_path / "missing") == ("q4_0", 0)
+
+    @pytest.mark.parametrize("argv, want", [([], ("q8_0", 6, None)),
+                                            (["--kv", "q4_0", "--cpu-moe", "0"], ("q4_0", 0, None))])
+    def test_cli_uses_the_preset_s_defaults_unless_told(self, tmp_path, monkeypatch, argv, want):
+        (tmp_path / "p").write_text("qwen36")
+        monkeypatch.setattr(G, "PRESET_FILE", tmp_path / "p")
+        got = []
+        monkeypatch.setattr(G, "System", lambda: None)
+        monkeypatch.setattr(G, "_locked", lambda path: type("L", (), {"close": lambda self: None})())
+        monkeypatch.setattr(G, "ModeSwitcher", lambda sys: type("S", (), {
+            "coding": lambda self, *a: got.append(a),
+            "status": lambda self: type("St", (), {"lines": lambda self: []})()})())
+        G.main(["coding", *argv])
+        assert got == [want]
+
     def test_coder_fails_rolls_back_to_voice(self):
         fake = FakeSystem(coder_starts=False)
         sw = switcher(fake)

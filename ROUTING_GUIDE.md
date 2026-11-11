@@ -1,6 +1,6 @@
 # ROUTING_GUIDE.md
 
-**Purpose:** which work goes to ZeroClaw (local `qwen3-coder-30b`, free) and which stays
+**Purpose:** which work goes to ZeroClaw (local `qwen36` = Qwen3.6-35B-A3B since 2026-11-11, free) and which stays
 with Claude (paid). Updated as evidence accumulates. Every rule here comes from an
 observed outcome on this box, not from theory.
 
@@ -14,15 +14,20 @@ The rest of this file is a dated log; older numbers in it may be stale. This
 block is kept current. Claude's own working rules for this project live in
 `~/.copilot/instructions/homeai.instructions.md`, which points here.
 
-**Builder agent (`zeroclaw agent -a builder`, qwen3-coder-30b on :8080):**
+**Builder agent (`zeroclaw agent -a builder`, qwen36 = Qwen3.6-35B-A3B on :8080 since 2026-11-11; was qwen3-coder-30b):**
 - Tool-call cap: **100 per message** (`runtime_profile = "heavy_duty"`,
   999999 actions/hour, 600 s shell timeout). The 10-call cap below is history.
 - `risk_profile = "yolo_unrestricted"`: it can run any command, pytest
   included, and write anywhere. It is useful, but it is a privileged agent:
   never feed it untrusted text.
 - One llama-server slot: a running task blocks every other coder request.
-  In voice mode it shares the GPU (~25 tok/s); `homeai-mode coding` gives
-  ~131 tok/s but takes Jarvis offline. Art modes (planned) evict it.
+  In voice mode it shares the GPU (~46 tok/s, 22 expert layers on CPU);
+  `homeai-mode coding` gives ~83 tok/s (q8_0, 6 on CPU, defaults picked from
+  `~/.config/llm-preset`) but takes Jarvis offline. Art mode evicts it.
+- Chosen 2026-11-11 over qwen3-coder-30b: never lied, built Android from a
+  one-line request. Watch for it routing around the environment (venv repoint);
+  read its tests, they over-specify. Rollback: `echo qwen > ~/.config/llm-preset`
+  then `systemctl --user restart llama-server`.
 - Persona: `~/.zeroclaw/agents/builder/workspace/SOUL.md` (anti-lying rules,
   fixed report format) and `AGENTS.md` (machine facts, conventions).
 - **Loop detector:** a tool returning identical output 8 times kills the

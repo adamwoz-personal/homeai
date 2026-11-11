@@ -105,11 +105,14 @@ empty to skip). Which tools the agent called: `~/.zeroclaw/data/state/runtime-tr
 
 ## Coding mode (the coder gets the whole GPU)
 
-The voice model (7.0 GB) and qwen3-coder-30b (about 19.7 GB) together exceed
-the 21.4 GB card. When they share it, the coder runs at about 25 tok/s.
+The coder is the preset named in `~/.config/llm-preset` (`qwen36` =
+Qwen3.6-35B-A3B since 2026-11-11; `qwen` = qwen3-coder-30b). With the voice
+model (7.0 GB) it does not fit the 21.4 GB card, so beside Jarvis llm-serve.sh
+keeps 22 expert layers on the CPU (~46 tok/s). To change coder:
+`echo qwen > ~/.config/llm-preset && systemctl --user restart llama-server`.
 
 ```bash
-homeai-mode coding    # Jarvis off, coder at ~131 tok/s (measured), ~7 s to switch
+homeai-mode coding    # Jarvis off, qwen36 at ~83 tok/s (measured), ~7 s to switch
 zc                    # code with ZeroClaw's builder agent, or use `hermes`
 homeai-mode voice     # Jarvis back, ~9 s to switch
 homeai-mode status
@@ -117,9 +120,10 @@ homeai-mode status
 
 - Both `zc` (ZeroClaw builder) and Hermes use the same llama-server, so both
   get the speed-up.
-- Coding mode defaults to a q4_0 KV cache with every layer on the GPU.
-  `homeai-mode coding --kv q8_0 --cpu-moe 6` gives a higher-fidelity cache at
-  about 80 tok/s.
+- Coding mode's KV cache and CPU expert layers default to the measured best
+  for the preset (`CODING_DEFAULTS` in homeai/gpu_mode.py): qwen36 q8_0 + 6;
+  qwen q4_0 + 0 (~131 tok/s). `--kv` / `--cpu-moe` override. An unlisted
+  preset gets qwen36's values, since too little offload fails to load.
 - `--ctx N` changes the context window (default 65536). Larger contexts are
   unmeasured and may need `--cpu-moe` to fit.
 - If the coder fails to start, the switch rolls back to voice mode.

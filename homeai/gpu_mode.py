@@ -69,6 +69,22 @@ COMFY_START_TIMEOUT_S = 180.0
 DEFAULT_KV = "q4_0"
 DEFAULT_CPU_MOE = 0
 
+# Coding-mode (KV, experts on CPU) per coder preset (~/.config/llm-preset).
+# qwen36 (22.4 GB) does not fit with every expert on the GPU; 6 measured best,
+# 83 tok/s gen / 1148 prompt (2026-11-10, ~/homeai-bench/kv.jsonl). A preset
+# not listed gets qwen36's: offloading too much is slow, too little fails to load.
+PRESET_FILE = Path.home() / ".config/llm-preset"
+CODING_DEFAULTS = {"qwen": (DEFAULT_KV, DEFAULT_CPU_MOE), "qwen36": ("q8_0", 6)}
+
+
+def coding_defaults(preset_file: Path | None = None) -> tuple[str, int]:
+    """Measured coding-mode KV type and CPU expert layers for the coder in use."""
+    try:
+        preset = (preset_file or PRESET_FILE).read_text(encoding="utf-8").strip() or "qwen"
+    except FileNotFoundError:
+        preset = "qwen"   # llm-serve's own fallback
+    return CODING_DEFAULTS.get(preset, CODING_DEFAULTS["qwen36"])
+
 CODER_START_TIMEOUT_S = 300.0
 UNLOAD_TIMEOUT_S = 30.0
 LOAD_ATTEMPTS = 3
@@ -490,10 +506,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="homeai-mode", description=__doc__.split("\n")[0])
     sub = parser.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("coding", help="give the coder the whole GPU (Jarvis offline)")
-    c.add_argument("--kv", default=DEFAULT_KV, choices=["q4_0", "q8_0", "f16"],
-                   help=f"KV cache type (default {DEFAULT_KV}, fastest measured)")
-    c.add_argument("--cpu-moe", type=int, default=DEFAULT_CPU_MOE,
-                   help="MoE layers kept on the CPU (q8_0 needs 6 to fit at 64K)")
+    c.add_argument("--kv", choices=["q4_0", "q8_0", "f16"],
+                   help="KV cache type (default: measured best for the coder preset)")
+    c.add_argument("--cpu-moe", type=int,
+                   help="MoE layers kept on the CPU (default: measured best for the coder preset)")
     c.add_argument("--ctx", type=int, help="context tokens (default: llm-serve.sh's 65536)")
     sub.add_parser("voice", help="Jarvis back on; the coder shares the GPU")
     sub.add_parser("art", help="ComfyUI replaces the coder for drawing; Jarvis stays on")
@@ -525,7 +541,8 @@ def main(argv: list[str] | None = None) -> int:
         lock = _locked(Path(f"/run/user/{os.getuid()}/homeai-mode.lock"))
         try:
             if args.cmd == "coding":
-                switcher.coding(args.kv, args.cpu_moe, args.ctx)
+                kv, cpu_moe = coding_defaults()
+                switcher.coding(args.kv or kv, cpu_moe if args.cpu_moe is None else args.cpu_moe, args.ctx)
             elif args.cmd == "art":
                 switcher.art()
             else:
