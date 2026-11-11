@@ -4,7 +4,7 @@
 with Claude (paid). Updated as evidence accumulates. Every rule here comes from an
 observed outcome on this box, not from theory.
 
-Last updated: 2026-11-10
+Last updated: 2026-11-11
 
 ---
 
@@ -2082,3 +2082,23 @@ Bake-off and routines (2026-11-06):
   and an attribute use (`P.MODEL`) in an eval script; grep for `import NAME`, `.NAME` AND lazy imports, and run
   the live tools (art_voice_live, eval_spec_patches) after a model change. (3) The voice model's name lived in
   six places; now homeai/voice_model.py reads it from ZeroClaw's config and tools/switch_voice_model.py changes it.
+
+## Coder upgrade candidates (2026-11-10/11)
+
+Evidence: plans/LLM_UPGRADE_PLAN.md step 3; ~/homeai-bench/coder-eval.jsonl, kv.jsonl.
+- **Speed has a cliff, not a slope.** Qwen3.6-35B-A3B with fewer CPU expert layers got
+  *slower*: beside Jarvis 46 tok/s at 22 layers, 20-31 below 20; alone 83 tok/s at 6,
+  ~40 below 6. Sweep NCPUMOE; never assume "more on GPU = faster".
+- **bench_tokps EOS bug:** a 1-token reply reported 1,000,000 tok/s. Report NOT MEASURED
+  when generation stops early.
+- **Quality (coding mode, worktrees kept):** the 35B built an Android hello-world from a
+  one-line request with 0 nudges and passed the planned Android app; it never lied in a
+  failure. The dense 27B (31 tok/s) hit ZeroClaw's provider timeout on 2 of 5 tasks.
+- **New failure mode: it routes around the environment.** Its CLI couldn't import homeai,
+  so it ran `pip install -e` in its worktree, repointing the SHARED .venv (Jarvis's) at
+  /tmp. git status can't see that. eval_local_coder.venv_guard now detects and reinstalls;
+  builder AGENTS.md forbids installing. After any delegation, check
+  `cd / && .venv/bin/python -c 'import homeai; print(homeai.__file__)'` points at the repo.
+- **Its tests over-specify** (error-message text, non-str input) and repeat themselves;
+  read them, don't count them. tools/inspect_coder_eval.py shows which tests reject the
+  reference.

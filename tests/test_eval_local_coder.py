@@ -160,6 +160,31 @@ def test_the_apk_must_contain_hello_world(tmp_path):
     assert not E._apk_shows_hello(_apk(tmp_path, "Good morning"))
 
 
+def test_a_venv_repointed_at_a_worktree_is_reported_and_put_back():
+    fixed = []
+    out = E.venv_guard(where=lambda: "/tmp/coder-eval-x/homeai", reinstall=lambda: fixed.append(1))
+    assert fixed == [1] and "/tmp/coder-eval-x/homeai" in out[0]
+    assert E.venv_guard(where=lambda: str(E.REPO / "homeai"), reinstall=lambda: fixed.append(2)) == []
+    assert fixed == [1]
+
+
+def test_the_real_venv_imports_this_repo():
+    assert E.venv_imports_homeai_from() == str(E.REPO / "homeai")
+
+
+def test_inspect_names_the_tests_that_reject_the_reference(tmp_path):
+    spec2 = importlib.util.spec_from_file_location("inspect_coder_eval", REPO / "tools" / "inspect_coder_eval.py")
+    inspect = importlib.util.module_from_spec(spec2)
+    spec2.loader.exec_module(inspect)
+    wt = _repo(tmp_path, E._PLAN_HIDDEN_TESTS.replace('(1, "1 second")', '(1, "one second")'))
+    wt = wt.rename(tmp_path / "coder-eval-plan-follow-1")
+    mine = E._PLAN_REFERENCE + "\n# the coder's own\n"
+    (wt / "homeai" / "spoken_time.py").write_text(mine)
+    out = inspect.failures_on_reference(wt)
+    assert "FAILED" in out and "test_say" in out and "1 failed" in out
+    assert (wt / "homeai" / "spoken_time.py").read_text() == mine
+
+
 def test_a_missing_file_fails_without_running_anything(tmp_path):
     wt = _repo(tmp_path, E._PLAN_HIDDEN_TESTS)
     (wt / "tools" / "say_duration.py").unlink()

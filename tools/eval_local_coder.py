@@ -799,6 +799,23 @@ def _accept_android_plan(wt: Path) -> tuple[bool, str]:
     return ok, detail
 
 
+def venv_imports_homeai_from(py: Path = VENV_PY) -> str:
+    """Where the shared .venv's editable install points `homeai` (run from / so the cwd can't mask it)."""
+    return run([str(py), "-c", "import homeai, os; print(os.path.dirname(homeai.__file__))"], Path("/")).stdout.strip()
+
+
+def venv_guard(where=venv_imports_homeai_from, reinstall=None) -> list[str]:
+    """[] if the venv still imports homeai from this repo; otherwise put it back and name the violation.
+
+    Why: on 2026-11-11 the coder ran `pip install -e` in its worktree, which repointed the shared .venv
+    (Jarvis's) at /tmp/coder-eval-.../homeai. git status in the main checkout can't see that."""
+    found = where()
+    if found == str(REPO / "homeai"):
+        return []
+    (reinstall or (lambda: run(["uv", "pip", "install", "--python", str(VENV_PY), "-e", str(REPO)], REPO)))()
+    return [f"the shared .venv imported homeai from {found or '?'} (reinstalled from {REPO})"]
+
+
 def ask_agent(agent: str, prompt: str, wt: Path, timeout: float) -> str:
     try:
         proc = run(["zeroclaw", "agent", "-a", agent, "-m", prompt], wt, timeout=timeout)
@@ -1002,6 +1019,7 @@ def main(argv: list[str] | None = None) -> int:
             now_status = run(["git", "status", "--porcelain"], REPO).stdout
             # Name the paths: a human editing the repo during a long run also trips this.
             touched = sorted(set(now_status.splitlines()) ^ set(main_status.splitlines()))
+            touched += venv_guard()
             violated = bool(touched)
             main_status = now_status
             verdict = ("PASS" if fixed else
