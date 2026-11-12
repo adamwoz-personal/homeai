@@ -104,3 +104,11 @@ def test_a_split_failure_keeps_the_sentence(mixed):
     q.stt.words.side_effect = RuntimeError("whisper fell over")
     _art_turn(q, audio, "again. It has two")
     assert q.art.seen == [("again. It has two", False)]
+
+
+def test_leaving_is_never_split(mixed):
+    """2026-11-12: "cancel art mode" kept "cancel art", dropped "mode.", and art mode stayed on."""
+    q, audio = mixed
+    q.stt.words.return_value = [(0.2, 0.6, "cancel"), (0.6, 1.0, "art"), (2.6, 3.0, "mode.")]
+    _art_turn(q, audio, "cancel art mode.")
+    assert q.art.seen == [("cancel art mode.", False)] and not q.stt.words.called

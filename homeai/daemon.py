@@ -108,6 +108,16 @@ FOLLOWUP_SETTLE_S = 0.25
 FORCED_EXIT_S = 15.0    # a wedged device can hang shutdown; systemd must still get its restart
 
 
+
+def _is_leave(text: str) -> bool:
+    """The sentence asks to leave art mode (homeai/art/grammar.py "leave")."""
+    from homeai.art import grammar
+    try:
+        intent = grammar.parse(text)
+    except Exception:  # noqa: BLE001 - not sure: split as usual
+        return False
+    return intent is not None and intent.kind == "leave"
+
 class VoiceAssistant(VoiceIdTurns):
     def __init__(self, cfg: Config | None = None) -> None:
         self.cfg = cfg or load()
@@ -754,7 +764,9 @@ class VoiceAssistant(VoiceIdTurns):
         owner = getattr(self.art, "owner", None)
         if getattr(self.art, "active", False) and owner and self.voice_id is not None and ident is not None:
             other, _ = self.voice_id.is_someone_else(owner, ident, emb)
-            if not other and audio is not None:
+            # "Cancel art mode" lost "mode." to the split on 2026-11-12 and art mode stayed on: a way out is
+            # never split (leaving is harmless; whoever says it, they can say "let's draw" again).
+            if not other and audio is not None and not _is_leave(text):
                 text, other = self._owner_words(owner, audio, text)
         try:
             reply = self.art.handle(text, speaker, other=other)

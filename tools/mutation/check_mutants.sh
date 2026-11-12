@@ -975,6 +975,11 @@ MUTANTS=(
   "art-takeover-by-unknown|homeai/art/voice.py|s/            if self.owner is None and speaker:/            if self.owner is None:/|tests/test_art_f7.py -k does_not_take_over"
   "art-takeover-from-owner|homeai/art/voice.py|s/            if self.owner is None and speaker:/            if speaker:/|tests/test_art_f7.py -k keeps_the_session"
   "art-takeover-session-stays-guest|homeai/art/voice.py|s/                self.session.owner = speaker.lower()/                pass/|tests/test_art_f7.py -k takes_over_a_guest"
+  "art-leave-to-voice-mode-missed|homeai/art/grammar.py|s/to (voice/to (nothing/|tests/test_art_grammar.py -k more_ways_out"
+  "art-leave-cancel-art-missed|homeai/art/grammar.py|s/r\"(art( mode)?/r\"(art( mode)/|tests/test_art_grammar.py -k more_ways_out"
+  "art-leave-done-missed|homeai/art/grammar.py|s/(all )?(done/(all )?(dXne/|tests/test_art_grammar.py -k more_ways_out"
+  "art-leave-split|homeai/daemon.py|s/ and not _is_leave(text):/:/|tests/test_speaker_split.py -k leaving_is_never_split"
+  "art-leave-never-recognised|homeai/daemon.py|s/    return intent is not None and intent.kind == \"leave\"/    return False/|tests/test_speaker_split.py -k leaving_is_never_split"
 )
 
 filter="${1:-}"

@@ -83,3 +83,20 @@ def test_saying_the_wake_word_again_restarts_the_request():
     assert parse("hey jarvis, draw a fox") == Intent("new", text="draw a fox")
     assert parse("Jarvis, draw a fox") == Intent("new", text="draw a fox")
     assert parse("Hey Jarvis, stop.") == Intent("cancel")
+
+
+# Adam's tries to leave on 2026-11-12, all of which missed; and "drawing mode" is what he calls it.
+@pytest.mark.parametrize("said", ["switch to voice mode", "Hey Jarvis, cancel art mode", "Hey Jarvis, cancel art",
+                                  "Hey Jarvis, we're done drawing", "we're done", "exit drawing mode",
+                                  "leave drawing mode", "back to voice mode", "voice mode", "turn off art mode",
+                                  "end art mode", "I'm finished with the drawing", "no more drawing",
+                                  "stop drawing mode", "go back to normal mode"])
+def test_more_ways_out_of_art_mode(said):
+    assert parse(said) == Intent("leave")
+
+
+@pytest.mark.parametrize("said", ["we're done to register as gassed if everybody can interrupt you",
+                                  "cancel the art of the dragon", "draw a voice mode diagram", "stop",
+                                  "stop the drawing", "cancel the picture", "end the picture"])
+def test_not_a_way_out(said):
+    assert (parse(said) or Intent("none")).kind != "leave"

@@ -64,8 +64,12 @@ def _tidy(text: str) -> str:
 
 PATTERNS: list[tuple[str, re.Pattern]] = [(kind, re.compile(rx)) for kind, rx in [
     ("cancel", r"^(stop|never ?mind|cancel( that| it| the picture)?|forget it)$"),
-    ("leave", r"^((leave|exit|quit|close) (the )?art mode|i'?m (done|finished) drawing|stop drawing|"
-              r"that'?s enough drawing)$"),
+    # Adam's tries on 2026-11-12, all missed: "switch to voice mode", "cancel art mode" (heard as "cancel art"),
+    # "we're done drawing"; and he calls it "drawing mode".
+    ("leave", r"^((leave|exit|quit|close|cancel|end|stop|turn off|switch off|get out of) (the )?"
+              r"(art( mode)?|(drawing|draw|picture) mode)|((go|switch|change) )?(back )?to (voice|normal|talking) mode|"
+              r"voice mode|(i'?m|we'?re|i am|we are) (all )?(done|finished)( drawing| with (the )?(drawing|pictures?|art))?|"
+              r"stop drawing|no more drawing|that'?s enough drawing)$"),
     ("again", r"^((try )?again|another one|one more|do it again|draw it again|redo it|re-?roll)$"),
     ("variations", rf"^(give me|show me|draw|make)( me)? {NUM}( more)?( options| versions| variations| ones)?$"),
     ("variations", r"^(a few|some) (options|versions|variations)$"),
