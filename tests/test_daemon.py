@@ -15,6 +15,7 @@ from __future__ import annotations
 import threading
 import time
 from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -1196,3 +1197,105 @@ def test_start_adopts_art_mode_left_on(assistant, monkeypatch) -> None:
         monkeypatch.setattr(assistant, name, lambda: None)
     assistant._start_services()
     assert calls == ["adopt"]
+
+
+# -- text typed in the art features window (ART_FEATURES_PLAN F6) ----------------
+
+class FakeArt:
+    def __init__(self, active=True, owner="Ani", reply="Drawing it now."):
+        self.active, self.owner, self.reply, self.seen = active, owner, reply, []
+
+    def handle(self, text, speaker, other=False):
+        self.seen.append((text, speaker, other))
+        if isinstance(self.reply, Exception):
+            raise self.reply
+        return self.reply
+
+
+def typed(assistant, art, *texts):
+    published = []
+    assistant.art = art
+    assistant.presence = SimpleNamespace(publish=lambda t, d: published.append((t, d)), state=lambda *a, **k: None)
+    for text in texts:
+        assistant._handle_typed(text)
+    return published
+
+
+def test_typed_text_changes_the_picture_as_the_session_owner_and_is_shown_not_spoken(assistant) -> None:
+    from homeai import daemon as D
+    art = FakeArt()
+    assistant.agent.ask = MagicMock()
+    published = typed(assistant, art, "a red dragon")
+    assert art.seen == [("a red dragon", "Ani", False)]                 # the owner's rules (Ani: kid-safe)
+    assert published == [("typed_reply", {"text": "Drawing it now."})]
+    assistant.tts.say.assert_not_called()
+    assistant.agent.ask.assert_not_called()
+    assert D.TYPED_MAX == 500
+
+
+def test_typed_text_outside_art_mode_does_nothing_but_say_so(assistant) -> None:
+    from homeai import daemon as D
+    art = FakeArt(active=False)
+    assert typed(assistant, art, "a red dragon") == [("typed_reply", {"text": D.MSG_TYPED_ART_OFF})]
+    assert art.seen == []
+    assert typed(assistant, None, "x") == [("typed_reply", {"text": D.MSG_TYPED_ART_OFF})]
+
+
+def test_typed_text_that_is_not_about_the_picture_never_reaches_jarvis(assistant) -> None:
+    from homeai import daemon as D
+    assistant.agent.ask = MagicMock()
+    assert typed(assistant, FakeArt(reply=None), "turn off the lights") == [
+        ("typed_reply", {"text": D.MSG_TYPED_NOT_ART})]
+    assistant.agent.ask.assert_not_called()
+
+
+def test_a_crash_on_typed_text_is_shown(assistant) -> None:
+    published = typed(assistant, FakeArt(reply=RuntimeError("boom")), "x")
+    assert published == [("typed_reply", {"text": "Something went wrong in art mode."})]
+
+
+def test_bus_messages_are_checked_before_queueing(assistant, monkeypatch) -> None:
+    from homeai import daemon as D
+    now = [100.0]
+    monkeypatch.setattr(D.time, "monotonic", lambda: now[0])
+    on = assistant._on_bus_message
+    on({"type": "typed", "data": {"text": "  a   red dragon "}})
+    on({"type": "typed", "data": {"text": "too soon"}})                      # inside TYPED_MIN_GAP_S
+    now[0] += 1
+    on({"type": "typed", "data": {"text": "x" * 501}})                       # too long
+    on({"type": "typed", "data": {"text": 7}})
+    on({"type": "typed", "data": {"text": "   "}})
+    on({"type": "caption", "data": {"text": "spoof"}})
+    on({"type": "typed", "data": {"text": "make it blue"}})
+    got = [assistant._typed.get_nowait() for _ in range(assistant._typed.qsize())]
+    assert got == ["a red dragon", "make it blue"]
+
+
+def test_the_typed_worker_runs_until_stop(assistant) -> None:
+    seen = []
+    assistant._handle_typed = seen.append
+    t = threading.Thread(target=assistant._typed_loop, daemon=True)
+    t.start()
+    assistant._typed.put("a red dragon")
+    deadline = time.monotonic() + 2
+    while not seen and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assistant._stop.set()
+    t.join(timeout=2)
+    assert seen == ["a red dragon"] and not t.is_alive()
+
+
+def test_the_bus_hands_messages_to_the_daemon() -> None:
+    with patch("homeai.daemon.Microphone"), patch("homeai.daemon.Transcriber"), patch("homeai.daemon.Speaker"), \
+         patch("homeai.daemon.build_agent_client"), patch("homeai.daemon.TranscriptLog"), \
+         patch("homeai.daemon.Presence") as presence:
+        from homeai.daemon import VoiceAssistant
+        va = VoiceAssistant(Config())
+    assert presence.call_args.kwargs["on_message"] == va._on_bus_message
+
+
+def test_the_typed_worker_is_started_with_jarvis() -> None:
+    import inspect
+
+    from homeai.daemon import VoiceAssistant
+    assert '(self._typed_loop, "typed")' in inspect.getsource(VoiceAssistant.start)

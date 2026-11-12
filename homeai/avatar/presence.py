@@ -18,9 +18,12 @@ STATES = frozenset({"idle", "listening", "thinking", "speaking", "followup", "sl
 
 
 class Presence:
-    def __init__(self, enabled: bool, socket_path: str = "", bus: EventBus | None = None) -> None:
+    def __init__(self, enabled: bool, socket_path: str = "", bus: EventBus | None = None,
+                 on_message=None) -> None:
+        """``on_message``: client messages (text typed in the art features window), see EventBus."""
         self._bus = (bus or EventBus(socket_path or None, capabilities=("state", "utterance",
-                                                                        "caption", "speech_stop"))
+                                                                        "caption", "speech_stop", "typed"),
+                                     on_message=on_message)
                      ) if enabled else None
         self._lock = threading.Lock()
         self.current: str | None = None

@@ -265,3 +265,55 @@ def test_handler_exception_does_not_kill_client(server, sock_path):
         assert c.connected
     finally:
         c.stop()
+
+
+# ---- text typed in the art features window (ART_FEATURES_PLAN F6) -----------------
+def test_parse_messages_accepts_only_typed_lines():
+    from homeai.avatar.bus import _Client, parse_messages
+    c = _Client(None, 4)
+    assert parse_messages(c, b'{"type": "typed", "data": {"text": "a red') == []      # incomplete: kept
+    got = parse_messages(c, b' dragon"}}\nnot json\n{"type": "state", "data": {}}\n{"type": "typed", "data": 1}\n')
+    assert got == [{"type": "typed", "data": {"text": "a red dragon"}}]
+    assert parse_messages(_Client(None, 4), b"x" * 9000) is None                       # one endless line
+
+
+def test_a_typed_line_reaches_the_handler_and_old_clients_are_unaffected(sock_path):
+    got = []
+    b = EventBus(sock_path, on_message=got.append)
+    b.start()
+    c = BusClient(lambda e: None, path=sock_path)
+    try:
+        assert not c.send("typed", {"text": "early"})              # not connected yet: refused, not queued
+        c.start()
+        assert wait_until(lambda: c.connected)
+        assert c.send("typed", {"text": "a blue sky"})
+        assert wait_until(lambda: got == [{"type": "typed", "data": {"text": "a blue sky"}}])
+        s = connect(sock_path)
+        read_events(s, 2)                                          # hello, snapshot
+        s.sendall(b'{"type": "caption", "data": {"text": "spoof"}}\n')   # only "typed" is accepted
+        b.publish("state", {"state": "idle"})
+        assert read_events(s, 1)[0]["type"] == "state" and len(got) == 1
+        s.close()
+    finally:
+        c.stop()
+        b.stop()
+
+
+def test_a_client_sending_an_endless_line_is_dropped(sock_path):
+    b = EventBus(sock_path, on_message=lambda m: None)
+    b.start()
+    try:
+        s = connect(sock_path)
+        read_events(s, 2)
+        s.sendall(b"y" * 20000)
+        assert wait_until(lambda: b.client_count == 0)
+    finally:
+        b.stop()
+
+
+def test_without_a_handler_input_is_ignored(server, sock_path):
+    s = connect(sock_path)
+    read_events(s, 2)
+    s.sendall(b'{"type": "typed", "data": {"text": "x"}}\n' + b"z" * 20000)
+    server.publish("caption", {"n": 1})
+    assert read_events(s, 1)[0]["type"] == "caption" and server.client_count == 1
