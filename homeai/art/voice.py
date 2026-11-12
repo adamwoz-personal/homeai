@@ -240,6 +240,13 @@ class ArtVoice:
                 # (a child's "it has two heads" became kid rules and changes, Adam 2026-11-07).
                 log.info("art: ignoring another voice in %s's session: %r", self.owner, text)
                 return ""
+            if self.owner is None and speaker:
+                # Started by a voice nobody recognised ("let's draw" at Adam 0.44, 2026-11-12): the first
+                # confidently recognised person takes it over: their folder and projects from here on.
+                # Pictures already saved under guest/ stay there (Adam's choice, 2026-11-12).
+                log.info("art: %s takes over the session started by an unrecognised voice", speaker)
+                self.owner = speaker
+                self.session.owner = speaker.lower()
             if speaker is None and self.owner:
                 speaker = self.owner        # not confidently someone else: the session's owner, not a stranger
             self._last = self._clock()

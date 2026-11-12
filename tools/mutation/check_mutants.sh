@@ -971,6 +971,10 @@ MUTANTS=(
   "f7-viewer-compare-overlap|homeai/art/viewer.py|s/(2 \\* PAD + half, PAD, half, main_h)/(PAD + half \\/\\/ 2, PAD, half, main_h)/|tests/test_art_f7.py -k two_halves"
   "f7-grammar-pick-nine|homeai/art/grammar.py|s/(?:number )?(?P<n>\\[1-8\\]/(?:number )?(?P<n>[1-9]/|tests/test_art_f7.py -k picking_nine"
   "f7-grammar-compare-show-alone|homeai/art/grammar.py|s/    if two and (said.startswith(\"compare\") or two.group(\"side\")):/    if two:/|tests/test_art_f7.py -k without_side_by_side"
+  "art-takeover-off|homeai/art/voice.py|s/            if self.owner is None and speaker:/            if False:/|tests/test_art_f7.py -k takes_over_a_guest"
+  "art-takeover-by-unknown|homeai/art/voice.py|s/            if self.owner is None and speaker:/            if self.owner is None:/|tests/test_art_f7.py -k does_not_take_over"
+  "art-takeover-from-owner|homeai/art/voice.py|s/            if self.owner is None and speaker:/            if speaker:/|tests/test_art_f7.py -k keeps_the_session"
+  "art-takeover-session-stays-guest|homeai/art/voice.py|s/                self.session.owner = speaker.lower()/                pass/|tests/test_art_f7.py -k takes_over_a_guest"
 )
 
 filter="${1:-}"

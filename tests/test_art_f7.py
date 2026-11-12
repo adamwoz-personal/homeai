@@ -481,3 +481,28 @@ def test_current_is_matched_by_project_too():
     assert not V.is_current({"node": "001", "project": "cat"}, current)
     assert V.is_current({"node": "001"}, current) and not V.is_current({"node": "002"}, current)
     assert not V.is_current({"node": "001"}, {})
+
+
+# -- a session started by an unrecognised voice (Adam 2026-11-12: "take over") --------------------
+
+def test_the_first_recognised_voice_takes_over_a_guest_session(art, tmp_path):
+    art.handle("let's draw", None)
+    assert art.owner is None and art.session.owner == "guest"
+    art.handle("draw a red fox", "Adam")
+    assert art.owner == "Adam" and art.session.owner == "adam"
+    finished(art, tmp_path)
+    assert (tmp_path / "Pictures" / "adam").exists() and not (tmp_path / "Pictures" / "guest").exists()
+    art.handle("make it blue", "Ani")              # someone else later doesn't take it again
+    assert art.owner == "Adam"
+
+
+def test_an_unrecognised_voice_does_not_take_over(art):
+    art.handle("let's draw", None)
+    art.handle("draw a red fox", None)
+    assert art.owner is None and art.session.owner == "guest"
+
+
+def test_a_recognised_owner_keeps_the_session(art):
+    art.handle("let's draw", "Ani")
+    art.handle("draw a red fox", "Adam")
+    assert art.owner == "Ani" and art.session.owner == "ani"
