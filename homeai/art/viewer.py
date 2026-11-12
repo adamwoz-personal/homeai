@@ -88,8 +88,46 @@ def option_label(step: dict) -> str:
     return f"{step['n']}: {', '.join(problems)}" if problems else str(step["n"])
 
 
-FEATURES_SIZE = (560, 720)
+FEATURES_SIZE = (560, 800)
 CHANGED = (255, 214, 120)
+ENTRY_H = 84                 # the typing box and the reply line above it (F6)
+TYPED_MAX = 500              # the daemon drops longer lines (daemon.TYPED_MAX)
+PLACEHOLDER = "Type what to draw or change, then Enter"
+
+
+class Entry:
+    """The one-line typing box in the features window (ART_FEATURES_PLAN F6). Pure: main() feeds it keys."""
+
+    def __init__(self) -> None:
+        self.text = ""
+        self.reply = ""
+
+    def type(self, s: str) -> None:
+        self.text = (self.text + s.replace("\n", " ").replace("\r", " "))[:TYPED_MAX]
+
+    def key(self, name: str) -> str | None:
+        """'backspace', 'escape' or 'return'; returns the text to send on 'return' (None if nothing)."""
+        if name == "backspace":
+            self.text = self.text[:-1]
+        elif name == "escape":
+            self.text = ""
+        elif name == "return":
+            text, self.text = " ".join(self.text.split()), ""
+            return text or None
+        return None
+
+    def visible(self, width_chars: int) -> str:
+        """What fits in the box: the end of the line (where the cursor is), with a cursor bar."""
+        shown = self.text[-max(1, width_chars - 1):]
+        return shown + "▏"
+
+
+def typed_reply(event: dict) -> str | None:
+    """The daemon's answer to typed text (a ``typed_reply`` event), else None."""
+    if event.get("type") != "typed_reply" or not isinstance(event.get("data"), dict):
+        return None
+    text = event["data"].get("text")
+    return text if isinstance(text, str) else None
 
 
 def wrap(text: str, width_chars: int) -> list[str]:
@@ -136,16 +174,32 @@ class Images:
         return self._cache[key]
 
 
-def draw_features(window, state: dict, letter_font, text_font) -> None:
+def draw_entry(surface, entry: Entry, text_font, pygame) -> None:
+    """The reply to the last typed line, and the typing box, along the bottom of the features window."""
+    width, height = surface.get_size()
+    top = height - ENTRY_H
+    pygame.draw.line(surface, DIM, (PAD, top), (width - PAD, top), 1)
+    if entry.reply:
+        reply = wrap(entry.reply, max(16, (width - 2 * PAD) // 11))[0]
+        surface.blit(text_font.render(reply, True, DIM), (PAD, top + 8))
+    box = (PAD, height - PAD - 36, width - 2 * PAD, 36)
+    pygame.draw.rect(surface, FG, box, 1)
+    chars = max(8, (box[2] - 16) // 11)
+    text, colour = (entry.visible(chars), FG) if entry.text else (PLACEHOLDER, DIM)
+    surface.blit(text_font.render(text, True, colour), (box[0] + 8, box[1] + 7))
+
+
+def draw_features(window, state: dict, letter_font, text_font, entry: Entry | None = None, pygame=None) -> None:
     surface = window.get_surface()
     surface.fill(BG)
     width, height = surface.get_size()
     rows = feature_rows(state, max(16, (width - 70) // 11))
     y = PAD
+    bottom = height - (ENTRY_H if entry is not None else 0)
     if not rows:
-        surface.blit(text_font.render("No features yet. Say what to draw.", True, DIM), (PAD, y))
+        surface.blit(text_font.render("No features yet. Say or type what to draw.", True, DIM), (PAD, y))
     for letter, line, hot in rows:
-        if y > height - 30:
+        if y > bottom - 30:
             break
         colour = CHANGED if hot else FG
         if letter:
@@ -155,7 +209,24 @@ def draw_features(window, state: dict, letter_font, text_font) -> None:
         else:
             surface.blit(text_font.render(line, True, colour), (PAD + 40, y))
             y += 26
+    if entry is not None and pygame is not None:
+        draw_entry(surface, entry, text_font, pygame)
     window.flip()
+
+
+KEY_NAMES = {"K_BACKSPACE": "backspace", "K_ESCAPE": "escape", "K_RETURN": "return", "K_KP_ENTER": "return"}
+
+
+def key_name(pygame, key: int) -> str | None:
+    return next((name for attr, name in KEY_NAMES.items() if getattr(pygame, attr, None) == key), None)
+
+
+def paste_text(pygame) -> str:
+    """The clipboard's text for Ctrl+V; "" when the clipboard can't be read (no error for the user)."""
+    try:
+        return pygame.scrap.get_text() or ""
+    except Exception:  # noqa: BLE001 - no clipboard on this display
+        return ""
 
 
 def main() -> int:
@@ -167,8 +238,8 @@ def main() -> int:
     from homeai.avatar.client import BusClient
 
     events: queue.SimpleQueue = queue.SimpleQueue()
-    client = BusClient(lambda event: events.put(event) if event.get("type") in ("art", "snapshot") else None,
-                       path=os.environ.get("HOMEAI_AVATAR_SOCKET") or None)
+    client = BusClient(lambda event: events.put(event) if event.get("type") in ("art", "snapshot", "typed_reply")
+                       else None, path=os.environ.get("HOMEAI_AVATAR_SOCKET") or None)
     pygame.init()
     screen = pygame.display.set_mode(SIZE, pygame.RESIZABLE)
     pygame.display.set_caption("Jarvis — pictures")
@@ -182,6 +253,9 @@ def main() -> int:
         feature_win = None
     images = Images(pygame)
     state: dict = {"active": True, "status": "Starting..."}
+    entry = Entry()
+    focused = None                                  # the window keys go to, when events don't say
+    pygame.key.start_text_input()
     client.start()
     clock = pygame.time.Clock()
     shots = os.environ.get("HOMEAI_ART_VIEWER_SHOTS")    # live checks: save the window after each new picture
@@ -196,10 +270,30 @@ def main() -> int:
                     continue
                 if event.type == pygame.QUIT:
                     return 0
-                if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_q):
-                    return 0
+                if event.type == pygame.WINDOWFOCUSGAINED:
+                    focused = getattr(event, "window", None)
+                    continue
+                typing = feature_win is not None and (getattr(event, "window", None) or focused) is feature_win
+                if typing and event.type == pygame.TEXTINPUT:
+                    entry.type(event.text)
+                elif typing and event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_v and event.mod & pygame.KMOD_CTRL:
+                        entry.type(paste_text(pygame))
+                    else:
+                        name = key_name(pygame, event.key)
+                        text = entry.key(name) if name else None
+                        if text:
+                            entry.reply = "…" if client.send("typed", {"text": text}) \
+                                else "Not connected to Jarvis."
+                elif event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_q):
+                    return 0                     # in the picture window only: in the features window they type
             while not events.empty():
-                state = art_state(events.get(), state)
+                event = events.get()
+                reply = typed_reply(event)
+                if reply is not None:
+                    entry.reply = reply
+                else:
+                    state = art_state(event, state)
             width, height = screen.get_size()
             thumbs = thumbs_of(state)
             boxes = layout(width, height, len(thumbs))
@@ -224,7 +318,7 @@ def main() -> int:
                     screen.blit(label, (x + 6, y + 4))
             pygame.display.flip()
             if feature_win is not None:
-                draw_features(feature_win, state, letter_font, small)
+                draw_features(feature_win, state, letter_font, small, entry, pygame)
             shown = (state.get("current") or {}).get("image") if picture is not None else None
             if shots and shown and shown != shot_of:
                 shot_of = shown
@@ -232,7 +326,7 @@ def main() -> int:
                 os.makedirs(shots, exist_ok=True)
                 pygame.image.save(screen, os.path.join(shots, f"window-{n}.png"))
                 if feature_win is not None:
-                    draw_features(feature_win, state, letter_font, small)
+                    draw_features(feature_win, state, letter_font, small, entry, pygame)
                     pygame.image.save(feature_win.get_surface(), os.path.join(shots, f"features-{n}.txt.png"))
             clock.tick(10)
     finally:

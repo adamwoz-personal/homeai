@@ -862,6 +862,23 @@ MUTANTS=(
   "misfire-openai-ignored|tools/eval_tool_misfire.py|s/    if state.get(\"endpoint\") == \"openai\":/    if False:/|tests/test_eval_tool_misfire.py"
   "misfire-openai-drops-tool-choice|tools/eval_tool_misfire.py|s/    body = dict(capture\[\"body\"\])/    body = {k: v for k, v in capture[\"body\"].items() if k != \"tool_choice\"}/|tests/test_eval_tool_misfire.py"
   "polkit-any-action|deploy/polkit/50-homeai.rules.in|s/action.id !== \"org.freedesktop.systemd1.manage-units\"/false/|tests/test_polkit_rule.py"
+  # Typing in the art features window (ART_FEATURES_PLAN F6, Adam 2026-11-12).
+  "typed-bus-any-type|homeai/avatar/bus.py|s/msg.get(\"type\") in ACCEPTED_IN and/True and/|tests/test_avatar_bus.py -k typed"
+  "typed-bus-endless-line-kept|homeai/avatar/bus.py|s/        if messages is None:/        if False:/|tests/test_avatar_bus.py -k endless"
+  "typed-bus-no-handler-reads|homeai/avatar/bus.py|s/        if self.on_message is None:/        if False:/|tests/test_avatar_bus.py -k without_a_handler"
+  "typed-client-sends-unconnected|homeai/avatar/client.py|s/        if sock is None or not self.connected:/        if False:/|tests/test_avatar_bus.py -k typed"
+  "typed-presence-no-handler|homeai/avatar/presence.py|s/                                     on_message=on_message)/                                     )/|tests/test_art_viewer_entry.py -k presence"
+  "typed-not-as-owner|homeai/daemon.py|s/reply = art.handle(text, art.owner, other=False)/reply = art.handle(text, \"Adam\", other=False)/|tests/test_daemon.py -k typed_text_changes"
+  "typed-outside-art-mode|homeai/daemon.py|s/        if art is None or not art.active:/        if art is None:/|tests/test_daemon.py -k outside_art_mode"
+  "typed-not-art-silent|homeai/daemon.py|s/            if not reply:/            if False:/|tests/test_daemon.py -k not_about_the_picture"
+  "typed-no-rate-limit|homeai/daemon.py|s/ or now - self._typed_last < TYPED_MIN_GAP_S:/:/|tests/test_daemon.py -k bus_messages"
+  "typed-no-length-cap|homeai/daemon.py|s/ or len(text) > TYPED_MAX or / or /|tests/test_daemon.py -k bus_messages"
+  "typed-no-worker|homeai/daemon.py|s/, (self._typed_loop, \"typed\"))/)/|tests/test_daemon.py -k typed_worker_is_started"
+  "typed-bus-not-wired|homeai/daemon.py|s/, on_message=self._on_bus_message)/)/|tests/test_daemon.py -k bus_hands"
+  "typed-worker-ignores-stop|homeai/daemon.py|/    def _typed_loop(self) -> None:/{n;s/while not self._stop.is_set():/while True:/}|tests/test_daemon.py -k runs_until_stop"
+  "typed-entry-not-cleared|homeai/art/viewer.py|s/            text, self.text = \" \".join(self.text.split()), \"\"/            text = \" \".join(self.text.split())/|tests/test_art_viewer_entry.py"
+  "typed-entry-uncapped|homeai/art/viewer.py|s/)\[:TYPED_MAX\]$/)/|tests/test_art_viewer_entry.py"
+  "typed-entry-shows-start|homeai/art/viewer.py|s/shown = self.text\[-max(1, width_chars - 1):\]/shown = self.text[:max(1, width_chars - 1)]/|tests/test_art_viewer_entry.py"
 )
 
 filter="${1:-}"

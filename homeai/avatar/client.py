@@ -74,6 +74,7 @@ class BusClient:
         self.version_error: str | None = None
         self._stop = threading.Event()
         self._sock: socket.socket | None = None
+        self._send_lock = threading.Lock()
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
@@ -94,6 +95,19 @@ class BusClient:
         if self._thread:
             self._thread.join(timeout=2)
             self._thread = None
+
+    def send(self, etype: str, data: dict) -> bool:
+        """Send one message to the daemon (only types the bus accepts, e.g. "typed"); False if not connected."""
+        sock = self._sock
+        if sock is None or not self.connected:
+            return False
+        line = (json.dumps({"type": etype, "data": data}, ensure_ascii=False) + "\n").encode()
+        try:
+            with self._send_lock:
+                sock.sendall(line)
+        except OSError:
+            return False
+        return True
 
     def _set_connected(self, value: bool) -> None:
         if value != self.connected:

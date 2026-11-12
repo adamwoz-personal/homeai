@@ -96,6 +96,12 @@ MSG_FRAGMENT = "Sorry, I only caught part of that. Say hey Jarvis again if you m
 # How long an unanswered "Which lights?" stays open.
 HOME_PENDING_S = 30.0
 
+# Text typed in the art features window (ART_FEATURES_PLAN F6, Adam 2026-11-12): art mode only, shown not spoken.
+TYPED_MAX = 500
+TYPED_MIN_GAP_S = 0.5
+MSG_TYPED_ART_OFF = "Typing works in art mode. Say “hey Jarvis, art mode” first."
+MSG_TYPED_NOT_ART = "Typed text only changes the picture."
+
 # Pause between the end of a reply and opening a follow-up window, so the
 # capture does not start on the acoustic tail of Jarvis's own voice.
 FOLLOWUP_SETTLE_S = 0.25
@@ -110,8 +116,11 @@ class VoiceAssistant(VoiceIdTurns):
         self._exit_code = 0
         self.stt = Transcriber(self.cfg.stt)
         self.tts = Speaker(self.cfg.tts, self.cfg.audio.output_device)
-        # Avatar event feed; a no-op (no socket) when HOMEAI_AVATAR=0.
-        self.presence = Presence(self.cfg.avatar.enabled, self.cfg.avatar.socket)
+        # Avatar event feed; a no-op (no socket) when HOMEAI_AVATAR=0. It also brings text typed in the
+        # art features window (F6) to the "typed" worker.
+        self._typed: queue.Queue[str] = queue.Queue(maxsize=8)
+        self._typed_last = float("-inf")
+        self.presence = Presence(self.cfg.avatar.enabled, self.cfg.avatar.socket, on_message=self._on_bus_message)
         if self.presence.enabled:
             self.tts.publish = self.presence.publish
         # Long-term memory (plans/MEMORY_PLAN.md). Optional: if Postgres or the
@@ -760,6 +769,51 @@ class VoiceAssistant(VoiceIdTurns):
         self._say_turn(turn, reply, total, listen=reply.endswith("?"))
         return True
 
+    # -- typed text (art features window, ART_FEATURES_PLAN F6) ----------------
+
+    def _on_bus_message(self, msg: dict) -> None:
+        """On the event bus's I/O thread: check and queue, never block."""
+        if msg.get("type") != "typed":
+            return
+        text = (msg.get("data") or {}).get("text")
+        if not isinstance(text, str):
+            return
+        text = " ".join(text.split())
+        now = time.monotonic()
+        if not text or len(text) > TYPED_MAX or now - self._typed_last < TYPED_MIN_GAP_S:
+            return
+        self._typed_last = now
+        try:
+            self._typed.put_nowait(text)
+        except queue.Full:
+            log.warning("typed text dropped: %d already waiting", self._typed.qsize())
+
+    def _typed_loop(self) -> None:
+        while not self._stop.is_set():
+            try:
+                text = self._typed.get(timeout=0.5)
+            except queue.Empty:
+                continue
+            self._handle_typed(text)
+
+    def _handle_typed(self, text: str) -> None:
+        """Typed text changes the picture exactly like a heard sentence from the session's owner (their rules),
+        and only that: never the chat model or the house. The reply is shown, not spoken (Adam 2026-11-12)."""
+        art = self.art
+        if art is None or not art.active:
+            reply = MSG_TYPED_ART_OFF
+        else:
+            log.info("typed: %r", text)
+            try:
+                reply = art.handle(text, art.owner, other=False)
+            except Exception:  # noqa: BLE001 - a broken art mode must not take Jarvis down
+                log.exception("art mode failed on typed %r", text)
+                reply = "Something went wrong in art mode."
+            if not reply:
+                reply = MSG_TYPED_NOT_ART
+            log.info("typed art: %r -> %r", text, reply)
+        self.presence.publish("typed_reply", {"text": reply})
+
     def _owner_words(self, owner: str, audio: np.ndarray, text: str) -> tuple[str, bool]:
         """Art mode: drop the words another voice said into the owner's recording (ART_FEATURES_PLAN S1).
 
@@ -891,7 +945,7 @@ class VoiceAssistant(VoiceIdTurns):
         # first real question pays that cost.
         threading.Thread(target=self._warm_up, name="warmup", daemon=True).start()
 
-        for target, name in ((self._wake_loop, "wake"), (self._worker_loop, "worker")):
+        for target, name in ((self._wake_loop, "wake"), (self._worker_loop, "worker"), (self._typed_loop, "typed")):
             thread = threading.Thread(target=target, name=name, daemon=True)
             thread.start()
             self._threads.append(thread)

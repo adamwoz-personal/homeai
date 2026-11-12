@@ -93,7 +93,31 @@ class _Client:
         self.sock = sock
         self.queue = ClientQueue(max_queue)
         self.out = bytearray()
+        self.inbuf = bytearray()
         self.blocked_since: float | None = None
+
+
+# What a client may send (ART_FEATURES_PLAN F6): text typed in the art features window. Anything else is dropped.
+ACCEPTED_IN = frozenset({"typed"})
+MAX_IN_LINE = 8192
+
+
+def parse_messages(client: "_Client", data: bytes) -> list[dict] | None:
+    """Complete JSON lines a client sent, only the accepted types; None: a line too long (drop the client)."""
+    client.inbuf += data
+    *lines, rest = bytes(client.inbuf).split(b"\n")
+    if len(rest) > MAX_IN_LINE or any(len(line) > MAX_IN_LINE for line in lines):
+        return None
+    client.inbuf = bytearray(rest)
+    out = []
+    for line in lines:
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(msg, dict) and msg.get("type") in ACCEPTED_IN and isinstance(msg.get("data"), dict):
+            out.append(msg)
+    return out
 
 
 class EventBus:
@@ -101,8 +125,10 @@ class EventBus:
 
     def __init__(self, path: Path | str | None = None, source: str = "daemon",
                  max_queue: int = MAX_QUEUE, slow_s: float = SLOW_S,
-                 capabilities: tuple[str, ...] = ()) -> None:
+                 capabilities: tuple[str, ...] = (), on_message=None) -> None:
+        """``on_message(msg)``: called on the I/O thread for each accepted client message; must not block."""
         self.path = Path(path) if path else default_socket_path()
+        self.on_message = on_message
         self.source = source
         self.max_queue = max_queue
         self.slow_s = slow_s
@@ -248,7 +274,7 @@ class EventBus:
         log.info("event bus client connected (%d total)", count)
 
     def _drain_input(self, client: _Client) -> None:
-        """Clients don't send anything yet: read and discard; EOF closes."""
+        """Accepted messages go to ``on_message``; without one, input is read and discarded. EOF closes."""
         try:
             data = client.sock.recv(4096)
         except BlockingIOError:
@@ -257,6 +283,19 @@ class EventBus:
             data = b""
         if not data:
             self._close(client)
+            return
+        if self.on_message is None:
+            return
+        messages = parse_messages(client, data)
+        if messages is None:
+            log.warning("event bus client sent a line over %d bytes; disconnected", MAX_IN_LINE)
+            self._close(client)
+            return
+        for msg in messages:
+            try:
+                self.on_message(msg)
+            except Exception:  # noqa: BLE001 - a bad handler must not stop the bus
+                log.exception("event bus message handler failed")
 
     def _flush_all(self) -> None:
         now = time.monotonic()
