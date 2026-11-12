@@ -2148,3 +2148,8 @@ Evidence: plans/LLM_UPGRADE_PLAN.md step 3; ~/homeai-bench/coder-eval.jsonl, kv.
 - **Adam's "assembly instructions for a deck" in art mode failed twice** (patcher: setting without a subject,
   then "not about the picture"), and both times said "the picture stays as it was" with no picture. A failure
   message must match the state it is said in.
+- **Adam couldn't leave art mode (18:20, 2026-11-12)**: three natural tries ("switch to voice mode", "cancel art
+  mode", "we're done drawing") all missed (956ebac adds them). Two also lost their last word to the S1 other-voice
+  split, which ran on 11 of ~24 art turns that evening and mostly cut Adam's own final word ("dragon.",
+  "karma.", "mode."). The synthetic bench (99/99 owner words kept) didn't predict this; the household did.
+  A way out must not depend on a filter that can eat words.
