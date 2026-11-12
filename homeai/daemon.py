@@ -709,7 +709,8 @@ class VoiceAssistant(VoiceIdTurns):
             return None
         from homeai import gpu_mode
         from homeai.art.voice import ArtVoice, build_studio
-        switcher = gpu_mode.ModeSwitcher(gpu_mode.System(), log=lambda line: log.info("mode: %s", line))
+        switcher = gpu_mode.ModeSwitcher(gpu_mode.System(), log=lambda line: log.info("mode: %s", line),
+                                         lock_path=gpu_mode.mode_lock_path())
         checker = None
         if self.cfg.art.check:
             from homeai.art import checker as art_checker

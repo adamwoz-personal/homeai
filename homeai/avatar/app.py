@@ -68,9 +68,9 @@ def local_mode(dropin: Path, lock: Path) -> str | None:
 
 
 def mode_paths() -> tuple[Path, Path]:
-    from ..gpu_mode import DROPIN_NAME, runtime_dropin_dir
+    from ..gpu_mode import DROPIN_NAME, mode_lock_path, runtime_dropin_dir
 
-    return runtime_dropin_dir() / DROPIN_NAME, Path(f"/run/user/{os.getuid()}/homeai-mode.lock")
+    return runtime_dropin_dir() / DROPIN_NAME, mode_lock_path()
 
 
 def build_scene() -> Scene:
