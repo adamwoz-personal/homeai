@@ -33,11 +33,13 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import functools
 import fcntl
 import json
 import os
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -211,10 +213,36 @@ def _flag(cmdline: list[str], name: str) -> str:
     return cmdline[cmdline.index(name) + 1] if name in cmdline[:-1] else ""
 
 
+def _exclusive(method):
+    """One mode switch at a time, across processes (``lock_path``) and threads. Re-entrant, so a failed
+    switch can roll back through ``voice()`` while it still holds the lock."""
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self._mutex:
+            if self._depth == 0 and self.lock_path is not None:
+                self._handle = _locked(self.lock_path, self.lock_wait_s)
+            self._depth += 1
+            try:
+                return method(self, *args, **kwargs)
+            finally:
+                self._depth -= 1
+                if self._depth == 0 and self._handle is not None:
+                    self._handle.close()
+                    self._handle = None
+    return wrapper
+
+
 class ModeSwitcher:
-    def __init__(self, system: System, log=print) -> None:
+    def __init__(self, system: System, log=print, lock_path: Path | None = None, lock_wait_s: float = 0.0) -> None:
+        """``lock_path``: the file every switcher locks (mode_lock_path() for real use; None in unit tests).
+        ``lock_wait_s``: how long to wait for another switch to finish (voice: VOICE_LOCK_WAIT_S; CLI: 0)."""
         self.sys = system
         self.log = log
+        self.lock_path = lock_path
+        self.lock_wait_s = lock_wait_s
+        self._mutex = threading.RLock()
+        self._depth = 0
+        self._handle = None
 
     # -- probes --------------------------------------------------------------
 
@@ -325,6 +353,7 @@ class ModeSwitcher:
 
     # -- modes ---------------------------------------------------------------
 
+    @_exclusive
     def art(self) -> None:
         """ComfyUI takes the coder's place on the card; Jarvis stays on."""
         if self.sys.dropin_exists():
@@ -355,6 +384,7 @@ class ModeSwitcher:
             self.log(f"WARNING: {_voice()} is not loaded; Jarvis loads it on the next question")
         self.log("art mode: ComfyUI on 127.0.0.1:8188, Jarvis listening")
 
+    @_exclusive
     def restart_comfy(self) -> None:
         """A fresh ComfyUI in art mode, e.g. after a job timed out (its job thread may be dead)."""
         if self.mode() != "art":
@@ -366,6 +396,7 @@ class ModeSwitcher:
             raise ModeError(f"ComfyUI did not answer within {COMFY_START_TIMEOUT_S:.0f}s after a restart")
         self.log("ComfyUI restarted")
 
+    @_exclusive
     def coding(self, kv: str = DEFAULT_KV, cpu_moe: int = DEFAULT_CPU_MOE,
                ctx: int | None = None) -> None:
         self._stop_comfy()
@@ -473,6 +504,7 @@ class ModeSwitcher:
             self.sys.sleep(10)
         self.log(f"WARNING: {_voice()} is not wholly on the GPU; check: ollama ps")
 
+    @_exclusive
     def voice(self) -> None:
         self._stop_comfy()
         if self.sys.dropin_exists():
@@ -493,13 +525,31 @@ class ModeSwitcher:
         self.log("voice mode: Jarvis is listening")
 
 
-def _locked(path: Path):
-    handle = open(path, "w")  # noqa: SIM115 - held for the process lifetime
-    try:
-        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        raise ModeError("another homeai-mode is already running") from None
-    return handle
+def mode_lock_path(uid: int | None = None) -> Path:
+    """Shared by the CLI and the daemon's art voice. In the runtime dir the sandboxed daemon may write
+    (homeai.service ReadWritePaths), not /run/user/<uid> itself, which is read-only to it."""
+    return Path(f"/run/user/{os.getuid() if uid is None else uid}/homeai/mode.lock")
+
+
+VOICE_LOCK_WAIT_S = 120   # a switch takes up to about a minute (art mode: ComfyUI start)
+LOCK_POLL_S = 0.25
+
+
+def _locked(path: Path, wait_s: float = 0.0, *, sleep=time.sleep, clock=time.monotonic):
+    """Take the mode lock. ``wait_s`` > 0: wait that long for a running switch to end (voice, Adam
+    2026-11-12: a voice request waits and then wins); 0: refuse at once (the CLI)."""
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    handle = open(path, "a")  # noqa: SIM115 - held until the switch ends
+    deadline = clock() + wait_s
+    while True:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return handle
+        except BlockingIOError:
+            if clock() >= deadline:
+                handle.close()
+                raise ModeError("another mode switch is already running") from None
+            sleep(LOCK_POLL_S)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -533,22 +583,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "speaker":
         return speaker_admin.main(args)
 
-    switcher = ModeSwitcher(System())
+    switcher = ModeSwitcher(System(), lock_path=mode_lock_path())
     try:
         if args.cmd == "status":
             print("\n".join(switcher.status().lines()))
             return 0
-        lock = _locked(Path(f"/run/user/{os.getuid()}/homeai-mode.lock"))
-        try:
-            if args.cmd == "coding":
-                kv, cpu_moe = coding_defaults()
-                switcher.coding(args.kv or kv, cpu_moe if args.cpu_moe is None else args.cpu_moe, args.ctx)
-            elif args.cmd == "art":
-                switcher.art()
-            else:
-                switcher.voice()
-        finally:
-            lock.close()
+        if args.cmd == "coding":
+            kv, cpu_moe = coding_defaults()
+            switcher.coding(args.kv or kv, cpu_moe if args.cpu_moe is None else args.cpu_moe, args.ctx)
+        elif args.cmd == "art":
+            switcher.art()
+        else:
+            switcher.voice()
         print("\n".join(switcher.status().lines()))
         return 0
     except ModeError as exc:

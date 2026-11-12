@@ -159,8 +159,7 @@ class TestCoding:
         monkeypatch.setattr(G, "PRESET_FILE", tmp_path / "p")
         got = []
         monkeypatch.setattr(G, "System", lambda: None)
-        monkeypatch.setattr(G, "_locked", lambda path: type("L", (), {"close": lambda self: None})())
-        monkeypatch.setattr(G, "ModeSwitcher", lambda sys: type("S", (), {
+        monkeypatch.setattr(G, "ModeSwitcher", lambda sys, **kw: type("S", (), {
             "coding": lambda self, *a: got.append(a),
             "status": lambda self: type("St", (), {"lines": lambda self: []})()})())
         G.main(["coding", *argv])
@@ -504,3 +503,71 @@ def test_jarvis_paused_refuses_outside_voice_mode(kw, why):
         with jarvis_paused(fs):
             pass
     assert fs.actions == []
+
+
+class TestOneSwitchAtATime:
+    """The CLI and the daemon's art voice share one lock (AVATAR_PLAN 6a known gap, fixed 2026-11-11)."""
+
+    def test_a_second_switcher_is_refused_while_one_is_switching(self, tmp_path):
+        lock = tmp_path / "homeai" / "mode.lock"
+        fake = FakeSystem()
+        other = G.ModeSwitcher(FakeSystem(), log=lambda *_: None, lock_path=lock)
+        seen = []
+        start = fake.start_comfy
+
+        def start_comfy():
+            with pytest.raises(G.ModeError, match="another mode switch"):
+                other.voice()
+            seen.append("refused")
+            return start()
+        fake.start_comfy = start_comfy
+        G.ModeSwitcher(fake, log=lambda *_: None, lock_path=lock).art()
+        assert seen == ["refused"] and fake.comfy
+        other.voice()                      # released once the first switch ended
+
+    def test_a_failed_switch_rolls_back_under_its_own_lock_and_releases_it(self, tmp_path):
+        lock = tmp_path / "mode.lock"
+        sw = G.ModeSwitcher(FakeSystem(comfy_starts=False), log=lambda *_: None, lock_path=lock)
+        with pytest.raises(G.ModeError, match="rolled back"):
+            sw.art()
+        G.ModeSwitcher(FakeSystem(), log=lambda *_: None, lock_path=lock).voice()
+
+    def test_a_waiting_switcher_gets_the_lock_once_the_running_switch_ends(self, tmp_path):
+        lock = tmp_path / "mode.lock"
+        holder = G._locked(lock)
+        slept = []
+
+        def sleep(s):
+            slept.append(s)
+            holder.close()                 # the running switch finishes while we wait
+        handle = G._locked(lock, 5, sleep=sleep, clock=lambda: 0.0)
+        assert slept == [G.LOCK_POLL_S]
+        handle.close()
+
+    def test_a_waiting_switcher_gives_up_after_its_wait(self, tmp_path):
+        lock = tmp_path / "mode.lock"
+        holder = G._locked(lock)
+        times = iter([0.0, 1.0, 6.0])
+        slept = []
+        with pytest.raises(G.ModeError, match="another mode switch"):
+            G._locked(lock, 5, sleep=slept.append, clock=lambda: next(times))
+        assert slept == [G.LOCK_POLL_S]
+        holder.close()
+
+    def test_the_switcher_passes_its_wait_to_the_lock(self, tmp_path, monkeypatch):
+        seen = []
+        monkeypatch.setattr(G, "_locked", lambda path, wait=0.0: seen.append(wait) or open(path, "a"))
+        G.ModeSwitcher(FakeSystem(), log=lambda *_: None, lock_path=tmp_path / "l", lock_wait_s=7).voice()
+        G.ModeSwitcher(FakeSystem(), log=lambda *_: None, lock_path=tmp_path / "l").voice()
+        assert seen == [7, 0.0]
+
+    def test_the_lock_is_where_the_sandboxed_daemon_may_write(self):
+        assert G.mode_lock_path(1000) == Path("/run/user/1000/homeai/mode.lock")
+
+    def test_the_cli_and_the_daemon_both_lock(self, monkeypatch):
+        made = []
+        monkeypatch.setattr(G, "ModeSwitcher", lambda sys, **kw: made.append(kw) or type("S", (), {
+            "voice": lambda self: None, "status": lambda self: type("St", (), {"lines": lambda self: []})()})())
+        monkeypatch.setattr(G, "System", lambda: None)
+        G.main(["voice"])
+        assert made == [{"lock_path": G.mode_lock_path()}]

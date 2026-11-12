@@ -482,3 +482,8 @@ def test_script_arrives_in_a_snapshot():
     s = Scene(state="idle", connected=True)
     s.apply({"type": "snapshot", "data": {"events": {"script": {"type": "script", "data": {"text": "Hi."}}}}})
     assert ("script", "Hi.", 1.0) in s.frame(1.0).captions
+
+
+def test_the_window_watches_the_lock_every_switcher_takes():
+    from homeai import gpu_mode
+    assert app.mode_paths()[1] == gpu_mode.mode_lock_path()

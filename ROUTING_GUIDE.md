@@ -1837,7 +1837,7 @@ Results in `plans/AVATAR_PLAN.md` §10; tools in `tools/avatar/`, tested in
   (iGPU); `python -m homeai.avatar.app` from a shell uses the RX 7900 XT. My
   first profile measured the dGPU. Tools that launch the window must copy the
   service env (`avatar_profile.py` does; `--dgpu` to compare).
-- **Never probe `homeai-mode.lock` to see if a switch is running**: it takes
+- **Never probe the mode lock (`/run/user/<uid>/homeai/mode.lock`, was `homeai-mode.lock` before 2026-11-11) to see if a switch is running**: it takes
   LOCK_EX|LOCK_NB, so a probe could make a real switch fail. Read
   `/proc/locks` by inode instead (`app.lock_held`).
 - Headless EGL renders are bit-identical run to run (diff 0.0), so golden

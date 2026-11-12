@@ -233,3 +233,13 @@ def test_viewer_labels_an_option_with_its_problems():
     from homeai.art import viewer as V
     assert V.option_label({"n": 2, "problems": ["2 heads", "3 riders"]}) == "2: 2 heads, 3 riders"
     assert V.option_label({"n": 3, "problems": []}) == "3" and V.option_label({"n": 1}) == "1"
+
+
+def test_the_daemon_s_art_switcher_takes_the_mode_lock(assistant):
+    import dataclasses
+    from homeai import gpu_mode
+    from homeai.config import ArtConfig
+    assistant.cfg = dataclasses.replace(assistant.cfg, art=ArtConfig(voice=True, check=False))
+    switcher = assistant._build_art().switcher
+    assert switcher.lock_path == gpu_mode.mode_lock_path()
+    assert switcher.lock_wait_s == gpu_mode.VOICE_LOCK_WAIT_S > 0      # voice waits, then wins (Adam 2026-11-12)
