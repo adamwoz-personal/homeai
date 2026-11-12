@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Remote app logins: list, set-password, devices, revoke, disable, enable.
+# See homeai/remote/user_cli.py and plans/REMOTE_APP_PLAN.md §4.
+set -euo pipefail
+cd "$(dirname "$(readlink -f "$0")")/.."
+exec .venv/bin/python -m homeai.remote.user_cli "$@"

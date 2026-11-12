@@ -29,7 +29,7 @@ avatar-build = ["mediapipe>=1.1", "opencv-python-headless>=5.0", "scipy>=1.18", 
 memory = ["psycopg[binary,pool]>=3.2", "pgvector>=0.3", "tokenizers>=0.20", "huggingface_hub>=0.25"]
 # Remote app (plans/REMOTE_APP_PLAN.md): the Noise channel to the phone, tested
 # against noise-java by tools/noise_interop.py.
-remote = ["noiseprotocol>=0.3.1", "cryptography>=42"]
+remote = ["noiseprotocol>=0.3.1", "cryptography>=42", "argon2-cffi>=25.1"]
 
 [tool.setuptools.package-data]
 "homeai.memory_store" = ["migrations/*.sql"]
