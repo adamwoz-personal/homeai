@@ -4,7 +4,7 @@
 with Claude (paid). Updated as evidence accumulates. Every rule here comes from an
 observed outcome on this box, not from theory.
 
-Last updated: 2026-11-11
+Last updated: 2026-11-12
 
 ---
 
@@ -2119,3 +2119,18 @@ Evidence: plans/LLM_UPGRADE_PLAN.md step 3; ~/homeai-bench/coder-eval.jsonl, kv.
 - **Declared sandboxes on user units are decoration here** (AppArmor userns restriction): the memory units say
   ProtectSystem=strict and still write $HOME. `tools/probe_unit_sandbox.sh UNIT...` checks any unit in seconds.
 - Library interop is provable cheaply with fixed-key vectors: Noise NK Python<->Kotlin byte-identical in ~11 s.
+
+## Logins, typing in art mode, voice-first mode lock (2026-11-12)
+- **Worktrees beat checking branches out** for unapproved work: `git worktree add ~/src/homeai-wt-X BRANCH`
+  plus a `.venv` symlink (remove it before committing: `.venv` is ignored only as a directory). The main checkout
+  stays on `main`, so a restart never picks up a branch, and the worktree can be built while the main gate runs.
+- **A mutant that removes a loop's exit hangs any test that reaches the loop with real `sleep`**: it only died at
+  check_mutants.sh's 300 s cap (twice: 10 min lost). Give polling code injectable `sleep`/`clock`, make the test's
+  fake `sleep` fail after a few calls, and point the mutant's selector at that test (`-k gives_up`).
+- **I edited a test during a subset mutant run** (breaking the standing rule); stopped it, checked `git status`
+  for a left-over mutation, reran. Finish or stop the run first, every time.
+- **A mutant's anchor can be broken by my own next edit on the same line** (adding `lock_wait_s=` changed the
+  `mode_lock_path())` line): STALE in the full gate. Run the branch's whole mutant subset after any edit to a
+  line a mutant matches, not just the new mutants.
+- `%h` in a *system* unit is root's home even with User= (systemd docs; unverified here): system-unit templates
+  spell the home out (@HOME@).

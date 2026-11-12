@@ -549,8 +549,12 @@ class TestOneSwitchAtATime:
         holder = G._locked(lock)
         times = iter([0.0, 1.0, 6.0])
         slept = []
+
+        def sleep(s):
+            slept.append(s)
+            assert len(slept) < 3, "still waiting after the deadline"   # fail fast, don't hang
         with pytest.raises(G.ModeError, match="another mode switch"):
-            G._locked(lock, 5, sleep=slept.append, clock=lambda: next(times))
+            G._locked(lock, 5, sleep=sleep, clock=lambda: next(times, 99.0))
         assert slept == [G.LOCK_POLL_S]
         holder.close()
 

@@ -155,6 +155,15 @@ homeai-mode voice     # ComfyUI stopped, coder back (~7 s warm, ~27 s cold)
 - Refused while the coder is answering someone, and from coding mode (switch
   to voice first). If ComfyUI does not answer within 180 s, it rolls back to
   voice mode.
+- One switch at a time (lock `/run/user/<uid>/homeai/mode.lock`): if a switch
+  is running, `homeai-mode` refuses at once ("another mode switch is already
+  running"); a voice request waits up to 120 s for it, then does its own.
+- **Typing** (2026-11-12): the features window has a box at the bottom. Type
+  what you'd say ("a red dragon", "make it blue", "undo", "pick 2") and press
+  Enter (Esc clears, Ctrl+V pastes). It works only in art mode, with the
+  session owner's rules, and only ever changes the picture. The reply shows
+  above the box, not spoken. Journal: `typed:` / `typed art:` lines.
+  Headless check of the viewer: `.venv/bin/python tools/art/probe_viewer_smoke.py`.
 - The art tools in `tools/art/` start their own ComfyUI on the same port, so
   run them in voice mode, not art mode.
 - If pictures stop finishing while ComfyUI still answers, its job thread has
