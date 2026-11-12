@@ -46,7 +46,8 @@ def main() -> int:
     doors = (lambda since, until: door_alerts(home, since, until)) if home else None
     alerts = door_alerts(home, time.time() - args.days * 86400, time.time()) if home else {}
     st = S.StatusUpdate(registry.profiles, doors, lambda: get_weather(DEFAULT_LOCATION).spoken(include_place=False),
-                        admins=cfg.status.admins, ledger=S.Ledger(out / "ledger.json"))
+                        admins=cfg.status.admins, ledger=S.Ledger(out / "ledger.json"),
+                        login_alerts=S.db_login_alerts(cfg.memory.dsn) if cfg.memory.enabled else None)
     start = time.monotonic()
     reply = st.handle("status update", args.who)
     seconds = round(time.monotonic() - start, 2)

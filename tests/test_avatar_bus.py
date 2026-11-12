@@ -315,5 +315,7 @@ def test_without_a_handler_input_is_ignored(server, sock_path):
     s = connect(sock_path)
     read_events(s, 2)
     s.sendall(b'{"type": "typed", "data": {"text": "x"}}\n' + b"z" * 20000)
+    # Reading input would drop this client within milliseconds; give it time to happen before checking.
+    assert not wait_until(lambda: server.client_count == 0, timeout=0.5)
     server.publish("caption", {"n": 1})
     assert read_events(s, 1)[0]["type"] == "caption" and server.client_count == 1

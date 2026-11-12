@@ -2134,3 +2134,6 @@ Evidence: plans/LLM_UPGRADE_PLAN.md step 3; ~/homeai-bench/coder-eval.jsonl, kv.
   line a mutant matches, not just the new mutants.
 - `%h` in a *system* unit is root's home even with User= (systemd docs; unverified here): system-unit templates
   spell the home out (@HOME@).
+- **A "nothing happened" assertion right after an action races the I/O thread**: `typed-bus-no-handler-reads`
+  survived once in three full runs because the client was dropped a few ms after the check. Wait (bounded) for the
+  bad thing to have had time to happen, then assert it didn't (`assert not wait_until(..., timeout=0.5)`).
