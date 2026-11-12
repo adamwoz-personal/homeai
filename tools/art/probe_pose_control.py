@@ -67,14 +67,35 @@ def arm_words(side: str, hand: dict, elbow: dict, shoulder: dict, head: dict, hi
     return ""
 
 
+def picture_side_of_l(spec: dict) -> str:
+    """Which side of the picture the ``L`` joints are on.
+
+    Contract rule 2: rig 1 is ``mirror`` (``L`` = the figure's own right, picture left facing the viewer); rig 2 is
+    ``anatomical`` (``L`` = the figure's own left, picture right at ``turn`` 0, picture left from behind at 180). Side
+    views have no fixed answer, so the drawn shoulders decide. Old specs without ``sides`` are rig 1.
+    """
+    sides = spec.get("sides", "mirror")
+    if sides == "mirror":
+        return "left"
+    if sides != "anatomical":
+        raise ValueError(f"unknown sides {sides!r}")
+    turn = spec.get("turn", 0) % 360
+    if turn in (0, 180):
+        return "right" if turn == 0 else "left"
+    j = spec["joints"]
+    return "left" if j["shoulderL"]["x"] < j["shoulderR"]["x"] else "right"
+
+
 def pose_words(spec: dict) -> str:
     """The parts of a pose that a picture alone doesn't hold, in words, from the spec's joints.
 
-    Her rig 1 is ``mirror``, so ``L`` is the left of the picture in the front view.
+    Arms are named by the side of the picture they are on (``picture_side_of_l``), so rig 1 and rig 2 agree.
     """
     j = spec["joints"]
-    words = [arm_words("left", j["handL"], j["elbowL"], j["shoulderL"], j["head"], j["hips"], j["chestTop"]),
-             arm_words("right", j["handR"], j["elbowR"], j["shoulderR"], j["head"], j["hips"], j["chestTop"])]
+    side_l = picture_side_of_l(spec)
+    side_r = "right" if side_l == "left" else "left"
+    words = [arm_words(side_l, j["handL"], j["elbowL"], j["shoulderL"], j["head"], j["hips"], j["chestTop"]),
+             arm_words(side_r, j["handR"], j["elbowR"], j["shoulderR"], j["head"], j["hips"], j["chestTop"])]
     lean = j["chestTop"]["x"] - j["hips"]["x"]
     if abs(lean) > 15:
         words.append(f"The upper body leans toward the {'right' if lean > 0 else 'left'} of the picture from the waist, "

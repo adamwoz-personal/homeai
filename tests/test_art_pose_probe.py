@@ -79,6 +79,42 @@ def test_raised_arm_is_named_on_its_side():
     assert "right of the picture" not in words
 
 
+def rig2(turn=0, **moved):
+    """Rig 2 (anatomical): the figure's own left, joint handL, is on the picture's right facing the viewer."""
+    j = joints()["joints"]
+    for part in ("shoulder", "elbow", "hand"):
+        j[f"{part}L"], j[f"{part}R"] = j[f"{part}R"], j[f"{part}L"]
+    return {"joints": {**j, **moved}, "rig": "mannequin-2d/2", "sides": "anatomical", "turn": turn}
+
+
+def test_rig2_raised_arm_is_named_on_the_side_it_is_drawn():
+    """Same picture as rig 1's raised left-of-picture arm: the words must not swap with the joint names."""
+    words = probe.pose_words(rig2(handR={"x": 150, "y": 40}))
+    assert "left of the picture is raised" in words and "right of the picture" not in words
+
+
+def test_rig2_from_behind_has_l_on_the_picture_left():
+    assert probe.picture_side_of_l(rig2(turn=180)) == "left"
+    assert probe.picture_side_of_l(rig2(turn=0)) == "right"
+    assert probe.picture_side_of_l(joints()) == "left"
+
+
+def test_rig2_side_view_goes_by_the_drawn_shoulders():
+    assert probe.picture_side_of_l(rig2(turn=90)) == "right"
+    assert probe.picture_side_of_l({**rig2(turn=270), "joints": joints()["joints"]}) == "left"
+
+
+def test_unknown_sides_is_refused():
+    import pytest
+    with pytest.raises(ValueError):
+        probe.pose_words({**joints(), "sides": "picture"})
+
+
+def test_held_hand_is_the_figure_s_own_side_in_both_rigs():
+    """handedness is the figure's own side whatever `sides` says (contract R24), so held_words needs no rig."""
+    assert "own right hand, the hand on the left of the picture" in probe.held_words("right", 0)
+
+
 def test_arm_straight_out_is_named():
     assert "right of the picture is stretched" in probe.pose_words(joints(handR={"x": 360, "y": 220}))
 
