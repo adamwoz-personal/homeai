@@ -6,6 +6,15 @@ with Jarvis on (6.6 s warm, 2026-11-06). The graph is the one the bake-off used
 """
 from __future__ import annotations
 
+import shutil
+from pathlib import Path
+
+INPUT_DIR = Path.home() / ".local/share/homeai/comfyui/app/input"
+# Real-ESRGAN x2plus (BSD-3, xinntao release v0.2.1), sha256 49fafd45...6abb, in models/upscale_models.
+# 2x is Adam's default (2026-11-12): 1024 -> 2048, the original kept.
+UPSCALER = "RealESRGAN_x2plus.pth"
+UPSCALE = 2
+
 KLEIN9_UNET = "flux-2-klein-9b-fp8.safetensors"
 KLEIN9_CLIP = "qwen_3_8b_fp8mixed.safetensors"
 FLUX2_VAE = "flux2-vae.safetensors"
@@ -31,4 +40,22 @@ def klein9(prompt: str, seed: int, width: int = 1024, height: int = 1024, prefix
             "latent_image": ["latent", 0]}},
         "decode": {"class_type": "VAEDecode", "inputs": {"samples": ["sample", 0], "vae": ["vae", 0]}},
         "save": {"class_type": "SaveImage", "inputs": {"images": ["decode", 0], "filename_prefix": prefix}},
+    }
+
+
+def stage(image: Path, name: str, input_dir: Path = INPUT_DIR) -> str:
+    """Copy a stored picture where ComfyUI's LoadImage can read it; returns the name LoadImage takes."""
+    target = Path(input_dir) / "art" / name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(image, target)
+    return f"art/{name}"
+
+
+def upscale(staged: str, prefix: str = "art", model: str = UPSCALER) -> dict:
+    """A stored picture at UPSCALE times the size (ART_FEATURES_PLAN F7d). No diffusion: nothing in it changes."""
+    return {
+        "load": {"class_type": "LoadImage", "inputs": {"image": staged}},
+        "model": {"class_type": "UpscaleModelLoader", "inputs": {"model_name": model}},
+        "up": {"class_type": "ImageUpscaleWithModel", "inputs": {"upscale_model": ["model", 0], "image": ["load", 0]}},
+        "save": {"class_type": "SaveImage", "inputs": {"images": ["up", 0], "filename_prefix": prefix}},
     }

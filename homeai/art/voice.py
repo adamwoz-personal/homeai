@@ -127,8 +127,41 @@ class Viewer:
         self._run(["systemctl", "--user", "stop", VIEWER_UNIT])
 
 
-def export_name(project: str, node: str) -> str:
-    return f"{project}-{node}.png"
+def export_name(project: str, node: str, upscale_of: str | None = None, scale: int = 2) -> str:
+    """A bigger copy is named after the picture it copies: <project>-003-2x.png beside <project>-003.png."""
+    return f"{project}-{upscale_of}-{scale}x.png" if upscale_of else f"{project}-{node}.png"
+
+
+NAME_MAX = 40
+
+
+def name_slug(name: str) -> str:
+    """The file name for "save that as Ember's Lair": ember-s-lair. Letters, digits and dashes only."""
+    return re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")[:NAME_MAX].strip("-")
+
+
+def free_name(folder: Path, slug: str, limit: int = 999) -> tuple[str, int]:
+    """(file stem, number): ember if free, else ember-2, ember-3... (number 1 means no suffix)."""
+    for number in range(1, limit + 1):
+        stem = slug if number == 1 else f"{slug}-{number}"
+        if not (folder / f"{stem}.png").exists() and not (folder / f"{stem}.json").exists():
+            return stem, number
+    raise OSError(f"no free name for {slug} in {folder}")
+
+
+def sidecar(project_id: str, node, who: str) -> dict:
+    """What made a saved picture: always prompt, seed and model (Adam 2026-11-12), and what it was asked as."""
+    meta = node.meta if node is not None else {}
+    out = {"project": project_id, "node": node.id if node is not None else None,
+           "parent": node.parent if node is not None else None, "by": who,
+           "instruction": node.instruction if node is not None else None,
+           "created": node.created if node is not None else None,
+           **{k: meta.get(k) for k in ("prompt", "model", "seed", "size")}}
+    if node is not None:
+        out["description"] = {k: v for k, v in node.spec.items() if k != "seed"}
+        if node.kind != "image":
+            out.update({"kind": node.kind, **{k: meta.get(k) for k in ("upscale_of", "upscaler", "scale")}})
+    return out
 
 
 def folder_name(person: str | None) -> str:
@@ -234,6 +267,7 @@ class ArtVoice:
             return MSG_SWITCH_FAILED.format(why=str(exc).split(";")[0])
         self.owner = speaker
         self.session, self.queue = self._build((speaker or "guest").lower(), self._on_job)
+        self.session.save_as = self._save_named
         self.session.rules = self.rules_for(speaker)
         self.session.speaker = speaker or "guest"
         self._resume_recent()
@@ -384,7 +418,11 @@ class ArtVoice:
                 return
             self._export(event, session)        # the session it was drawn in, even if art mode just ended
             grid = list(getattr(session, "grid", []))
-            if issues and len(grid) > 1 and event.get("node") in grid:
+            made = session.project.nodes.get(event.get("node")) if getattr(session, "project", None) is not None \
+                and session.project.id == event.get("project") else None
+            if made is not None and made.kind == "upscale":
+                self.status = f"The {made.meta.get('scale') or 2} times bigger copy is saved."
+            elif issues and len(grid) > 1 and event.get("node") in grid:
                 self.status = f"Option {grid.index(event['node']) + 1} came out with {', '.join(issues)}."
             else:
                 self.status = f"Best I could do: {', '.join(issues)}." if issues else "Done."
@@ -406,8 +444,8 @@ class ArtVoice:
         if self.checker is None or project is None or project.id != event.get("project"):
             return [], False
         node = project.nodes.get(event.get("node"))
-        if node is None or "features" not in node.spec:
-            return [], False
+        if node is None or "features" not in node.spec or node.kind != "image":
+            return [], False                    # a bigger copy is the same picture: nothing new to check
         try:
             checks = CK.checklist(F.features_of(node.spec))
             if not checks:
@@ -432,26 +470,42 @@ class ArtVoice:
         return issues, False
 
     def _export(self, event: dict, session=None) -> None:
-        """The picture into the asker's own folder, with its description as JSON beside it."""
-        node = None
+        """The picture into the asker's own folder, always with a JSON beside it (prompt, seed, model)."""
         session = session or self.session
         project = session.project if session is not None else None
-        if project is not None and project.id == event.get("project"):
-            node = project.nodes.get(event["node"])
+        if project is None or project.id != event.get("project"):
+            try:                     # drawn before a new picture was started: still this session's
+                project = session.store.open(event["project"])
+            except Exception:  # noqa: BLE001 - no store or no project: save what the event says
+                project = None
+        node = project.nodes.get(event["node"]) if project is not None else None
         who = folder_name((node.meta.get("by") if node else None) or (project.info.get("owner") if project else None))
         folder = self.pictures / who
         try:
             folder.mkdir(parents=True, exist_ok=True)
-            target = folder / export_name(event["project"], event["node"])
+            meta = node.meta if node is not None else {}
+            target = folder / export_name(event["project"], event["node"], meta.get("upscale_of"),
+                                          meta.get("scale") or 2)
             atomic_copy(event["image"], target)
-            if node is not None:
-                sidecar = {"project": event["project"], "node": node.id, "parent": node.parent, "by": who,
-                           "instruction": node.instruction, "created": node.created, **{
-                               k: node.meta.get(k) for k in ("prompt", "model", "seed", "size")},
-                           "description": {k: v for k, v in node.spec.items() if k != "seed"}}
-                atomic_write_json(target.with_suffix(".json"), sidecar, indent=1)
+            atomic_write_json(target.with_suffix(".json"), sidecar(event["project"], node, who), indent=1)
         except OSError as exc:
             log.warning("could not save the picture to %s: %s", folder, exc)
+
+    def _save_named(self, project, node, name: str) -> str:
+        """"Save that as Ember": a copy named ember.png (ember-2.png if taken) in the owner's folder. Returns
+        the name to say. The timestamped copy stays where it is."""
+        slug = name_slug(name)
+        if not slug:
+            raise ValueError("no letters or digits in the name")
+        who = folder_name(node.meta.get("by") or project.info.get("owner"))
+        folder = self.pictures / who
+        folder.mkdir(parents=True, exist_ok=True)
+        stem, number = free_name(folder, slug)
+        atomic_copy(project.image(node.id), folder / f"{stem}.png")
+        atomic_write_json(folder / f"{stem}.json", {**sidecar(project.id, node, who), "name": name.strip()}, indent=1)
+        log.info("art: saved %s/%s as %s/%s.png", project.id, node.id, who, stem)
+        spoken = " ".join(name.split())
+        return spoken if number == 1 else f"{spoken} {number}"
 
     def state(self) -> dict:
         """The ``art`` event: everything the picture window shows (latest wins on the bus)."""
@@ -470,7 +524,7 @@ class ArtVoice:
             image = project.image(node.id)
             out["lineage"].append({"node": node.id, "instruction": node.instruction, "state": node.state,
                                    "image": str(image) if image.exists() else None})
-        out["current"] = out["lineage"][-1] if out["lineage"] else None
+        out["current"] = {**out["lineage"][-1], "project": project.id} if out["lineage"] else None
         node = project.nodes.get(project.current)
         if node is not None:
             from homeai.art import features as F
@@ -479,14 +533,34 @@ class ArtVoice:
             except ValueError:
                 out["features"] = []
             out["changed"] = list(getattr(session, "last_changed", []))
+        sheet = list(getattr(session, "sheet", []) or [])
         grid = [n for n in getattr(session, "grid", []) if n in project.nodes]
-        if len(grid) > 1:
+        if sheet:
+            out["options"] = [self._sheet_entry(session, entry) for entry in sheet]
+            out["compare"] = bool(getattr(session, "comparing", False))
+        elif len(grid) > 1:
             out["options"] = []
             for number, node_id in enumerate(grid, 1):
                 image = project.image(node_id)
                 out["options"].append({"n": number, "node": node_id, "state": project.nodes[node_id].state,
                                        "image": str(image) if image.exists() else None,
                                        "problems": list(project.nodes[node_id].meta.get("checked") or [])})
+        return out
+
+    @staticmethod
+    def _sheet_entry(session, entry: dict) -> dict:
+        """One numbered picture of "show me the last four" or a comparison; it may be from an earlier project."""
+        out = {"n": entry["n"], "node": entry["node"], "project": entry["project"], "state": None, "image": None,
+               "problems": []}
+        try:
+            project = session.project if session.project.id == entry["project"] else \
+                session.store.open(entry["project"])
+            node = project.nodes[entry["node"]]
+        except Exception:  # noqa: BLE001 - a missing picture shows as an empty box
+            return out
+        image = project.image(node.id)
+        out.update(state=node.state, image=str(image) if image.exists() else None,
+                   problems=list(node.meta.get("checked") or []), instruction=node.instruction)
         return out
 
     def _publish_state(self) -> None:

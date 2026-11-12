@@ -13,8 +13,11 @@ from dataclasses import dataclass
 
 NUMBERS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
            "ten": 10, "a couple of": 2, "a couple": 2, "a few": 4, "some": 4}
-ORDINALS = {"first": 1, "second": 2, "third": 3, "fourth": 4, "last": -1}
+ORDINALS = {"first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth": 6, "seventh": 7, "eighth": 8,
+            "last": -1}
 MAX_VARIATIONS = 4
+MAX_SHOWN = 8           # "show me the last N" and picking by number: the picture window's strip holds 8
+PICK_WORD = r"([1-8]|one|two|three|four|five|six|seven|eight|first|second|third|fourth|fifth|sixth|seventh|eighth)"
 NUM = r"(\d+|one|two|three|four|five|six|seven|eight|nine|ten|a couple of|a couple|a few|some)"
 
 
@@ -24,11 +27,14 @@ class Intent:
     n: int | None = None
     text: str = ""
     name: str = ""
+    picks: tuple[int, ...] = ()
 
 
 def _number(word: str | None, default: int = 1) -> int:
     if not word:
         return default
+    if word in ORDINALS:
+        return ORDINALS[word]
     return int(word) if word.isdigit() else NUMBERS[word]
 
 
@@ -65,13 +71,17 @@ PATTERNS: list[tuple[str, re.Pattern]] = [(kind, re.compile(rx)) for kind, rx in
     ("variations", r"^(a few|some) (options|versions|variations)$"),
     ("back", rf"^(go |step )?back( {NUM})?( steps?)?$"),
     ("back", r"^undo( that)?$"),
-    ("select", r"^(i like |pick |use |show me |go with |let'?s (see|go with|have) )?(the )?(first|second|third|fourth|last) "
+    ("select", r"^(i like |pick |use |show me |go with |let'?s (see|go with|have) )?(the )?"
+               r"(first|second|third|fourth|fifth|sixth|seventh|eighth|last) "
                r"(one|picture|image|option|try)$"),
     ("keep", r"^(keep|save|pin) (that|this|it)( one)?( as (my )?(?P<name>[a-z0-9' -]{1,40}))?$"),
     ("what", r"^(what prompt (made|did) (this|that|it)|what('s| is| was) the prompt|what did you (use|tell it))$"),
-    ("compare", r"^(show (them|those|me them) side by side|compare (them|those))$"),
-    ("upscale", r"^(upscale (it|that|this)|make it (high|higher) resolution)$"),
-    ("show_last", rf"^show me the last {NUM}( pictures| ones)?$"),
+    ("compare", r"^((show )?(them |those |me them |it )?side by side|compare( (them|those|it|that|this))?"
+                r"( (with|to) (the last one|the one before|before|what it was))?)$"),
+    # "Make it bigger" stays an edit (the subject's size); only these words mean more pixels.
+    ("upscale", r"^(upscale( (it|that|this))?|make (it|that|this) (high|higher) resolution|(high|higher) resolution"
+                r"( please)?|(make (it|that|this) )?print size|(make )?a print( size)? (version|copy))$"),
+    ("show_last", rf"^show( me)? the last {NUM}( pictures| ones| images)?$"),
 ]]
 
 NEW = re.compile(r"^(draw|paint|sketch|generate|create|make)( me)? (?!(it|them|her|him|this|that|the picture|"
@@ -106,7 +116,11 @@ def is_complaint(text: str) -> bool:
 # All three of Adam's tries went to the patcher instead and changed the picture (2026-11-07).
 PICK = re.compile(r"^(?:(?:i like|pick|use|show me|go with|let'?s (?:see|go with|have)|what(?:'s| is| about)|"
                   r"how about|can i see|i want) )?(?:the )?(?:image|option|picture|number|try|version|choice|one) "
-                  r"(?:number )?(?P<n>[1-4]|one|two|three|four)$")
+                  r"(?:number )?(?P<n>[1-8]|one|two|three|four|five|six|seven|eight)$")
+# Two numbered pictures side by side: "compare two and four", "show the first and third side by side".
+COMPARE_TWO = re.compile(rf"^(?:compare|show(?: me)?|put) (?:the |number |option )?(?P<a>{PICK_WORD[1:-1]})(?: one)? "
+                         rf"(?:and|with|to|against) (?:the |number |option )?(?P<b>{PICK_WORD[1:-1]})(?: ones?)?"
+                         rf"(?P<side> side by side)?$")
 # "Again. Oh gosh, it's fake again..." took the chatter after "again" as a change (2026-11-07).
 AGAIN_THEN = re.compile(r"^(?:try again|again|another one|one more|re-?roll)[.!,]+\s+(?P<rest>.+)$")
 
@@ -118,6 +132,9 @@ def parse(text: str) -> Intent | None:
     pick = PICK.match(said)
     if pick:
         return Intent("select", n=_number(pick.group("n")))
+    two = COMPARE_TWO.match(said)
+    if two and (said.startswith("compare") or two.group("side")):
+        return Intent("compare", picks=(_number(two.group("a")), _number(two.group("b"))))
     again = AGAIN_THEN.match(said)
     if again:
         rest = again.group("rest")

@@ -126,7 +126,6 @@ def test_keep_pins(session):
     session.handle("draw a red fox")
     assert session.handle("keep that").spoken == "Kept."
     assert session.project.info["pins"] == ["001"]
-    assert "comes later" in session.handle("save that as my fox").spoken
 
 
 def test_what_reads_the_prompt(session):
@@ -140,9 +139,15 @@ def test_cancel(session):
     assert session.handle("never mind").spoken == "Stopped." and session.queue.cancelled == ["j1"]
 
 
-def test_not_built_yet_is_said_plainly(session):
+def test_an_intent_with_no_handler_is_said_plainly(session):
+    from homeai.art import grammar
     session.handle("draw a red fox")
-    assert session.handle("upscale it").spoken == "I can't do that one yet."
+    grammar_parse = grammar.parse
+    try:
+        grammar.parse = lambda text: grammar.Intent("teleport")
+        assert session.handle("teleport it").spoken == "I can't do that one yet."
+    finally:
+        grammar.parse = grammar_parse
 
 
 class Denying:

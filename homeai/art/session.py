@@ -25,6 +25,15 @@ MSG_NOTHING_TO_STOP = "Nothing is drawing."
 MSG_NO_GRID = "There's no set of options to pick from."
 MSG_FRESH = "Okay, a new picture. What shall I draw?"
 MSG_QUESTION = "I can't answer questions about the picture yet, but I can change it."
+MSG_NOTHING_BEFORE = "There's nothing before this one to compare it with."
+MSG_STILL_DRAWING = "It's still drawing. Say that again when it's done."
+MSG_UPSCALED_ALREADY = "There's already a bigger copy of this one."
+MSG_NO_SAVE = "Kept, but I can't save pictures by name here."
+MSG_BAD_NAME = "Kept. That name needs a letter or a number in it."
+MSG_SAVE_FAILED = "Kept, but saving it by name failed."
+# A new picture the patcher couldn't turn into features: "the picture stays as it was" made no sense with no
+# picture yet (Adam's deck request, 2026-11-12).
+MSG_NOT_CAUGHT_NEW = "I couldn't tell what to draw from that. Say draw, and the thing you'd like."
 
 # A question is never a change: "what is image three?" changed four features (Adam, 2026-11-07).
 QUESTION = re.compile(r"^(what|who|when|where|why|how|which|is (it|that|this|there)|are (they|there|those)|"
@@ -85,6 +94,13 @@ class ArtSession:
         self.jobs: list[str] = []
         self.speaker: str | None = None     # who asked for the next picture (set per sentence by ArtVoice)
         self.last_changed: list[str] = []    # feature letters the last change touched (for the window)
+        # F7: (project, node) of every picture this session finished, in order ("show me the last four");
+        # a numbered sheet of them on screen (each {"project", "node", "n"}), and whether it is a comparison.
+        self.seen: list[tuple[str, str]] = []
+        self.sheet: list[dict] = []
+        self.comparing = False
+        self.save_as = None                 # (project, node, name) -> the name it was saved as; set by ArtVoice
+        self.input_dir = workflows.INPUT_DIR
 
     # -- helpers ---------------------------------------------------------------
 
@@ -107,6 +123,7 @@ class ArtSession:
                                       **(meta or {})})
         graph = workflows.klein9(rendered.text, spec["seed"], rendered.width, rendered.height,
                                  prefix=f"art/{self.project.id}")
+        self.sheet, self.comparing = [], False      # a new picture: back to the picture and its steps
         job = self.queue.submit(self.project.id, node.id, graph,
                                 priority=0 if preview else 1)
         self.jobs.append(job.id)
@@ -144,7 +161,7 @@ class ArtSession:
     def _on_new(self, intent, text):
         result = self._patch({}, intent.text)
         if not result.ok:
-            return Reply(MSG_NOT_CAUGHT, "new")
+            return Reply(MSG_NOT_CAUGHT_NEW, "new")
         verdict, spec = self._allowed(text, result.spec)
         if not verdict.allowed:
             return Reply(verdict.reason, "denied")
@@ -246,6 +263,8 @@ class ArtSession:
         return Reply(f"Drawing {intent.n} options.", "variations", jobs)
 
     def _on_select(self, intent, text):
+        if self.sheet:
+            return self._select_from_sheet(intent.n)
         if not self.grid:
             return Reply(MSG_NO_GRID, "select")
         index = intent.n - 1 if intent.n > 0 else len(self.grid) - 1
@@ -268,10 +287,119 @@ class ArtSession:
         node = self._current()
         if node is None:
             return Reply(MSG_NOTHING_YET, "keep")
+        if intent.name and self._finished(self.project.id, node.id) is None:
+            return Reply(MSG_STILL_DRAWING, "keep")
         self.project.pin(node.id)
-        if intent.name:
-            return Reply("Kept. Saving it by name comes later.", "keep")
-        return Reply("Kept.", "keep")
+        if not intent.name:
+            return Reply("Kept.", "keep")
+        if self.save_as is None:
+            return Reply(MSG_NO_SAVE, "keep")
+        try:
+            saved = self.save_as(self.project, node, intent.name)
+        except ValueError:
+            return Reply(MSG_BAD_NAME, "keep")
+        except OSError:
+            return Reply(MSG_SAVE_FAILED, "keep")
+        return Reply(f"Saved as {saved}.", "keep")
+
+    # -- F7: looking back, comparing, a bigger copy ------------------------------
+
+    def _finished(self, project_id: str, node_id: str):
+        """The node if it is a finished picture (not a bigger copy, not deleted or failed), else None.
+
+        Read from the store, not ``self.project``: the job queue finishes pictures through its own copy of
+        the project, so the session's copy still says "pending" (live run 2026-11-12: "show me the last
+        four" found one picture, and "upscale it" said it was still drawing).
+        """
+        try:
+            project = self.store.open(project_id)
+        except StoreError:
+            return None
+        node = project.nodes.get(node_id)
+        if node is None or node.deleted or node.state != "done" or node.kind != "image":
+            return None
+        return node
+
+    def _on_show_last(self, intent, text):
+        n = max(1, min(intent.n or 1, grammar.MAX_SHOWN))
+        shown, seen = [], set()
+        for project_id, node_id in reversed(self.seen):
+            if len(shown) == n:
+                break
+            if (project_id, node_id) not in seen and self._finished(project_id, node_id) is not None:
+                seen.add((project_id, node_id))
+                shown.append((project_id, node_id))
+        if not shown:
+            return Reply(MSG_NOTHING_YET, "show_last")
+        shown.reverse()
+        self.sheet = [{"project": p, "node": node, "n": i} for i, (p, node) in enumerate(shown, 1)]
+        self.comparing = False
+        said = "Here it is." if len(shown) == 1 else f"Here are the last {len(shown)}."
+        return Reply(said + (" Say a number to pick one." if len(shown) > 1 else ""), "show_last")
+
+    def _on_compare(self, intent, text):
+        if intent.picks:
+            numbered = self.sheet
+            if not numbered and self.grid and self.project is not None:
+                numbered = [{"project": self.project.id, "node": node, "n": i} for i, node in enumerate(self.grid, 1)]
+            if not numbered:
+                return Reply(MSG_NO_GRID, "compare")
+            by_n = {entry["n"]: entry for entry in numbered}
+            missing = [n for n in intent.picks if n not in by_n]
+            if missing:
+                return Reply(f"There's no number {missing[0]}.", "compare")
+            self.sheet = [by_n[n] for n in intent.picks]
+            self.comparing = True
+            return Reply(f"Side by side: {intent.picks[0]} and {intent.picks[1]}.", "compare")
+        node = self._current()
+        if node is None:
+            return Reply(MSG_NOTHING_YET, "compare")
+        before = next((n for n in reversed(self.project.lineage(node.id)[:-1])
+                       if self._finished(self.project.id, n.id) is not None), None)
+        if before is None:
+            return Reply(MSG_NOTHING_BEFORE, "compare")
+        self.sheet = [{"project": self.project.id, "node": before.id, "n": 1},
+                      {"project": self.project.id, "node": node.id, "n": 2}]
+        self.comparing = True
+        return Reply("Before on the left, now on the right.", "compare")
+
+    def _select_from_sheet(self, n: int) -> Reply:
+        """Picking a number off the sheet on screen; it may be from an earlier picture in this session."""
+        entry = self.sheet[-1] if n is not None and n < 0 else next((e for e in self.sheet if e["n"] == n), None)
+        if entry is None:
+            return Reply(f"There's no number {n}.", "select")
+        if self.project is None or self.project.id != entry["project"]:
+            try:
+                self.project = self.store.open(entry["project"])
+            except StoreError:
+                return Reply(f"I can't open number {n} any more.", "select")
+            self.grid = []
+        self.project.select(entry["node"])
+        self.picked = True
+        self.sheet, self.comparing = [], False
+        return Reply("That one.", "select")
+
+    def _on_upscale(self, intent, text):
+        node = self._current()
+        if node is None:
+            return Reply(MSG_NOTHING_YET, "upscale")
+        if self._finished(self.project.id, node.id) is None:
+            return Reply(MSG_STILL_DRAWING, "upscale")
+        stored = self.store.open(self.project.id)          # the queue's view: a failed copy may be retried
+        if any(c.kind == "upscale" and c.state != "failed" for c in stored.children(node.id)):
+            return Reply(MSG_UPSCALED_ALREADY, "upscale")
+        size = [v * workflows.UPSCALE for v in node.meta.get("size") or []]
+        staged = workflows.stage(self.project.image(node.id), f"{self.project.id}-{node.id}.png", self.input_dir)
+        copy = self.project.add(f"{workflows.UPSCALE}x copy of {node.id}", dict(node.spec), parent=node.id,
+                                kind="upscale",
+                                meta={**{k: node.meta[k] for k in ("prompt", "model", "seed", "by") if k in node.meta},
+                                      "size": size, "upscale_of": node.id, "upscaler": workflows.UPSCALER,
+                                      "scale": workflows.UPSCALE})
+        self.project.select(node.id)                # the picture stays current: edits go on from it
+        job = self.queue.submit(self.project.id, copy.id,
+                                workflows.upscale(staged, prefix=f"art/{self.project.id}"), priority=1)
+        self.jobs.append(job.id)
+        return Reply(f"Making a {workflows.UPSCALE} times bigger copy. The original stays.", "upscale", [job.id])
 
     def _on_what(self, intent, text):
         node = self._current()
@@ -290,10 +418,15 @@ class ArtSession:
 
     def on_event(self, event: dict) -> str | None:
         """For a finished picture, the sentence to say if the policy stops it; None if it may be shown."""
-        if event.get("state") != "done" or self.project is None or event.get("project") != self.project.id:
+        if event.get("state") != "done":
+            return None
+        if self.project is None or event.get("project") != self.project.id:
+            if event.get("job") in self.jobs:       # drawn in this session, before a new picture was started
+                self.seen.append((event["project"], event["node"]))
             return None
         verdict = self.rules.check_image(event.get("image", ""), self.owner)
         if verdict.allowed:
+            self.seen.append((event["project"], event["node"]))
             return None
         try:
             self.store.open(event["project"]).fail(event["node"], verdict.reason)

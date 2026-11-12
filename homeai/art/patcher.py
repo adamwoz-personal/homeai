@@ -105,6 +105,7 @@ def features_patch_for(spec: dict, instruction: str, chat=None, clock=time.monot
             ops, aspect = answer["ops"], answer.get("aspect")
         if not ops and not aspect:
             raise SpecError("empty change")
+        ops = F.subject_first(before, ops)
         used = set(spec.get("letters_used") or []) if spec else set()
         after, changed = F.apply_ops(before, ops, used)
         after, changed = F.keep_details(instruction, after, changed)

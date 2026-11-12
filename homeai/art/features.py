@@ -152,6 +152,23 @@ def apply_ops(features: list[Feature], ops: list[dict], used: set[str] | None = 
     return current, changed
 
 
+def subject_first(before: list, ops: list) -> list:
+    """A new picture whose only adds are other kinds: the first add is the main subject.
+
+    "An 8 foot by 8 foot deck on the ground for a tent" came back as a setting alone, and the new
+    picture failed with "a picture needs a main subject" (Adam, 2026-11-12). An edit is left alone.
+    """
+    if before or any(isinstance(op, dict) and op.get("op") == "add" and op.get("kind") == "subject" for op in ops):
+        return ops
+    out, done = [], False
+    for op in ops:
+        if not done and isinstance(op, dict) and op.get("op") == "add" and _clean(op.get("text", "")) \
+                and not PLACEHOLDER.match(_clean(op.get("text", "")).lower()):
+            op, done = {**op, "kind": "subject"}, True
+        out.append(op)
+    return out
+
+
 COLOURS = ("red", "orange", "yellow", "green", "blue", "purple", "violet", "pink", "black", "white", "grey", "gray",
            "brown", "gold", "golden", "silver", "bronze", "teal", "crimson", "scarlet")
 _COLOUR = "(?:" + "|".join(COLOURS) + ")"
