@@ -174,7 +174,7 @@ def test_the_multi_subject_bakeoff_asks_what_its_scenes_promise():
     from tools.art import bakeoff_multi as B
     got = {s: [(c.kind, c.expect) for c in B.checks_of(s)] for s in B.SCENES}
     assert got == {"rider": [("heads", 1), ("riders", 1)], "two_riders": [("heads", 1), ("riders", 2)],
-                   "battleship": [("heads", 1)], "two_people": [("humans", 2)],
+                   "battleship": [("heads", 1)], "two_people": [("people", 2)],
                    "fruit": [("apples", 3), ("pears", 2)]}
     assert B.prompt_of("battleship").text.startswith("A single green dragon with one head.")
 
@@ -233,3 +233,23 @@ def test_viewer_labels_an_option_with_its_problems():
     from homeai.art import viewer as V
     assert V.option_label({"n": 2, "problems": ["2 heads", "3 riders"]}) == "2: 2 heads, 3 riders"
     assert V.option_label({"n": 3, "problems": []}) == "3" and V.option_label({"n": 1}) == "1"
+
+
+@pytest.mark.parametrize("subject, people", [
+    ("a knight and a wizard shaking hands", 2), ("two kids and an old wizard", 3), ("a lone samurai", 1),
+    ("a knight and his squire", None), ("a crowd of people", None), ("a castle on a hill", None),
+    ("knights fighting", None), ("a princess, a knight and a wizard", 3)])
+def test_people_counted_only_when_every_part_is_a_counted_person(subject, people):
+    got = [c.expect for c in CK.checklist(feats(("subject", subject))) if c.kind == "people"]
+    assert got == ([people] if people else [])
+
+
+def test_no_people_check_beside_a_creature():
+    assert "people" not in [c.kind for c in CK.checklist(feats(("subject", "two knights riding a dragon")))]
+
+
+def test_a_crowd_behind_two_people_is_named(tmp_path):
+    checks = CK.checklist(feats(("subject", "a knight and a wizard shaking hands")))
+    assert CK.problems(tmp_path / "x.png", checks, lambda image, q: "5") == ["5 people"]
+    assert CK.problems(tmp_path / "x.png", checks, lambda image, q: "1") == ["1 person"]
+    assert CK.problems(tmp_path / "x.png", checks, lambda image, q: "2") == []
