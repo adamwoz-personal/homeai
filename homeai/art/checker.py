@@ -40,6 +40,7 @@ CREATURES = ("dragon", "wyvern", "horse", "unicorn", "pegasus", "griffin", "gryp
 PEOPLE = ("samurai", "knight", "rider", "person", "man", "woman", "girl", "boy", "warrior", "wizard", "witch",
           "pirate", "ninja", "princess", "prince", "king", "queen", "soldier", "cowboy", "child", "kid", "elf")
 _COUNT = r"(a single|single|lone|one|two|three|four|a|an)"
+SINGULAR = {"heads": "head", "riders": "rider", "people": "person"}
 _HEADS = re.compile(r"\b(?:with )?" + _COUNT + r" heads?\b")
 _MANY_HEADS = re.compile(r"\b(hydra|(two|three|multi|many)[- ]headed)\b")
 _RIDING = re.compile(r"\b(riding|ridden|rides|sitting on|seated on|sits on|astride|mounted on|on (?:its|his|her|"
@@ -50,7 +51,7 @@ _WORDS = {"zero": 0, "none": 0, "no": 0, "one": 1, "two": 2, "three": 3, "four":
 
 @dataclass(frozen=True)
 class Check:
-    kind: str           # "heads" or "riders"
+    kind: str           # "heads", "riders" or "people"
     question: str
     expect: int
     noun: str
@@ -85,7 +86,28 @@ def checklist(features) -> list[Check]:
                     checks.append(Check("riders", f"How many people are riding the {creature}? "
                                                   "Answer with one number only.", count, creature))
                     break
+    people = None if creature else people_count(subject)
+    if people:
+        checks.append(Check("people", "How many people are in this picture? Answer with one number only.",
+                            people, "person"))
     return checks
+
+
+def people_count(text: str) -> int | None:
+    """How many people a subject names, when every part of it is a counted person ("a knight and a wizard
+    shaking hands" -> 2), else None: an uncounted "squire" or "crowd" would make the check fail a right picture.
+
+    Measured 2026-11-08 on the multi-subject bake-off (two_people scene, 48 pictures): minicpm-v's people count
+    matched the contact sheet on 48/48; its 7 flags were boogu's background crowds.
+    """
+    parts = [p.strip() for p in re.split(r",| and ", text) if p.strip()]
+    total = 0
+    for part in parts:
+        match = re.match(_COUNT + r" (?:[a-z'-]+ ){0,3}?(" + "|".join(PEOPLE) + r")s?\b", part)
+        if not match:
+            return None
+        total += COUNTS[match.group(1)]
+    return total or None
 
 
 def parse_count(answer: str) -> int | None:
@@ -105,7 +127,7 @@ def problems(image: Path, checks: list[Check], ask: Callable[[Path, str], str]) 
     for check in checks:
         got = parse_count(ask(image, check.question))
         if got is not None and got != check.expect:
-            found.append(f"{got} {check.kind if got != 1 else check.kind[:-1]}")
+            found.append(f"{got} {check.kind if got != 1 else SINGULAR[check.kind]}")
     return found
 
 

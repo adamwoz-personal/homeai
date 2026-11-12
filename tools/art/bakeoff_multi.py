@@ -60,7 +60,7 @@ SCENES = {
                           ("setting", "a stormy sea")), []),
     "two_people": (_feats(("subject", "a knight and a wizard shaking hands"),
                           ("setting", "in front of a castle")),
-                   [_ask("humans", "How many people are in this picture?", 2)]),
+                   []),            # people: CK.checklist asks since 2026-11-11
     "fruit": (_feats(("subject", "three red apples and two green pears"), ("setting", "on a wooden table")),
               [_ask("apples", "How many apples are in this picture?", 3),
                _ask("pears", "How many pears are in this picture?", 2)]),
