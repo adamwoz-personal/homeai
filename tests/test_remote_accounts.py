@@ -176,6 +176,27 @@ def test_an_unknown_name_answers_exactly_like_a_wrong_password(acc, clock):
     assert run("adam") == run("mallory")
 
 
+def test_unknown_name_counts_are_in_the_audit_and_survive_a_restart(acc, auth_db, clock):
+    import psycopg
+    from argon2 import PasswordHasher
+
+    for _ in range(3):
+        assert acc.login("mallory", "wrong password!", "p").retry_after_s == 0
+    restarted = A.Accounts(lambda: psycopg.connect(auth_db), now=clock,
+                           hasher=PasswordHasher(time_cost=1, memory_cost=8, parallelism=1))
+    assert restarted.login("mallory", "wrong password!", "p").retry_after_s == 3600    # 4th, after the restart
+    clock.advance(minutes=30)
+    assert restarted.login("mallory", "wrong password!", "p").retry_after_s == 1800    # still locked
+    assert restarted.login("eve", "wrong password!", "p").retry_after_s == 0          # names counted apart
+    got = rows(auth_db, "SELECT event, detail->>'name' FROM auth.audit ORDER BY id")
+    assert got == [("login_unknown", "mallory")] * 4 + [("login_unknown_refused", "mallory"),
+                                                        ("login_unknown", "eve")]
+    alerts = A.login_alerts(lambda: psycopg.connect(auth_db), clock() - timedelta(days=1), clock())
+    assert alerts.unknown == 6                                                       # tries while locked count
+    clock.advance(minutes=30)
+    assert restarted.login("mallory", "wrong password!", "p").retry_after_s == 3600    # one try per hour after
+
+
 def test_a_password_change_logs_every_device_out(acc, auth_db):
     acc.set_password("adam", PW)
     r1, r2 = acc.login("adam", PW, "a"), acc.login("adam", PW, "b")

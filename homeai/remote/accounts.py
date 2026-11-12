@@ -12,7 +12,8 @@ Rules, each from the plan:
 * Failed logins: the 4th wrong one in a row locks the login for an hour (Adam,
   2026-11-12), and the status update reports failures to admins (``login_alerts``).
   Unknown usernames get the same answers, lock and (one hash) time as wrong
-  passwords, so a login attempt can't tell whether a name exists.
+  passwords, so a login attempt can't tell whether a name exists. Their counts
+  are kept in the audit (the name tried, in ``detail``), so a restart forgets nothing.
 * A login creates a device: 256 random bits shown to the app once, stored as
   sha256. Tokens expire after 90 days unused. A password change revokes every
   device. Each device is a memory identity (channel 'app', handle device_id),
@@ -88,7 +89,6 @@ class Accounts:
         self.now = now
         self.random_bytes = random_bytes
         self._dummy_hash = self.hasher.hash(secrets.token_hex(16))
-        self._unknown: dict[str, tuple[int, datetime | None]] = {}   # name -> (failures, locked_until)
 
     # -- plumbing ---------------------------------------------------------------------------------
     def _conn(self):
@@ -215,15 +215,18 @@ class Accounts:
     def _unknown_login(self, conn, username: str, password: str, now: datetime) -> LoginResult:
         """No such login: spend one hash and answer exactly like a wrong password, with the same delays."""
         self._verify(self._dummy_hash, password)
-        failures, locked_until = self._unknown.get(username, (0, None))
+        # The count lives in the audit (Adam 2026-11-12), so it survives a restart: every failed try with this
+        # name, as an account's count runs until a success, which an unknown name never has.
+        failures, last = conn.execute("SELECT count(*), max(at) FROM auth.audit WHERE event = 'login_unknown' "
+                                      "AND detail->>'name' = %s", (username,)).fetchone()
+        locked_until = last + wait_after(failures) if failures and wait_after(failures) else None
         if locked_until and locked_until > now:
+            self._audit(conn, "login_unknown_refused", None, name=username,
+                        retry_after_s=self._seconds(locked_until - now))
             return LoginResult(False, BAD, self._seconds(locked_until - now))
         failures += 1
         wait = wait_after(failures)
-        if len(self._unknown) > 10_000:
-            self._unknown.clear()
-        self._unknown[username] = (failures, now + wait if wait else None)
-        self._audit(conn, "login_unknown", None, failures=failures)
+        self._audit(conn, "login_unknown", None, name=username, failures=failures)
         return LoginResult(False, BAD, self._seconds(wait))
 
     def _new_device(self, conn, username: str, device_name: str, now: datetime) -> tuple[str, str]:
@@ -286,7 +289,7 @@ def login_alerts(connect: Callable, since: datetime, until: datetime) -> LoginAl
             "SELECT username, count(*) FROM auth.audit WHERE at > %s AND at <= %s "
             "AND event IN ('login_failed', 'login_refused') GROUP BY username", (since, until)).fetchall())
         unknown = conn.execute("SELECT count(*) FROM auth.audit WHERE at > %s AND at <= %s "
-                               "AND event = 'login_unknown'", (since, until)).fetchone()[0]
+                               "AND event IN ('login_unknown', 'login_unknown_refused')", (since, until)).fetchone()[0]
         locked = dict(conn.execute("SELECT username, locked_until FROM auth.accounts WHERE locked_until > %s",
                                    (until,)).fetchall())
     return LoginAlerts(failed, locked, unknown)

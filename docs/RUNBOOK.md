@@ -264,7 +264,8 @@ admin (`HOMEAI_STATUS_ADMINS`, default Adam):
   name that has no login. Read from `auth.audit`; a database failure is said
   ("I couldn't check the app logins") and reported again next time. The 4th
   wrong password in a row locks a login for an hour (`bin/homeai-user list`
-  shows `locked_until`; `set-password` clears it);
+  shows `locked_until`; `set-password` clears it). Tries with unknown names are
+  counted per name in `auth.audit`, so a restart forgets nothing;
 - the weather. Anyone else gets only the weather.
 The answer is built without the model (~0.8 s). "Last update" is per person in
 `~/.local/share/homeai/status_update.json`, moved on only after a complete update.
