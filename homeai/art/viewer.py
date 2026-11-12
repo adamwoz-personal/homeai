@@ -50,6 +50,28 @@ def layout(width: int, height: int, thumbs: int) -> dict:
     return out
 
 
+def compare_layout(width: int, height: int) -> dict:
+    """Two pictures side by side at half width each ("compare two and four"), the status line below (F7a)."""
+    half = max(1, (width - 3 * PAD) // 2)
+    main_h = max(1, height - STATUS_H - PAD * 3)
+    return {"pair": [(PAD, PAD, half, main_h), (2 * PAD + half, PAD, half, main_h)],
+            "status": (PAD, PAD + main_h + PAD, max(1, width - 2 * PAD), STATUS_H)}
+
+
+def comparing(state: dict) -> list[dict]:
+    """The two pictures to show side by side, or [] for the usual window."""
+    options = list(state.get("options") or [])
+    return options if state.get("compare") and len(options) == 2 else []
+
+
+def is_current(step: dict, current: dict) -> bool:
+    """The step on screen is the current picture: same node, and same project when the step names one
+    (the last N pictures can come from earlier projects, whose node numbers repeat)."""
+    if not current or step.get("node") != current.get("node"):
+        return False
+    return step.get("project") is None or step.get("project") == current.get("project")
+
+
 def status_line(state: dict) -> str:
     if not state.get("active"):
         return "Art mode is off."
@@ -295,31 +317,42 @@ def main() -> int:
                 else:
                     state = art_state(event, state)
             width, height = screen.get_size()
-            thumbs = thumbs_of(state)
-            boxes = layout(width, height, len(thumbs))
+            pair = comparing(state)
+            thumbs = [] if pair else thumbs_of(state)
+            boxes = compare_layout(width, height) if pair else layout(width, height, len(thumbs))
             screen.fill(BG)
-            x, y, w, h = boxes["main"]
-            picture = images.get((state.get("current") or {}).get("image"), (w, h))
-            if picture is not None:
-                pw, ph = picture.get_size()
-                screen.blit(picture, (x + (w - pw) // 2, y + (h - ph) // 2))
+            picture = None
+            for (x, y, w, h), step in zip(boxes.get("pair", []), pair):
+                shown = images.get(step.get("image"), (w, h))
+                if shown is not None:
+                    pw, ph = shown.get_size()
+                    screen.blit(shown, (x + (w - pw) // 2, y + (h - ph) // 2))
+                    picture = picture or shown
+                screen.blit(font.render(option_label(step), True, FG, BG), (x + 6, y + 4))
+            if not pair:
+                x, y, w, h = boxes["main"]
+                picture = images.get((state.get("current") or {}).get("image"), (w, h))
+                if picture is not None:
+                    pw, ph = picture.get_size()
+                    screen.blit(picture, (x + (w - pw) // 2, y + (h - ph) // 2))
             x, y, w, h = boxes["status"]
             text = font.render(status_line(state)[:160], True, FG)
             screen.blit(text, (x, y + (h - text.get_height()) // 2))
-            current = (state.get("current") or {}).get("node")
-            for (x, y, w, h), step in zip(boxes["thumbs"], thumbs):
+            current = state.get("current") or {}
+            for (x, y, w, h), step in zip(boxes.get("thumbs", []), thumbs):
                 thumb = images.get(step.get("image"), (w, h - 4))
                 if thumb is not None:
                     screen.blit(thumb, (x + (w - thumb.get_width()) // 2, y))
-                colour = FG if step.get("node") == current else DIM
-                pygame.draw.rect(screen, colour, (x, y, w, h - 4), 2 if step.get("node") == current else 1)
+                here = is_current(step, current)
+                pygame.draw.rect(screen, FG if here else DIM, (x, y, w, h - 4), 2 if here else 1)
                 if step.get("n"):                        # options: the number to say
                     label = font.render(option_label(step), True, FG, BG)
                     screen.blit(label, (x + 6, y + 4))
             pygame.display.flip()
             if feature_win is not None:
                 draw_features(feature_win, state, letter_font, small, entry, pygame)
-            shown = (state.get("current") or {}).get("image") if picture is not None else None
+            shown = ("|".join(str(s.get("image")) for s in pair) if pair else (state.get("current") or {}).get("image")) \
+                if picture is not None else None
             if shots and shown and shown != shot_of:
                 shot_of = shown
                 n = len(list(os.scandir(shots))) + 1 if os.path.isdir(shots) else 1
