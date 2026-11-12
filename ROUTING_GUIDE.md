@@ -2137,3 +2137,14 @@ Evidence: plans/LLM_UPGRADE_PLAN.md step 3; ~/homeai-bench/coder-eval.jsonl, kv.
 - **A "nothing happened" assertion right after an action races the I/O thread**: `typed-bus-no-handler-reads`
   survived once in three full runs because the client was dropped a few ms after the check. Wait (bounded) for the
   bad thing to have had time to happen, then assert it didn't (`assert not wait_until(..., timeout=0.5)`).
+- **Art F7 (show last N, compare, upscale, save by name), 1cc3a30:** all unit tests and 50 mutants passed, and the
+  first live run still failed: `ArtSession.project` is an in-memory copy, while the job queue finishes pictures
+  through `store.open()`, so the session saw every picture as pending. Fakes that finish on the session's own
+  object hide this; test helpers now finish through a separate `store.open()` like the queue. Rule: state that
+  another thread writes is read from the store, not from a cached object. The live probe
+  (`tools/art/art_f7_live.py`) found it in one run.
+- **ComfyUI caches identical graphs**: a repeated upscale of the same input returned in 0.2 s. Benchmarks must
+  vary the input (or the seed) per run, or only the first sample is real.
+- **Adam's "assembly instructions for a deck" in art mode failed twice** (patcher: setting without a subject,
+  then "not about the picture"), and both times said "the picture stays as it was" with no picture. A failure
+  message must match the state it is said in.

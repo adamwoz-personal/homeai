@@ -179,6 +179,12 @@ homeai-mode voice     # ComfyUI stopped, coder back (~7 s warm, ~27 s cold)
   goes to Jarvis. In art mode, house talk ("turn off the lights") still works.
 - In art mode: "make it night time", "again", "give me four", "the second one",
   "go back", "keep that", "what prompt made this", "cancel that".
+  Looking back (F7): "show me the last four" (up to 8 pictures from this session, numbered; say a number to
+  pick one, even from an earlier picture), "compare" (before and now side by side), "compare two and four",
+  "upscale it" / "print size" (a 2x copy, ~3 s, saved as `<project>-<node>-2x.png`; the original stays
+  current), "save that as Ember" (`~/Pictures/homeai/<person>/ember.png`, `ember-2.png` if taken).
+  Every saved picture has a `.json` beside it with the prompt, seed and model. The upscaler is
+  `RealESRGAN_x2plus.pth` in ComfyUI's `models/upscale_models` (sha256 49fafd45...6abb).
   "I'm done drawing" goes back to voice mode (~25 s for the coder to reload,
   in the background). 20 minutes with nothing said or drawing does the same.
 - In art mode Jarvis waits for 2.5 s of quiet before deciding you've finished
