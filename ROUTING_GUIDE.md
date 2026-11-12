@@ -2107,3 +2107,15 @@ Evidence: plans/LLM_UPGRADE_PLAN.md step 3; ~/homeai-bench/coder-eval.jsonl, kv.
 - **Its tests over-specify** (error-message text, non-str input) and repeat themselves;
   read them, don't count them. tools/inspect_coder_eval.py shows which tests reject the
   reference.
+
+## Overnight unattended work (2026-11-11)
+- **A branch in the main checkout is live.** The venv's editable install points at this checkout, so whatever
+  branch is checked out is what Jarvis loads on its next restart. Unapproved behaviour changes went on branches
+  (`art-mode-lock`, `art-people-check`), gated there, pushed, and the checkout went straight back to `main`.
+- **Equivalent mutant: "never release the lock" survived** because dropping the last reference to a file object
+  closes it in CPython, which releases the flock. Mutate the bookkeeping (`_depth -= 1`) instead of the close.
+- **Indentation-anchored mutants go STALE after refactors** (removing a `try:` moved `coding_defaults()` 4 spaces);
+  run the full mutant gate on the branch, not just the new subset.
+- **Declared sandboxes on user units are decoration here** (AppArmor userns restriction): the memory units say
+  ProtectSystem=strict and still write $HOME. `tools/probe_unit_sandbox.sh UNIT...` checks any unit in seconds.
+- Library interop is provable cheaply with fixed-key vectors: Noise NK Python<->Kotlin byte-identical in ~11 s.
