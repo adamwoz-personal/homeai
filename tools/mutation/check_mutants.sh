@@ -138,6 +138,12 @@ MUTANTS=(
   "modelock-cli-unlocked|homeai/gpu_mode.py|s/    switcher = ModeSwitcher(System(), lock_path=mode_lock_path())/    switcher = ModeSwitcher(System())/|tests/test_gpu_mode.py -k OneSwitch"
   "modelock-daemon-unlocked|homeai/daemon.py|s/lock_path=gpu_mode.mode_lock_path())/lock_path=None)/|tests/test_art_checker.py -k mode_lock"
   "modelock-avatar-old-path|homeai/avatar/app.py|s/DROPIN_NAME, mode_lock_path()/DROPIN_NAME, Path(\"\/run\/user\/1000\/homeai-mode.lock\")/|tests/test_avatar_scene.py -k lock_every"
+  # Adam 2026-11-12: a voice switch waits for a running one, then wins; the CLI refuses at once.
+  "modelock-voice-no-wait|homeai/daemon.py|s/lock_wait_s=gpu_mode.VOICE_LOCK_WAIT_S)/lock_wait_s=0)/|tests/test_art_checker.py -k mode_lock"
+  "modelock-wait-ignored|homeai/gpu_mode.py|s/_locked(self.lock_path, self.lock_wait_s)/_locked(self.lock_path)/|tests/test_gpu_mode.py -k OneSwitch"
+  "modelock-wait-forever|homeai/gpu_mode.py|s/            if clock() >= deadline:/            if False:/|tests/test_gpu_mode.py -k OneSwitch"
+  "modelock-no-wait|homeai/gpu_mode.py|s/    deadline = clock() + wait_s/    deadline = clock()/|tests/test_gpu_mode.py -k OneSwitch"
+  "modelock-voice-wait-zero|homeai/gpu_mode.py|s/^VOICE_LOCK_WAIT_S = 120 /VOICE_LOCK_WAIT_S = 0 /|tests/test_art_checker.py -k mode_lock"
   "art-no-health-wait|homeai/gpu_mode.py|s/if not self._wait(self._comfy_healthy, COMFY_START_TIMEOUT_S):/if False:/|tests/test_gpu_mode.py -k Art"
   "art-comfy-left-running|homeai/gpu_mode.py|s/        self._stop_comfy()$/        pass/|tests/test_gpu_mode.py -k Leaving"
   "art-stop-unchecked|homeai/gpu_mode.py|s/raise ModeError(f\"{COMFY_UNIT} would not stop.*/pass/|tests/test_gpu_mode.py -k Leaving"

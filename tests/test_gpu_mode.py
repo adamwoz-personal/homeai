@@ -532,6 +532,35 @@ class TestOneSwitchAtATime:
             sw.art()
         G.ModeSwitcher(FakeSystem(), log=lambda *_: None, lock_path=lock).voice()
 
+    def test_a_waiting_switcher_gets_the_lock_once_the_running_switch_ends(self, tmp_path):
+        lock = tmp_path / "mode.lock"
+        holder = G._locked(lock)
+        slept = []
+
+        def sleep(s):
+            slept.append(s)
+            holder.close()                 # the running switch finishes while we wait
+        handle = G._locked(lock, 5, sleep=sleep, clock=lambda: 0.0)
+        assert slept == [G.LOCK_POLL_S]
+        handle.close()
+
+    def test_a_waiting_switcher_gives_up_after_its_wait(self, tmp_path):
+        lock = tmp_path / "mode.lock"
+        holder = G._locked(lock)
+        times = iter([0.0, 1.0, 6.0])
+        slept = []
+        with pytest.raises(G.ModeError, match="another mode switch"):
+            G._locked(lock, 5, sleep=slept.append, clock=lambda: next(times))
+        assert slept == [G.LOCK_POLL_S]
+        holder.close()
+
+    def test_the_switcher_passes_its_wait_to_the_lock(self, tmp_path, monkeypatch):
+        seen = []
+        monkeypatch.setattr(G, "_locked", lambda path, wait=0.0: seen.append(wait) or open(path, "a"))
+        G.ModeSwitcher(FakeSystem(), log=lambda *_: None, lock_path=tmp_path / "l", lock_wait_s=7).voice()
+        G.ModeSwitcher(FakeSystem(), log=lambda *_: None, lock_path=tmp_path / "l").voice()
+        assert seen == [7, 0.0]
+
     def test_the_lock_is_where_the_sandboxed_daemon_may_write(self):
         assert G.mode_lock_path(1000) == Path("/run/user/1000/homeai/mode.lock")
 

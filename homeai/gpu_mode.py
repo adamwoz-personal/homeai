@@ -220,7 +220,7 @@ def _exclusive(method):
     def wrapper(self, *args, **kwargs):
         with self._mutex:
             if self._depth == 0 and self.lock_path is not None:
-                self._handle = _locked(self.lock_path)
+                self._handle = _locked(self.lock_path, self.lock_wait_s)
             self._depth += 1
             try:
                 return method(self, *args, **kwargs)
@@ -233,11 +233,13 @@ def _exclusive(method):
 
 
 class ModeSwitcher:
-    def __init__(self, system: System, log=print, lock_path: Path | None = None) -> None:
-        """``lock_path``: the file every switcher locks (mode_lock_path() for real use; None in unit tests)."""
+    def __init__(self, system: System, log=print, lock_path: Path | None = None, lock_wait_s: float = 0.0) -> None:
+        """``lock_path``: the file every switcher locks (mode_lock_path() for real use; None in unit tests).
+        ``lock_wait_s``: how long to wait for another switch to finish (voice: VOICE_LOCK_WAIT_S; CLI: 0)."""
         self.sys = system
         self.log = log
         self.lock_path = lock_path
+        self.lock_wait_s = lock_wait_s
         self._mutex = threading.RLock()
         self._depth = 0
         self._handle = None
@@ -529,15 +531,25 @@ def mode_lock_path(uid: int | None = None) -> Path:
     return Path(f"/run/user/{os.getuid() if uid is None else uid}/homeai/mode.lock")
 
 
-def _locked(path: Path):
+VOICE_LOCK_WAIT_S = 120   # a switch takes up to about a minute (art mode: ComfyUI start)
+LOCK_POLL_S = 0.25
+
+
+def _locked(path: Path, wait_s: float = 0.0, *, sleep=time.sleep, clock=time.monotonic):
+    """Take the mode lock. ``wait_s`` > 0: wait that long for a running switch to end (voice, Adam
+    2026-11-12: a voice request waits and then wins); 0: refuse at once (the CLI)."""
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     handle = open(path, "a")  # noqa: SIM115 - held until the switch ends
-    try:
-        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        handle.close()
-        raise ModeError("another mode switch is already running") from None
-    return handle
+    deadline = clock() + wait_s
+    while True:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return handle
+        except BlockingIOError:
+            if clock() >= deadline:
+                handle.close()
+                raise ModeError("another mode switch is already running") from None
+            sleep(LOCK_POLL_S)
 
 
 def main(argv: list[str] | None = None) -> int:
