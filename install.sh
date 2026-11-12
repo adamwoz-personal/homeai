@@ -294,6 +294,11 @@ else
     install_jarvis_unit
 
     # Nightly memory backup and hourly health/maintenance, only where the memory database exists.
+    # Skipped once they are system units (tools/install_memory_system_units.sh): never both.
+    MEMORY_SYSTEM_TIMER="${HOMEAI_SYSTEM_UNIT_DIR:-/etc/systemd/system}/homeai-memory-backup.timer"
+    if [[ -f "$MEMORY_SYSTEM_TIMER" ]]; then
+        info "memory backup and maintenance are system units; leaving them (sudo tools/install_memory_system_units.sh)"
+    else
     for f in homeai-memory-backup.service homeai-memory-backup.timer \
              homeai-memory-maintain.service homeai-memory-maintain.timer; do
         src="deploy/systemd/$f"; [[ -f "$src" ]] || src="$src.in"
@@ -308,6 +313,7 @@ else
         run systemctl --user enable --now homeai-memory-backup.timer homeai-memory-maintain.timer
     else
         info "memory database not reachable; backup and maintenance timers not enabled"
+    fi
     fi
 
     # Avatar window: starts with the desktop session, only where its extra imports.

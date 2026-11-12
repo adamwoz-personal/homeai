@@ -3,6 +3,7 @@
 For an admin (HOMEAI_STATUS_ADMINS, default Adam):
 - voice profiles created since their last update (first time: the last week),
 - doorbell rings and motion since their last update, at most the last 24 hours,
+- failed remote-app logins and locked logins since their last update (Adam, 2026-11-12),
 - a short weather summary.
 Anyone else gets the weather. Nothing goes to the agent: the sentences are
 built here, so the reply is short and can't wander off into a lookup.
@@ -16,7 +17,7 @@ import json
 import logging
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -33,6 +34,7 @@ TRIGGER = re.compile(r"^(?:(?:give|get) me |can i (?:get|have) |let'?s (?:have|g
 MSG_NO_NEWS = "No new voices and no doorbell alerts since your last update."
 MSG_DOOR_FAILED = "I couldn't check the doorbell."
 MSG_WEATHER_FAILED = "I couldn't get the weather."
+MSG_LOGINS_FAILED = "I couldn't check the app logins."
 
 
 def is_request(text: str) -> bool:
@@ -70,6 +72,26 @@ def doors_sentence(alerts: dict[tuple[str, str], list[float]]) -> str:
     return " ".join(parts)
 
 
+def logins_sentence(alerts) -> str:
+    """'Four failed app logins for Ani; that login is locked until 3:40 pm.' (alerts: accounts.LoginAlerts)"""
+    parts = []
+    for name in sorted(set(alerts.failed) | set(alerts.locked), key=lambda n: n or ""):
+        if name is None:
+            continue
+        n = alerts.failed.get(name, 0)
+        what = f"{_count(n, 'failed app login', 'failed app logins').capitalize()} for {name.title()}" if n else \
+            f"{name.title()}'s app login"
+        if name in alerts.locked:
+            when = alerts.locked[name]
+            when = when.timestamp() if hasattr(when, "timestamp") else float(when)
+            what += f"{'; that login' if n else ''} is locked until {_clock_time(when)}"
+        parts.append(what + ".")
+    if alerts.unknown:
+        parts.append(f"{_count(alerts.unknown, 'failed app login', 'failed app logins').capitalize()} "
+                     "with a name that has no login.")
+    return " ".join(parts)
+
+
 class Ledger:
     """When each person last had a status update. A broken file starts fresh, never stops Jarvis."""
 
@@ -99,8 +121,10 @@ class Ledger:
 class StatusUpdate:
     def __init__(self, profiles: Callable[[], list], door_alerts: Callable[[float, float], dict] | None,
                  weather: Callable[[], str], admins: tuple[str, ...] = ("Adam",), ledger: Ledger | None = None,
-                 clock: Callable[[], float] = time.time) -> None:
+                 clock: Callable[[], float] = time.time,
+                 login_alerts: Callable[[float, float], object] | None = None) -> None:
         self._profiles, self._doors, self._weather = profiles, door_alerts, weather
+        self._logins = login_alerts
         self.admins = tuple(a.lower() for a in admins)
         self.ledger, self._clock = ledger or Ledger(), clock
 
@@ -131,6 +155,15 @@ class StatusUpdate:
                     log.warning("status update: doorbell history failed: %s", exc)
                     news.append(MSG_DOOR_FAILED)
                     complete = False
+            if self._logins is not None:
+                try:
+                    logins = self._logins(since_voices, now)
+                    if logins:
+                        news.append(logins_sentence(logins))
+                except Exception as exc:  # noqa: BLE001 - database down: say so, report it again next time
+                    log.warning("status update: login check failed: %s", exc)
+                    news.append(MSG_LOGINS_FAILED)
+                    complete = False
             parts += news or [MSG_NO_NEWS]
         try:
             parts.append(self._weather())
@@ -142,10 +175,28 @@ class StatusUpdate:
         return " ".join(p for p in parts if p)
 
 
-def build(home, admins: tuple[str, ...], profiles: Callable[[], list], location: str) -> StatusUpdate:
-    """The real one: Home Assistant history for the doorbell, Open-Meteo for the weather."""
+def db_login_alerts(dsn: str) -> Callable[[float, float], object]:
+    """Failed logins from the auth audit (remote/accounts.py). No auth schema yet = nothing to report."""
+    def ask(since: float, until: float):
+        import psycopg
+
+        from .remote.accounts import LoginAlerts, login_alerts
+
+        utc = timezone.utc
+        try:
+            return login_alerts(lambda: psycopg.connect(dsn, connect_timeout=3),
+                                datetime.fromtimestamp(since, utc), datetime.fromtimestamp(until, utc))
+        except psycopg.errors.InvalidSchemaName:
+            return LoginAlerts({}, {}, 0)
+    return ask
+
+
+def build(home, admins: tuple[str, ...], profiles: Callable[[], list], location: str,
+          memory_dsn: str | None = None) -> StatusUpdate:
+    """The real one: Home Assistant history for the doorbell, Open-Meteo for the weather, the auth audit."""
     from .doorbell import door_alerts
     from .weather import get_weather
 
     doors = (lambda since, until: door_alerts(home, since, until)) if home is not None else None
-    return StatusUpdate(profiles, doors, lambda: get_weather(location).spoken(include_place=False), admins=admins)
+    return StatusUpdate(profiles, doors, lambda: get_weather(location).spoken(include_place=False), admins=admins,
+                        login_alerts=db_login_alerts(memory_dsn) if memory_dsn else None)

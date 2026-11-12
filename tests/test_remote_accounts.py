@@ -126,22 +126,39 @@ def test_a_wrong_token_does_not_resume(acc, token):
     assert acc.resume("0" * 32, r.token) is None
 
 
-def test_failures_slow_down_then_lock(acc, clock):
+def test_the_fourth_failure_locks_for_an_hour(acc, clock):
     acc.set_password("adam", PW)
-    waits = [acc.login("adam", "wrong password!", "p").retry_after_s for _ in range(2)]
-    assert waits == [0, 0]
-    assert acc.login("adam", "wrong password!", "p").retry_after_s == 2         # 3rd
-    refused = acc.login("adam", PW, "p")                                         # right, but too soon
-    assert not refused.ok and refused.code == A.BAD and refused.retry_after_s == 2
-    clock.advance(seconds=2)
-    assert acc.login("adam", "wrong password!", "p").retry_after_s == 8          # 4th
-    clock.advance(seconds=8)
-    assert acc.login("adam", "wrong password!", "p").retry_after_s == 15 * 60    # 5th: locked
-    clock.advance(minutes=14)
+    waits = [acc.login("adam", "wrong password!", "p").retry_after_s for _ in range(3)]
+    assert waits == [0, 0, 0]
+    assert acc.login("adam", "wrong password!", "p").retry_after_s == 3600       # 4th: locked
+    refused = acc.login("adam", PW, "p")                                         # right, but locked
+    assert not refused.ok and refused.code == A.BAD and refused.retry_after_s == 3600
+    clock.advance(minutes=59)
     assert not acc.login("adam", PW, "p").ok
     clock.advance(minutes=1)
     assert acc.login("adam", PW, "p").ok
     assert acc.login("adam", "wrong password!", "p").retry_after_s == 0         # success reset the count
+
+
+def test_login_alerts_for_the_status_update(acc, auth_db, clock):
+    import psycopg
+
+    acc.set_password("adam", PW)
+    acc.set_password("ani", PW)
+    start = clock()
+    clock.advance(seconds=1)
+    acc.login("adam", "wrong password!", "p")
+    clock.advance(seconds=59)
+    for _ in range(4):
+        acc.login("ani", "wrong password!", "p")
+    acc.login("ani", PW, "p")                       # refused while locked: counted too
+    acc.login("mallory", "wrong password!", "p")
+    acc.login("adam", PW, "p")                      # a good login is not an alert
+    got = A.login_alerts(lambda: psycopg.connect(auth_db), start, clock())
+    assert got.failed == {"adam": 1, "ani": 5} and got.unknown == 1
+    assert got.locked == {"ani": start + timedelta(minutes=1, hours=1)}
+    later = A.login_alerts(lambda: psycopg.connect(auth_db), clock(), clock() + timedelta(hours=2))
+    assert not later                               # nothing new, and the lock has run out
 
 
 def test_an_unknown_name_answers_exactly_like_a_wrong_password(acc, clock):
@@ -230,7 +247,7 @@ def test_app_is_a_memory_channel(auth_db):
 
 
 def test_wait_schedule():
-    assert [A.wait_after(n).total_seconds() for n in range(1, 7)] == [0, 0, 2, 8, 900, 900]
+    assert [A.wait_after(n).total_seconds() for n in range(1, 7)] == [0, 0, 0, 3600, 3600, 3600]
 
 
 # -- bin/homeai-user -----------------------------------------------------------------------------

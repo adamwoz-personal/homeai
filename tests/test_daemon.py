@@ -1177,6 +1177,18 @@ def test_status_update_crash_is_spoken(voiced) -> None:
     voiced.agent.ask.assert_not_called()
 
 
+def test_status_update_gets_the_memory_database_for_login_alerts(assistant, monkeypatch) -> None:
+    from homeai import status_update
+    seen = []
+    monkeypatch.setattr(status_update, "build", lambda *a: seen.append(a) or object())
+    import dataclasses
+    assistant._start_status()                                   # memory off in tests: no login check
+    on = dataclasses.replace(assistant.cfg.memory, enabled=True, dsn="dbname=x")
+    assistant.cfg = dataclasses.replace(assistant.cfg, memory=on)
+    assistant._start_status()
+    assert [a[-1] for a in seen] == [None, "dbname=x"]
+
+
 def test_start_adopts_art_mode_left_on(assistant, monkeypatch) -> None:
     calls = []
     assistant.art = type("A", (), {"adopt": lambda self: calls.append("adopt")})()

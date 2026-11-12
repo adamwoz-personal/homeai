@@ -58,6 +58,7 @@ def test_dump_holds_everything_and_restores_with_the_same_counts(mem_store, pg_d
     meta = json.loads(path.with_suffix(".json").read_text())
     # Counts are taken with admin scope: RLS would otherwise hide ryan's rows.
     assert meta["counts"]["facts"] == 2 and meta["counts"]["episodes"] == 1
+    assert {"auth.accounts", "auth.devices", "auth.audit"} <= set(meta["counts"])   # logins are backed up too
     assert meta["schema_version"] >= 2
     before = databases()
     r = backup.restore_check(path)
@@ -71,6 +72,33 @@ def test_dump_files_are_private(mem_store, pg_dsn, tmp_path):
     assert stat.S_IMODE(dest.stat().st_mode) == 0o700
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     assert stat.S_IMODE(path.with_suffix(".json").stat().st_mode) == 0o600
+
+
+def test_restore_check_catches_missing_logins(mem_store, pg_dsn, tmp_path):
+    path = backup.dump(pg_dsn, tmp_path, now=T0)
+    meta = json.loads(path.with_suffix(".json").read_text())
+    meta["counts"]["auth.accounts"] += 1
+    path.with_suffix(".json").write_text(json.dumps(meta))
+    with pytest.raises(backup.BackupError, match="auth.accounts: dump had"):
+        backup.restore_check(path)
+
+
+def test_counts_files_from_before_logins_still_check(mem_store, pg_dsn, tmp_path):
+    path = backup.dump(pg_dsn, tmp_path, now=T0)
+    meta = json.loads(path.with_suffix(".json").read_text())
+    meta["counts"] = {t: n for t, n in meta["counts"].items() if not t.startswith("auth.")}
+    path.with_suffix(".json").write_text(json.dumps(meta))
+    assert backup.restore_check(path)["file"] == path.name
+
+
+def test_counts_skip_tables_a_database_does_not_have_yet():
+    class Conn:
+        def execute(self, sql, args=()):
+            name = args[0] if args else ""
+            value = None if name.startswith("auth.") else (name or 7)
+            return type("R", (), {"fetchone": lambda self: (value if "to_regclass" in sql else 7,)})()
+    got = backup.counts(Conn())
+    assert "auth.audit" not in got and got["facts"] == 7
 
 
 def test_restore_check_catches_missing_rows(mem_store, pg_dsn, tmp_path):

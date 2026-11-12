@@ -1,0 +1,28 @@
+# Template rendered by tools/install_memory_system_units.sh (SANDBOX_PLAN, 2026-11-12):
+# @USER@ @HOME@ @REPO@ are substituted.
+# Nightly dump of the long-term memory database, then a restore into a
+# scratch database to prove the dump is usable. A system unit with User= so
+# the sandbox below is enforced (as a user unit it was silently skipped:
+# tools/probe_unit_sandbox.sh). Failures: `systemctl --failed`,
+# `journalctl -u homeai-memory-backup`.
+[Unit]
+Description=Home AI memory backup (pg_dump + restore check)
+Documentation=file://@REPO@/docs/RUNBOOK.md
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=@USER@
+Group=@USER@
+Environment=HOME=@HOME@
+WorkingDirectory=@REPO@
+EnvironmentFile=-@REPO@/.env
+ExecStart=@REPO@/bin/homeai-memory backup
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+# Dumps land in ~/.local/share/homeai/backups (HOMEAI_LTM_BACKUP_DIR).
+ReadWritePaths=@HOME@/.local/share/homeai

@@ -118,6 +118,71 @@ def test_voices_sentence():
     assert S.voices_sentence(["Lily", "Sam"]) == "New voices since your last update: Lily and Sam."
 
 
+# -- failed remote-app logins (Adam, 2026-11-12) --------------------------------------------------
+def alerts(failed=None, locked=None, unknown=0):
+    from homeai.remote.accounts import LoginAlerts
+    return LoginAlerts(failed or {}, locked or {}, unknown)
+
+
+class Logins:
+    def __init__(self, result=None, fail=False):
+        self.result, self.fail, self.asked = result if result is not None else alerts(), fail, []
+
+    def __call__(self, since, until):
+        self.asked.append((since, until))
+        if self.fail:
+            raise RuntimeError("database down")
+        return self.result
+
+
+def with_logins(tmp_path, logins):
+    return S.StatusUpdate(lambda: [], None, lambda: "Clear.", ledger=S.Ledger(tmp_path / "l.json"),
+                          clock=lambda: NOW, login_alerts=logins)
+
+
+def test_failed_logins_are_in_an_admins_update(tmp_path):
+    until = NOW + 3000
+    logins = Logins(alerts({"ani": 4, "adam": 1}, {"ani": until}, unknown=2))
+    reply = with_logins(tmp_path, logins).handle("status update", "Adam")
+    t = datetime.fromtimestamp(until).strftime("%I:%M %p").lstrip("0").lower()
+    assert reply == ("One failed app login for Adam. Four failed app logins for Ani; that login is locked "
+                     f"until {t}. Two failed app logins with a name that has no login. Clear.")
+    assert logins.asked == [(NOW - S.FIRST_LOOK_S, NOW)]
+
+
+def test_no_failed_logins_is_no_news(tmp_path):
+    assert with_logins(tmp_path, Logins()).handle("status update", "Adam") == f"{S.MSG_NO_NEWS} Clear."
+
+
+def test_a_failed_login_check_is_said_and_reported_again(tmp_path):
+    reply = with_logins(tmp_path, Logins(fail=True)).handle("status update", "Adam")
+    assert S.MSG_LOGINS_FAILED in reply and S.Ledger(tmp_path / "l.json").last("Adam") is None
+
+
+def test_others_never_hear_about_logins(tmp_path):
+    logins = Logins(alerts({"ani": 4}))
+    assert with_logins(tmp_path, logins).handle("status update", "Ani") == "Clear."
+    assert logins.asked == []
+
+
+def test_a_lock_without_new_failures_is_still_said():
+    assert S.logins_sentence(alerts(locked={"ani": NOW})).startswith("Ani's app login is locked until ")
+
+
+def test_the_real_check_reads_the_auth_audit(clean_db):
+    import psycopg
+    with psycopg.connect(clean_db, autocommit=True) as conn:
+        conn.execute("TRUNCATE auth.audit, auth.devices, auth.accounts CASCADE")
+        conn.execute("INSERT INTO auth.audit (at, username, event) VALUES (to_timestamp(%s), 'ani', 'login_failed')",
+                     (NOW - 60,))
+    assert S.db_login_alerts(clean_db)(NOW - 3600, NOW).failed == {"ani": 1}
+
+
+def test_status_update_built_with_memory_checks_logins():
+    st = S.build(None, ("Adam",), lambda: [], "Boston", "dbname=nowhere")
+    assert st._logins is not None and S.build(None, ("Adam",), lambda: [], "Boston")._logins is None
+
+
 def test_broken_ledger_starts_fresh(tmp_path):
     path = tmp_path / "l.json"
     path.write_text("{not json")

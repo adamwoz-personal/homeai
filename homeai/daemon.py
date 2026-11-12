@@ -683,7 +683,8 @@ class VoiceAssistant(VoiceIdTurns):
         from . import status_update
         from .mcp_server import DEFAULT_LOCATION
         profiles = (lambda: self.voice_id.registry.profiles()) if self.voice_id is not None else (lambda: [])
-        self.status = status_update.build(self.home, self.cfg.status.admins, profiles, DEFAULT_LOCATION)
+        dsn = self.cfg.memory.dsn if self.cfg.memory.enabled else None
+        self.status = status_update.build(self.home, self.cfg.status.admins, profiles, DEFAULT_LOCATION, dsn)
 
     def _start_doorbell(self) -> None:
         cfg = self.cfg.home

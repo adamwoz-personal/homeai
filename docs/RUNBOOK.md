@@ -250,6 +250,12 @@ admin (`HOMEAI_STATUS_ADMINS`, default Adam):
 - voice profiles created since your last update (the first time: the last week);
 - doorbell rings and motion since your last update, at most the last 24 hours,
   read from Home Assistant's history, so alerts while Jarvis was down count;
+- failed remote-app logins since your last update, by name (tries while
+  locked count too), which logins are locked and until when, and tries with a
+  name that has no login. Read from `auth.audit`; a database failure is said
+  ("I couldn't check the app logins") and reported again next time. The 4th
+  wrong password in a row locks a login for an hour (`bin/homeai-user list`
+  shows `locked_until`; `set-password` clears it);
 - the weather. Anyone else gets only the weather.
 The answer is built without the model (~0.8 s). "Last update" is per person in
 `~/.local/share/homeai/status_update.json`, moved on only after a complete update.
@@ -396,16 +402,24 @@ sheet in `~/homeai-bench/`).
 - One-time setup already done: Postgres 18 + pgvector, `adam` has
   CREATEROLE/CREATEDB, and `vector` is in `template1`.
 
-**Backups.** A user timer (`homeai-memory-backup.timer`, 03:30 daily) dumps
+**Backups.** A timer (`homeai-memory-backup.timer`, 03:30 daily) dumps
 the database to `~/.local/share/homeai/backups/` (mode 0700, last 14 kept),
-then restores it into a scratch database and checks row counts, schema
-version and forced row security. A failed check fails the unit.
+then restores it into a scratch database and checks row counts (the remote
+app's `auth.*` login tables included, since 0004), schema version and forced
+row security. A failed check fails the unit.
+
+The backup and hourly maintenance units are user units until
+`sudo tools/install_memory_system_units.sh` moves them to system units with
+User=adam, where their sandbox is actually enforced (as user units it isn't:
+`tools/probe_unit_sandbox.sh`). The switch runs one backup as proof and goes
+back on its own if that fails; `--undo` returns to the user units, `--dry-run`
+shows the steps. install.sh leaves them alone once they are system units.
 
 ```bash
 bin/homeai-memory backup [--keep N] [--no-check]   # dump now (+ restore check)
 bin/homeai-memory restore-check [FILE]             # check newest (or FILE) again
-systemctl --user list-timers homeai-memory-backup.timer
-journalctl --user -u homeai-memory-backup -n 20
+systemctl list-timers 'homeai-memory-*'            # system units (add --user before the switch)
+journalctl -u homeai-memory-backup -n 20           # (journalctl --user -u ... before the switch)
 ```
 
 Settings: `HOMEAI_LTM_BACKUP_DIR`, `HOMEAI_LTM_BACKUP_KEEP` (14). Disaster

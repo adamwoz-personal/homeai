@@ -9,8 +9,9 @@ Rules, each from the plan:
 * Passwords are Argon2id hashes, at least 12 characters, set only on this
   machine (``bin/homeai-user``). Only people with a verified voice identity
   may have one (D5): the voice decides who is eligible, it is never a factor.
-* Failed logins: a growing delay from the 3rd, a 15-minute lock at the 5th.
-  Unknown usernames get the same answers, delays and (one hash) time as wrong
+* Failed logins: the 4th wrong one in a row locks the login for an hour (Adam,
+  2026-11-12), and the status update reports failures to admins (``login_alerts``).
+  Unknown usernames get the same answers, lock and (one hash) time as wrong
   passwords, so a login attempt can't tell whether a name exists.
 * A login creates a device: 256 random bits shown to the app once, stored as
   sha256. Tokens expire after 90 days unused. A password change revokes every
@@ -34,9 +35,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 MIN_PASSWORD = 12
-LOCK_AT = 5
-LOCK_FOR = timedelta(minutes=15)
-DELAYS = {3: timedelta(seconds=2), 4: timedelta(seconds=8)}   # failures -> wait before the next try
+LOCK_AT = 4
+LOCK_FOR = timedelta(hours=1)
 TOKEN_IDLE = timedelta(days=90)
 ROLE = "homeai_auth"
 NOT_ELIGIBLE = ("household", "guest")
@@ -75,9 +75,7 @@ def token_raw(text: str) -> bytes | None:
 
 def wait_after(failures: int) -> timedelta:
     """How long the next attempt is refused after ``failures`` wrong ones in a row."""
-    if failures >= LOCK_AT:
-        return LOCK_FOR
-    return DELAYS.get(failures, timedelta(0))
+    return LOCK_FOR if failures >= LOCK_AT else timedelta(0)
 
 
 class Accounts:
@@ -267,3 +265,28 @@ class Accounts:
     @staticmethod
     def _seconds(delta: timedelta) -> int:
         return max(0, int(-(-delta.total_seconds() // 1)))
+
+
+@dataclass(frozen=True)
+class LoginAlerts:
+    """Failed app logins in a time window, for the status update. Names, counts and times only."""
+    failed: dict[str, int]                 # username -> wrong passwords + tries while locked
+    locked: dict[str, datetime]            # username -> locked until (still locked at the window's end)
+    unknown: int = 0                       # tries with a name that has no login
+
+    def __bool__(self) -> bool:
+        return bool(self.failed or self.locked or self.unknown)
+
+
+def login_alerts(connect: Callable, since: datetime, until: datetime) -> LoginAlerts:
+    """What the audit says went wrong with logins between ``since`` and ``until``."""
+    with connect() as conn:
+        conn.execute(f"SET ROLE {ROLE}")
+        failed = dict(conn.execute(
+            "SELECT username, count(*) FROM auth.audit WHERE at > %s AND at <= %s "
+            "AND event IN ('login_failed', 'login_refused') GROUP BY username", (since, until)).fetchall())
+        unknown = conn.execute("SELECT count(*) FROM auth.audit WHERE at > %s AND at <= %s "
+                               "AND event = 'login_unknown'", (since, until)).fetchone()[0]
+        locked = dict(conn.execute("SELECT username, locked_until FROM auth.accounts WHERE locked_until > %s",
+                                   (until,)).fetchall())
+    return LoginAlerts(failed, locked, unknown)

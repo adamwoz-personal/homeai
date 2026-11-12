@@ -31,7 +31,9 @@ KEEP = 14
 PREFIX = "memory-"
 # Every table with data worth keeping; health samples and finished jobs are not.
 TABLES = ("people", "identities", "episodes", "facts", "fact_sources", "fact_links",
-          "topics", "events", "schema_version")
+          "topics", "events", "schema_version",
+          # Remote app logins (0004): schema-qualified, since they aren't in ``memory``.
+          "auth.accounts", "auth.devices", "auth.audit")
 FORCED_RLS = ("episodes", "facts")
 ADMIN_ENV = {"PGOPTIONS": "-c app.scope=admin"}
 
@@ -54,7 +56,13 @@ def _run(cmd: list[str], run: Callable = subprocess.run) -> None:
 def counts(conn) -> dict[str, int]:
     """Rows per table, seen with admin scope (inside the caller's transaction)."""
     conn.execute("SELECT set_config('app.scope', 'admin', true)")
-    return {t: conn.execute(f"SELECT count(*) FROM memory.{t}").fetchone()[0] for t in TABLES}
+    out = {}
+    for t in TABLES:
+        name = t if "." in t else f"memory.{t}"
+        # A dump from before a migration has no such table: absent here and in its counts file alike.
+        if conn.execute("SELECT to_regclass(%s)", (name,)).fetchone()[0] is not None:
+            out[t] = conn.execute(f"SELECT count(*) FROM {name}").fetchone()[0]
+    return out
 
 
 def dump(dsn: str, dest: Path = DEFAULT_DIR, *, keep: int = KEEP,
@@ -130,7 +138,8 @@ def restore_check(path: Path, *, scratch: str | None = None) -> dict[str, Any]:
     finally:
         _run(["dropdb", "--if-exists", "--force", name])
     problems = [f"{t}: dump had {meta['counts'].get(t)}, restored {got.get(t)}"
-                for t in TABLES if got.get(t) != meta["counts"].get(t)]
+                for t in TABLES if got.get(t) != meta["counts"].get(t)
+                and (t in meta["counts"] or "." not in t)]   # counts files from before 0004 have no auth.*
     if version != meta["schema_version"]:
         problems.append(f"schema version {version} != {meta['schema_version']}")
     problems += [f"row security not forced on {t}" for t in FORCED_RLS if t not in forced]
