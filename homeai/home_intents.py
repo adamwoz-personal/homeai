@@ -177,7 +177,10 @@ _MUSIC_WORDS = re.compile(
     r"\b(?:music|songs?|album|playlist|radio|station|tunes|jazz|blues|rock|pop|classical|"
     r"country|hip hop|rap|folk|soul|funk|reggae|metal|indie|oldies|christmas|lofi|lo fi|"
     r"soundtrack|amazon music)\b")
-_PLAY = re.compile(r"^play (?P<what>.+?)(?: (?:in|on) the (?P<where>[a-z' ]+?))?$")
+# "Play cardiac arrest by bad suns everywhere" (2026-11-13) went to the model: no music word, and "everywhere"
+# had no "on the". "<title> by <artist>" is a song, and "everywhere" needs no preposition.
+_PLAY = re.compile(r"^play (?P<what>.+?)(?: (?:(?:in|on) the (?P<where>[a-z' ]+?)|(?:(?:in|on) )?(?P<all>everywhere)))?$")
+_BY_ARTIST = re.compile(r"^\S.* by \S")
 _MUSIC_CONTROL = (
     (re.compile(r"^(?:stop|turn off|kill) (?:the |that )?(?:music|song|radio)$"), "stop"),
     (re.compile(r"^pause (?:the |that )?(?:music|song|radio)$"), "pause"),
@@ -241,9 +244,9 @@ def parse(text: str) -> HomeIntent | None:
         if pattern.match(t):
             return HomeIntent("music", {"action": action})
     m = _PLAY.match(t)
-    if m and _MUSIC_WORDS.search(m.group("what")):
+    if m and (_MUSIC_WORDS.search(m.group("what")) or _BY_ARTIST.match(m.group("what"))):
         what = re.sub(r"\s+on amazon music$", "", m.group("what"))
-        return HomeIntent("music", {"action": "play", "request": what, "where": m.group("where")})
+        return HomeIntent("music", {"action": "play", "request": what, "where": m.group("where") or m.group("all")})
 
     for pattern in _ANNOUNCE:
         m = pattern.match(t)

@@ -160,9 +160,23 @@ def test_music():
     assert parse("next song") == HomeIntent("music", {"action": "next"})
 
 
+@pytest.mark.parametrize("text, song, where", [
+    ("play cardiac arrest by bad sons everywhere.", "cardiac arrest by bad sons", "everywhere"),
+    ("Play Cardiac Arrest by Bad Suns on everywhere", "cardiac arrest by bad suns", "everywhere"),
+    ("play cardiac arrest by bad suns", "cardiac arrest by bad suns", None),
+    ("play cardiac arrest by bad suns in the kitchen", "cardiac arrest by bad suns", "kitchen"),
+    ("play some jazz everywhere", "some jazz", "everywhere"),
+])
+def test_play_a_song_by_an_artist(text, song, where):
+    """Adam's "play cardiac arrest by bad suns everywhere" went to the chat model (2026-11-13)."""
+    assert parse(text) == HomeIntent("music", {"action": "play", "request": song, "where": where})
+
+
 @pytest.mark.parametrize("text", [
     "play a game with me",         # no music cue: the model decides
     "play twenty questions",
+    "play by the rules",
+    "play everywhere",
     "what do you think about free will",
     "what's the weather",
     "stop",                        # a dismissal, not a command

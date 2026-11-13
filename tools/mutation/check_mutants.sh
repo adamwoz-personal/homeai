@@ -1008,6 +1008,9 @@ MUTANTS=(
   "backup-drop-no-retry|homeai/memory_store/backup.py|s/            sleep(DROP_WAIT_S)/            raise/|tests/test_memory_backup.py -k dropdb"
   "backup-drop-retries-anything|homeai/memory_store/backup.py|s/if \"permission denied to terminate\" not in str(exc) or /if /|tests/test_memory_backup.py -k dropdb"
   "backup-drop-retries-forever|homeai/memory_store/backup.py|s/ or attempt == DROP_TRIES - 1:/:/|tests/test_memory_backup.py -k dropdb"
+  "music-by-artist-missed|homeai/home_intents.py|s/ or _BY_ARTIST.match(m.group(\"what\"))//|tests/test_home_intents.py -k song_by_an_artist"
+  "music-everywhere-dropped|homeai/home_intents.py|s/m.group(\"where\") or m.group(\"all\")/m.group(\"where\")/|tests/test_home_intents.py -k song_by_an_artist"
+  "music-by-anywhere|homeai/home_intents.py|s/_BY_ARTIST = re.compile(r\"^\\\\S.\* by \\\\S\")/_BY_ARTIST = re.compile(r\"by\")/|tests/test_home_intents.py -k not_home"
 )
 
 filter="${1:-}"

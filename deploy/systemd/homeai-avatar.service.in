@@ -22,6 +22,11 @@ Environment=DRI_PRIME=1
 ExecStart=@REPO@/.venv/bin/python -m homeai.avatar.app
 Restart=on-failure
 RestartSec=5
+# Sandbox, as measured 2026-11-13 (plans/SANDBOX_PLAN.md): these two are in
+# force (/proc/<pid>/status: NoNewPrivs 1, Seccomp 2). There is deliberately no
+# filesystem sandbox: ProtectHome/ProtectSystem are silently skipped in user
+# units on this box (Ubuntu's AppArmor userns rule), and the window needs the
+# display and GPU anyway. It only reads the repo and the event-bus socket.
 NoNewPrivileges=true
 LockPersonality=true
 
