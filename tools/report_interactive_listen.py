@@ -24,10 +24,13 @@ def pct(values: list[float], p: float) -> float | None:
 
 def summary(rows: list[dict]) -> dict:
     ok = [r for r in rows if r.get("ok")]
+    noise = [r for r in rows if not r.get("ok") and "minimum length" in (r.get("error") or "")]
     lag = [r["lag_s"] for r in ok]
     rtf = [r["rtf"] for r in ok]
-    return {"segments": len(rows), "failed": len(rows) - len(ok),
-            "speech_h": round(sum(float(r.get("duration") or 0) for r in rows) / 3600, 2),
+    # Noise (whisper heard no words: a door, the fridge) is not a failure, and not speech: only clips with
+    # words count toward the ~10 hours step 0 needs.
+    return {"segments": len(rows), "noise": len(noise), "failed": len(rows) - len(ok) - len(noise),
+            "speech_h": round(sum(float(r.get("duration") or 0) for r in ok) / 3600, 2),
             "lag_p50": pct(lag, 50), "lag_p95": pct(lag, 95), "lag_max": max(lag, default=None),
             "rtf_p50": pct(rtf, 50), "rtf_p95": pct(rtf, 95)}
 

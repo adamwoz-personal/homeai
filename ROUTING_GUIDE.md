@@ -2162,3 +2162,9 @@ Evidence: plans/LLM_UPGRADE_PLAN.md step 3; ~/homeai-bench/coder-eval.jsonl, kv.
   dropdb now retries that one error. A flake in code I didn't touch is still worth a cause, not a rerun.
 - Jarvis opens the webcam mic as raw ALSA `hw:3,0`, which is exclusive: no second process can listen. Anything that
   needs the room's audio (the interactive-mode recorder) has to tap Jarvis's ring buffer from inside.
+- whisper.cpp can print half a UTF-8 character; `text=True` then raised UnicodeDecodeError out of
+  `Transcriber.transcribe_file` (voice turns too). Decode with `errors="replace"`. The listen worker retried that clip
+  forever, ~13 s a pass, so room lag read 15-26 s; one poison input must be marked done, never retried.
+- Room-clip bake-off (`tools/bench_stt_room.py`, 50 real clips, CPU): s/clip small.en 1.09, medium.en 2.44,
+  Parakeet TDT 0.6B v3 0.58, large-v3-turbo 2.60. Turbo hears hard far-field lines best but invents "Thank you." /
+  "Okay." on 6 of 10 noise clips; Parakeet invents least and is fastest. No ground truth yet: Adam marks the sheet.

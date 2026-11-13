@@ -97,6 +97,17 @@ class TestTranscriberAvailability:
         assert result.ok is False
         assert result.error
 
+    def test_split_multibyte_character_is_dropped_not_raised(self, tmp_path: Path) -> None:
+        # whisper.cpp printed half a UTF-8 character on a real room clip (2026-11-13): the strict decode
+        # raised UnicodeDecodeError out of transcribe_file.
+        binary = tmp_path / "whisper-cli"
+        binary.write_text("#!/bin/sh\nprintf 'cold after midnight \\342\\200'\n")
+        binary.chmod(0o755)
+        model = tmp_path / "m.bin"
+        model.touch()
+        result = Transcriber(replace(SttConfig(), binary=binary, model=model)).transcribe_file(tmp_path / "x.wav")
+        assert result.ok is True and result.text == "cold after midnight"
+
     def test_empty_audio_rejected(self) -> None:
         result = Transcriber(SttConfig()).transcribe_audio(np.array([], dtype=np.float32), 16000)
         assert result.ok is False

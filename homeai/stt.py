@@ -55,7 +55,8 @@ def clean_transcript(raw: str) -> str:
     """Strip whisper artefacts and normalise whitespace."""
     if not raw:
         return ""
-    without_annotations = _NON_SPEECH.sub(" ", raw)
+    # U+FFFD: a multibyte character whisper split across tokens (decoded with errors="replace").
+    without_annotations = _NON_SPEECH.sub(" ", raw.replace("�", ""))
     collapsed = re.sub(r"\s+", " ", without_annotations).strip()
     # A transcript of only punctuation carries no instruction.
     if not re.search(r"[A-Za-z0-9]", collapsed):
@@ -92,7 +93,7 @@ class Transcriber:
             proc = subprocess.run(
                 cmd,
                 capture_output=True,
-                text=True,
+                encoding="utf-8", errors="replace",  # whisper can split a multibyte character
                 timeout=self._cfg.timeout_s,
             )
         except subprocess.TimeoutExpired:
@@ -126,7 +127,8 @@ class Transcriber:
                 write_wav(wav_path, audio, sample_rate)
                 proc = subprocess.run([str(self._cfg.binary), "-m", str(self._cfg.model), "-f", str(wav_path),
                                        "-t", str(self._cfg.threads), "-ml", "1", "-sow", "--no-prints"],
-                                      capture_output=True, text=True, timeout=self._cfg.timeout_s)
+                                      capture_output=True, encoding="utf-8", errors="replace",
+                                      timeout=self._cfg.timeout_s)
             except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
                 log.warning("word timings failed: %s", exc)
                 return []

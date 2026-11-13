@@ -150,6 +150,25 @@ def rows(lags, comfy):
     return [{"ok": True, "lag_s": lag, "rtf": 0.3, "duration": 3600 / len(lags), "comfy_busy": comfy} for lag in lags]
 
 
+def test_report_counts_noise_apart_from_failures_and_not_as_speech():
+    noise = {"ok": False, "error": "transcript below minimum length (likely noise)", "duration": 3600}
+    broken = {"ok": False, "error": "whisper timed out after 30s", "duration": 3600}
+    s = R.summary(rows([1, 2], False) + [noise, broken])
+    assert (s["noise"], s["failed"], s["speech_h"]) == (1, 1, 1.0)
+
+
+def test_worker_never_retries_a_clip_that_raised(tmp_path, monkeypatch, capsys):
+    class Broken:
+        def transcribe_file(self, wav):
+            raise UnicodeDecodeError("utf-8", b"\xe2", 0, 1, "unexpected end of data")
+    monkeypatch.setattr(W, "Transcriber", lambda cfg: Broken())
+    LP.art_clips.save(tmp_path, tone(1), SR, {"end": 1000.0, "duration": 1.0}, now=1000.0)
+    assert W.main(["--once", "--folder", str(tmp_path)]) == 0
+    assert W.waiting(tmp_path) == []
+    [path] = tmp_path.glob("*.json")
+    assert "unexpected end" in json.loads(path.read_text())["stt"]["error"]
+
+
 def test_report_says_go_only_when_lag_keeps_up_with_an_art_job():
     assert "GO" in R.report(rows([0.5] * 19 + [1.9], True)).splitlines()[-1]
     assert "NO-GO" in R.report(rows([0.5] * 18 + [3.0, 3.0], True))

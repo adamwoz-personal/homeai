@@ -83,6 +83,19 @@ def transcribe(path: Path, stt: Transcriber, clock=time.time) -> dict:
             ("jarvis_speaking", "mic_paused", "art_active")}, **out}
 
 
+def mark_failed(path: Path, exc: Exception) -> None:
+    """Record the failure in the clip's json so ``waiting`` skips it from now on."""
+    try:
+        meta = json.loads(path.read_text())
+    except (OSError, ValueError):
+        meta = {}
+    meta["stt"] = {"ok": False, "text": "", "error": f"worker: {exc}"[:200]}
+    try:
+        atomic_write_json(path, meta)
+    except OSError:
+        path.with_suffix(".wav").unlink(missing_ok=True)   # waiting() needs the wav, so this also stops retries
+
+
 def smoke(wav: Path) -> dict:
     """One clip through the real whisper, as if the probe had saved it now: proves the binary, model and timing."""
     import tempfile
@@ -118,6 +131,7 @@ def main(argv: list[str] | None = None) -> int:
                 row = transcribe(path, stt)
             except (OSError, ValueError) as exc:
                 print(f"skip {path.name}: {exc}", file=sys.stderr)
+                mark_failed(path, exc)       # never retry it: one bad clip stalled the queue 13 s a pass
                 continue
             log = BENCH / f"interactive-listen-{time.strftime('%Y%m%d')}.jsonl"
             with log.open("a") as f:
