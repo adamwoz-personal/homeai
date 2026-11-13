@@ -272,3 +272,13 @@ def test_avatar_profile_parsers_and_verdict():
     assert prof.gpu_kib([fd, fd, "pos: 0\nflags: 2\n", other]) == 1536 + 2560   # shared fd counted once
     assert prof.verdict({"idle_cpu_pct": 4.9, "gpu_mb": 10}) == []
     assert prof.verdict({"idle_cpu_pct": 5.1})[0].startswith("idle_cpu_pct")
+
+
+def test_inspect_bus_shows_what_a_new_client_starts_from():
+    """Proves the white-hair 'recording' event is latched for windows that connect later (2026-11-13)."""
+    ib = _load("inspect_bus")
+    snap = {"type": "snapshot", "data": {"events": {"state": {"data": {"state": "idle"}},
+                                                    "recording": {"data": {"on": True, "until": "2026-11-27"}}}}}
+    row = ib.describe(snap, 1.0)
+    assert row["state"] == "recording,state" and row["latched"]["recording"] == {"on": True, "until": "2026-11-27"}
+    assert ib.describe({"type": "recording", "data": {"on": False, "until": ""}}, 1.0)["state"] == "on=False until="

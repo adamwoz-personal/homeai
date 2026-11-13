@@ -38,6 +38,12 @@ def describe(event: dict, arrived: float) -> dict:
                    duration_ms=data.get("duration_ms"), visemes=len(data.get("visemes") or []))
     elif event.get("type") == "state":
         row["state"] = data.get("state")
+    elif event.get("type") == "snapshot":     # the latched events a new client starts from
+        row["state"] = ",".join(sorted((data.get("events") or {})))
+        row["latched"] = {k: (v.get("data") or {}) for k, v in (data.get("events") or {}).items()
+                          if k in ("state", "recording", "mode")}
+    elif event.get("type") == "recording":
+        row["state"] = f"on={data.get('on')} until={data.get('until')}"
     return row
 
 
