@@ -95,4 +95,5 @@ def test_the_prune_thread_runs_until_stop(mixed, monkeypatch):
     waits = iter([False, True])
     monkeypatch.setattr(q._stop, "wait", lambda s: next(waits))
     q._prune_art_clips()
-    assert calls == [folder, folder]
+    from homeai import listen_probe
+    assert [c for c in calls if c != listen_probe.DIR] == [folder, folder]

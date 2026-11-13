@@ -22,7 +22,8 @@ class Presence:
                  on_message=None) -> None:
         """``on_message``: client messages (text typed in the art features window), see EventBus."""
         self._bus = (bus or EventBus(socket_path or None, capabilities=("state", "utterance",
-                                                                        "caption", "speech_stop", "typed"),
+                                                                        "caption", "speech_stop", "typed",
+                                                                        "recording"),
                                      on_message=on_message)
                      ) if enabled else None
         self._lock = threading.Lock()

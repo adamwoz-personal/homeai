@@ -1211,6 +1211,47 @@ def test_start_runs_the_art_clips_prune(assistant, monkeypatch) -> None:
     assert wait_until(lambda: started == ["prune"])
 
 
+def test_listen_probe_is_off_unless_a_date_is_set(assistant, monkeypatch) -> None:
+    """Interactive mode step 0 records the room: only while HOMEAI_LISTEN_PROBE_UNTIL is set and not past."""
+    import dataclasses
+    from homeai import listen_probe
+    started = []
+    monkeypatch.setattr(listen_probe.ListenProbe, "run", lambda self, stop, shown=None: started.append(self.until))
+    assistant._start_listen_probe()
+    for until in ("2000-01-01", "2999-01-01"):
+        assistant.cfg = dataclasses.replace(
+            assistant.cfg, interactive=dataclasses.replace(assistant.cfg.interactive, probe_until=until))
+        assistant._start_listen_probe()
+    from tests.test_avatar_bus import wait_until
+    assert wait_until(lambda: started == ["2999-01-01"])
+
+
+def test_listen_probe_clips_are_pruned_even_after_the_probe_ended(assistant) -> None:
+    """The probe prunes only while on; the daemon's prune loop keeps the 30-day promise afterwards."""
+    import os
+    import time as _time
+    from homeai import listen_probe
+    listen_probe.DIR.mkdir(parents=True)
+    old = listen_probe.DIR / "old.wav"
+    old.write_bytes(b"x")
+    os.utime(old, (_time.time() - 31 * 86400,) * 2)
+    assistant._stop.set()
+    assistant._prune_art_clips()
+    assert not old.exists()
+
+
+def test_show_recording_tells_the_avatar(assistant, monkeypatch) -> None:
+    sent = []
+    monkeypatch.setattr(assistant.presence, "publish", lambda etype, data: sent.append((etype, data["on"])))
+    assistant._show_recording(True)
+    assistant._show_recording(False)
+    assert sent == [("recording", True), ("recording", False)]
+
+
+def test_listen_state_reports_what_jarvis_was_doing(assistant) -> None:
+    assert set(assistant._listen_state()) == {"jarvis_speaking", "mic_paused", "art_active"}
+
+
 # -- text typed in the art features window (ART_FEATURES_PLAN F6) ----------------
 
 class FakeArt:

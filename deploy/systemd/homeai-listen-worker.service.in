@@ -1,0 +1,21 @@
+# Template: @REPO@ and @UNTIL@ are substituted (docs/RUNBOOK.md "Listen probe").
+# Interactive mode step 0 (plans/INTERACTIVE_MODE_PLAN.md): transcribes the speech segments Jarvis saves
+# (homeai/listen_probe.py) as they arrive and times it, to learn whether a whole room can be transcribed
+# beside voice turns and art jobs. Nice=10 so a real voice turn gets the CPU first. Exits after @UNTIL@.
+# Sandbox: none in force (user units on this box skip ProtectHome/ProtectSystem, plans/SANDBOX_PLAN.md).
+[Unit]
+Description=Home AI listen probe worker (interactive mode step 0)
+Documentation=file://@REPO@/plans/INTERACTIVE_MODE_PLAN.md
+
+[Service]
+Type=simple
+WorkingDirectory=@REPO@
+Environment=PYTHONUNBUFFERED=1 PYTHONPATH=@REPO@
+ExecStart=@REPO@/.venv/bin/python tools/bench_interactive_listen.py --until @UNTIL@
+Nice=10
+Restart=on-failure
+RestartSec=30
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

@@ -47,6 +47,9 @@ MOTION_OMEGA = 6.0          # 1/s; motion eases in/out over ~0.3 s
 SWIRL_RATE = 1.6            # rad/s of extra equatorial rotation at swirl 1
 RING_PERIOD_S = 1.6
 STATUS_TEXT = {"busy": "coding mode", "mode_switching": "switching modes"}
+# While Jarvis records the room (interactive mode step 0, homeai/listen_probe.py) the hair is white and she stays
+# visually awake, so anyone in the room can see it (Adam 2026-11-13).
+RECORDING_HAIR = (0.95, 0.95, 0.95)
 
 SLEEP_S = 300.0             # Adam 2026-11-04: five idle minutes
 QUIET_SLEEP_S = 30.0        # in quiet hours, sleep again soon after any activity
@@ -137,6 +140,7 @@ class Frame:
     base_glow: float = 0.0      # glow without speech: the hair shows speech as a travelling pulse
     captions: list[tuple[str, str, float]] = field(default_factory=list)  # (who, text, alpha)
     params: dict[str, float] = field(default_factory=dict)   # face rig values (face.FaceMotion)
+    hair_colour: tuple[float, float, float] | None = None    # None: the state's colour
 
 
 @dataclass
@@ -166,6 +170,7 @@ class Scene:
     quiet: tuple[dtime, dtime] | None = None
     clock: Callable[[], dtime] = _local_time
     local_mode: str | None = None   # None | "coding" | "switching" (window-detected)
+    recording: bool = False         # the daemon is recording the room ("recording" event)
     _heard: tuple[str, float | None] | None = None
     _said: _Said | None = None
     _script: tuple[str, float | None] | None = None   # (text to read aloud, shown since)
@@ -174,6 +179,7 @@ class Scene:
     _open: float = 0.0
     _open_v: float = 0.0
     _colour: tuple[float, float, float] = LOOK["offline"][0]
+    _hair: tuple[float, float, float] = LOOK["offline"][0]
     _glow: float = LOOK["offline"][1]
     _motion: tuple[float, float, float] = (0.0, 0.0, 0.0)
     _swirl: float = 0.0
@@ -205,6 +211,8 @@ class Scene:
                 self._said.starts.append(u.start)
         elif etype == "speech_stop":
             self.utterances.clear()
+        elif etype == "recording":
+            self.recording = bool(data.get("on"))
         elif etype == "script":
             text = str(data.get("text", "")).strip()
             self._script = (text, t) if text else None
@@ -222,6 +230,7 @@ class Scene:
         self._poked = True
         if not connected:
             self.state = "offline"
+            self.recording = False          # nothing records without the daemon; the snapshot restores it
             self.utterances.clear()
 
     # ---- evaluation ----
@@ -230,7 +239,7 @@ class Scene:
             return "mode_switching"
         if not self.connected:
             return "busy" if self.local_mode == "coding" else "offline"
-        if self.state == "idle" and self._active_at is not None:
+        if self.state == "idle" and self._active_at is not None and not self.recording:
             quiet = in_quiet_hours(self.quiet, self.clock())
             limit = QUIET_SLEEP_S if quiet else self.sleep_s
             if limit > 0 and now - self._active_at >= limit:
@@ -305,6 +314,8 @@ class Scene:
         colour, glow = LOOK.get(shown, LOOK["idle"])
         k = 1 - math.exp(-COLOUR_OMEGA * dt)
         self._colour = tuple(c + (n - c) * k for c, n in zip(self._colour, colour))
+        hair = RECORDING_HAIR if self.recording else colour
+        self._hair = tuple(c + (n - c) * k for c, n in zip(self._hair, hair))
         self._glow += (glow - self._glow) * k
 
         km = 1 - math.exp(-MOTION_OMEGA * dt)
@@ -323,4 +334,5 @@ class Scene:
                      glow=min(1.0, self._glow + 0.3 * openness), spin=spin, angle=self._angle,
                      fps=self.fps(now), ripple=ripple, swirl=self._swirl,
                      ring=(now % RING_PERIOD_S) / RING_PERIOD_S if ring_amp > 0.01 else -1.0,
-                     ring_amp=ring_amp, low=low, high=high, base_glow=self._glow, captions=self.captions(now, shown))
+                     ring_amp=ring_amp, low=low, high=high, base_glow=self._glow, captions=self.captions(now, shown),
+                     hair_colour=self._hair)

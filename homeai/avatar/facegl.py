@@ -286,6 +286,11 @@ def silhouette_edge(xy: np.ndarray, y: float, side: int, band: float, centre: fl
     return float((xs[cut[0]] if len(cut) else xs[-1]) * side)
 
 
+def hair_colour(frame) -> tuple[float, float, float]:
+    """The hair's own colour (white while recording the room), else the state's."""
+    return tuple(frame.hair_colour or frame.colour)
+
+
 def lit_points(xy: np.ndarray, colour: np.ndarray) -> np.ndarray:
     """The art's points bright enough to count as the head (its black surround is stippled too)."""
     lit = np.asarray(xy)[np.asarray(colour).max(axis=1) > HAIR_LIT]
@@ -875,7 +880,7 @@ class FaceRenderer:
                                 "ring_amp": frame.ring_amp, "glow": frame.base_glow, "pulse": 1,
                                 "pulse_head": self.pulse.head, "face_h": self.geo["face_h"], "hair_wind_amount": HAIR_WIND,
                                 "pulse_per_px": HAIR_PULSE_HZ / (HAIR_PULSE_SPEED * self.geo["face_h"]),
-                                "colour": tuple(frame.colour)}.items():
+                                "colour": hair_colour(frame)}.items():
                 self._set(self.hair_prog, name, value)
             self.hair_vao.render(self._mgl.POINTS)
         teeth = teeth_visibility(verts, p.get("teeth_show", 0.0), self.geo["face_h"])

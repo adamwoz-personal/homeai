@@ -492,3 +492,10 @@ def test_iris_dots_join_their_eye_and_the_rest_keep_their_place(verts):
     assert not np.isin(idx[1], list(rig.REGIONS["iris_r"])).any()       # off the iris vertices
     np.testing.assert_allclose(verts[idx[:2, 0]] + offset[:2], xy[:2], atol=1e-3)
     assert idx[2].tolist() == [1, 2, 4] and not offset[2].any()         # nothing to do with the eyes
+
+
+def test_hair_draws_its_own_colour_when_the_scene_gives_one():
+    """White hair while Jarvis records the room (interactive mode step 0, Adam 2026-11-13)."""
+    from types import SimpleNamespace
+    assert facegl.hair_colour(SimpleNamespace(colour=(0.2, 0.7, 1.0), hair_colour=(0.95, 0.95, 0.95))) == (0.95,) * 3
+    assert facegl.hair_colour(SimpleNamespace(colour=(0.2, 0.7, 1.0), hair_colour=None)) == (0.2, 0.7, 1.0)

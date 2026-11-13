@@ -32,7 +32,7 @@ log = logging.getLogger("homeai.avatar.bus")
 
 PROTOCOL_VERSION = 1
 # Latest-wins types: a client only ever needs the newest one.
-COALESCED = frozenset({"state", "mode", "timer", "art", "script"})
+COALESCED = frozenset({"state", "mode", "timer", "art", "script", "recording"})
 MAX_QUEUE = 256
 SLOW_S = 2.0
 MAX_BACKLOG_BYTES = 4 << 20

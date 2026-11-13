@@ -431,6 +431,15 @@ class ArtConfig:
 
 
 @dataclass(frozen=True)
+class InteractiveConfig:
+    """Interactive mode (plans/INTERACTIVE_MODE_PLAN.md)."""
+
+    # Step 0: save every stretch of speech the mic hears until this date (homeai/listen_probe.py), each clip
+    # deleted 30 days after it was made. Empty: off.
+    probe_until: str = field(default_factory=lambda: _env_str("HOMEAI_LISTEN_PROBE_UNTIL", ""))
+
+
+@dataclass(frozen=True)
 class StatusConfig:
     """'Status update' (homeai/status_update.py). Admins hear new voices and doorbell alerts; others the weather."""
 
@@ -452,6 +461,7 @@ class Config:
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     avatar: AvatarConfig = field(default_factory=AvatarConfig)
     art: ArtConfig = field(default_factory=ArtConfig)
+    interactive: InteractiveConfig = field(default_factory=InteractiveConfig)
     status: StatusConfig = field(default_factory=StatusConfig)
 
     def validation_errors(self) -> list[str]:

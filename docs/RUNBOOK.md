@@ -537,6 +537,22 @@ homeai-mode memory purge            # delete saved conversations (asks first; --
 - Test without touching live data: `tools/test_memory_privacy_sandbox.sh`
   (runs against a copy of `~/.zeroclaw`).
 
+## Listen probe (interactive mode step 0; white hair = recording)
+
+While `HOMEAI_LISTEN_PROBE_UNTIL=YYYY-MM-DD` is set in `.env` (and not past), Jarvis saves every stretch of
+speech the mic hears to `~/.local/share/homeai/listen-probe/` (wav + json; audio deleted after 30 days, also
+after the probe ends). The avatar's hair is white and she doesn't doze off while it records. Jarvis holds the
+mic exclusively, so this is a thread inside Jarvis (`homeai/listen_probe.py`), not a second process.
+
+- Worker: `homeai-listen-worker.service` (user unit, from `deploy/systemd/homeai-listen-worker.service.in`)
+  transcribes each segment at Nice=10 and times it; exits after the date.
+  `journalctl --user -u homeai-listen-worker -f` shows each line as it's heard.
+- Report: `.venv/bin/python tools/report_interactive_listen.py` (speech hours, lag p50/p95, GO/NO-GO).
+- Stop early: remove the line from `.env`, restart Jarvis, `systemctl --user disable --now homeai-listen-worker`.
+- Delete an hour or a day: delete the matching `YYYYMMDD-HHMMSS-*.wav/.json` files in the folder.
+- Smoke test of the worker: `PYTHONPATH=. .venv/bin/python tools/bench_interactive_listen.py --smoke some.wav`.
+- Hair look: `.venv/bin/python tools/avatar/probe_recording_hair.py` (off and on, side by side).
+
 ## Avatar window (the Jarvis sphere)
 
 `homeai-avatar.service` starts with the desktop session (XWayland, iGPU via

@@ -854,6 +854,8 @@ class VoiceAssistant(VoiceIdTurns):
             try:
                 for folder in (art_clips.DIR.iterdir() if art_clips.DIR.is_dir() else ()):
                     art_clips.prune(folder)
+                from . import listen_probe
+                art_clips.prune(listen_probe.DIR, days=listen_probe.KEEP_DAYS)   # also after the probe ended
             except OSError:
                 log.warning("pruning art clips failed", exc_info=True)
             if self._stop.wait(art_clips.PRUNE_EVERY_S):
@@ -965,6 +967,26 @@ class VoiceAssistant(VoiceIdTurns):
         if self.art is not None:
             self.art.adopt()        # art mode left on from before a restart still idles back to voice
         threading.Thread(target=self._prune_art_clips, name="art-clips", daemon=True).start()
+        self._start_listen_probe()
+
+    def _start_listen_probe(self) -> None:
+        """Interactive mode step 0: keep the room's speech segments until the configured date."""
+        from . import art_clips, listen_probe
+        until = self.cfg.interactive.probe_until
+        if not art_clips.recording_on(until):
+            return
+        probe = listen_probe.ListenProbe(self.mic.buffer, self.cfg.audio.sample_rate, until,
+                                         state=self._listen_state, frame=self.cfg.audio.block_size)
+        threading.Thread(target=probe.run, args=(self._stop, self._show_recording), name="listen-probe",
+                         daemon=True).start()
+
+    def _show_recording(self, on: bool) -> None:
+        self.presence.publish("recording", {"on": on, "until": self.cfg.interactive.probe_until if on else ""})
+
+    def _listen_state(self) -> dict:
+        """What Jarvis was doing when a segment ended (the worker adds CPU, GPU and ComfyUI)."""
+        return {"jarvis_speaking": bool(self.tts.speaking), "mic_paused": bool(self.mic.paused),
+                "art_active": bool(getattr(self.art, "active", False))}
 
     def start(self) -> bool:
         problems = self.preflight()

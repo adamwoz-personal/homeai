@@ -2160,3 +2160,5 @@ Evidence: plans/LLM_UPGRADE_PLAN.md step 3; ~/homeai-bench/coder-eval.jsonl, kv.
   Look at what an integration exposes before driving another device by text. `tools/ha/inspect_light_history.py`.
 - A flaky memory-backup test (3 of 4 runs) was dropdb --force failing on a server worker still in the fresh scratch db;
   dropdb now retries that one error. A flake in code I didn't touch is still worth a cause, not a rerun.
+- Jarvis opens the webcam mic as raw ALSA `hw:3,0`, which is exclusive: no second process can listen. Anything that
+  needs the room's audio (the interactive-mode recorder) has to tap Jarvis's ring buffer from inside.

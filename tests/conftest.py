@@ -27,6 +27,9 @@ def _isolated_home(tmp_path, monkeypatch):
     # Art-mode clips (homeai/art_clips.py): never into the real ~/.local/share (a run wrote 5 there, 2026-11-13).
     import homeai.art_clips
     monkeypatch.setattr(homeai.art_clips, "DIR", tmp_path / "art-clips")
+    import homeai.listen_probe
+    monkeypatch.setattr(homeai.listen_probe, "DIR", tmp_path / "listen-probe")
+    monkeypatch.delenv("HOMEAI_LISTEN_PROBE_UNTIL", raising=False)
     monkeypatch.setenv("HOMEAI_HA_ENV", str(tmp_path / "no-ha.env"))
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "run"))
     monkeypatch.delenv("HA_TOKEN", raising=False)

@@ -487,3 +487,38 @@ def test_script_arrives_in_a_snapshot():
 def test_the_window_watches_the_lock_every_switcher_takes():
     from homeai import gpu_mode
     assert app.mode_paths()[1] == gpu_mode.mode_lock_path()
+
+
+# -- recording the room (interactive mode step 0): white hair, visually awake (Adam 2026-11-13) ----------
+
+def test_recording_turns_the_hair_white_and_leaves_the_rest_as_the_state():
+    from homeai.avatar.scene import LOOK, RECORDING_HAIR
+    s = idle_scene()
+    s.apply({"type": "recording", "data": {"on": True}})
+    f = [s.frame(t / 10) for t in range(1, 30)][-1]
+    assert f.hair_colour == pytest.approx(RECORDING_HAIR, abs=0.02)
+    assert f.colour == pytest.approx(LOOK["idle"][0], abs=0.02)
+    s.apply({"type": "recording", "data": {"on": False}})
+    f = [s.frame(3 + t / 10) for t in range(1, 30)][-1]
+    assert f.hair_colour == pytest.approx(LOOK["idle"][0], abs=0.02)
+
+
+def test_recording_never_sleeps_not_even_in_quiet_hours():
+    from datetime import time as dtime
+    s = idle_scene(sleep_s=300.0, quiet=(dtime(22, 0), dtime(7, 0)), clock=lambda: dtime(23, 30))
+    s.apply({"type": "recording", "data": {"on": True}})
+    s.frame(1.0)
+    assert s.frame(10_000.0).state == "idle"
+    s.apply({"type": "recording", "data": {"on": False}})
+    s.frame(20_000.0)                                  # the event woke it; quiet hours count from here
+    assert s.frame(20_031.0).state == "sleep"
+
+
+def test_recording_comes_back_with_the_snapshot_after_a_reconnect():
+    s = idle_scene()
+    s.apply({"type": "recording", "data": {"on": True}})
+    s.set_connected(False)
+    assert not s.recording
+    s.set_connected(True)
+    s.apply({"type": "snapshot", "data": {"events": {"recording": {"type": "recording", "data": {"on": True}}}}})
+    assert s.recording
