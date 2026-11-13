@@ -1040,6 +1040,7 @@ MUTANTS=(
   "rec-never-cleared|homeai/listen_probe.py|s/^                shown(False)$/                pass/|tests/test_listen_probe.py -k shows_recording"
   "rec-daemon-silent|homeai/daemon.py|s/        self.presence.publish(\"recording\", /        (lambda *a: None)(\"recording\", /|tests/test_daemon.py -k show_recording"
   "lp-worker-forever|tools/bench_interactive_listen.py|s/ or (args.until and not art_clips.recording_on(args.until) and not waiting(args.folder))://|tests/test_listen_probe.py -k exits_after"
+  "inspect-bus-no-snapshot|tools/avatar/inspect_bus.py|s/    elif event.get(\"type\") == \"snapshot\":/    elif False:/|tests/test_avatar_spikes.py -k new_client"
 )
 
 filter="${1:-}"
