@@ -55,7 +55,18 @@ def default_states():
     ]
     for slug, name, _model, state in ECHOS:
         states += _echo_entities(slug, name, state)
-    return states
+    return states + routine_buttons()
+
+
+# Alexa routines as alexa_devices shows them in HA (2026-11-13): one button each, named "<account> <phrase>".
+ROUTINE_BUTTONS = [("alexa_red_alert", "Alexa, red alert"), ("all_clear", "all clear"),
+                   ("condition_yellow", "condition yellow"), ("it_s_movie_time", "it's movie time"),
+                   ("its_business_time", "its business time"), ("morning", "morning")]
+
+
+def routine_buttons():
+    return [{"entity_id": f"button.angrybob_gmail_com_{slug}", "state": "unknown",
+             "attributes": {"friendly_name": f"angrybob@gmail.com {name}"}} for slug, name in ROUTINE_BUTTONS]
 
 
 def default_devices():

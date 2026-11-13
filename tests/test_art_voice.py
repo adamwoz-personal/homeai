@@ -662,3 +662,14 @@ def test_misheard_art_mode_still_enters(said):
 @pytest.mark.parametrize("said", ["art made by kids is great", "what's the weather"])
 def test_not_art_mode(said):
     assert not AV.is_enter(said)
+
+
+@pytest.mark.parametrize("said", ["all clear", "Hey Jarvis, red alert.", "run the movie time routine"])
+def test_routines_in_art_mode_go_to_jarvis(said):
+    """'All clear' in art mode went to the picture patcher, not the house (2026-11-13)."""
+    assert AV.for_jarvis(said, "a dragon")
+
+
+@pytest.mark.parametrize("said", ["clear it", "make it red", "add a clear sky"])
+def test_picture_words_with_clear_stay_in_art_mode(said):
+    assert not AV.for_jarvis(said, "a dragon")

@@ -100,3 +100,25 @@ def test_more_ways_out_of_art_mode(said):
                                   "stop the drawing", "cancel the picture", "end the picture"])
 def test_not_a_way_out(said):
     assert (parse(said) or Intent("none")).kind != "leave"
+
+
+# Adam's misses on 2026-11-12: "clear." (meant a new picture), "go to the last image" (the one before),
+# typed "create 4" (added a feature called 4) and typed "agin".
+@pytest.mark.parametrize("said, intent", [
+    ("clear.", Intent("fresh")), ("Hey Jarvis, clear it", Intent("fresh")), ("clear the picture", Intent("fresh")),
+    ("wipe the canvas", Intent("fresh")), ("start over", Intent("fresh")), ("start from scratch", Intent("fresh")),
+    ("Okay Jarvis, go to the last image.", Intent("back", n=1)), ("go back to the previous picture", Intent("back", n=1)),
+    ("the previous one", Intent("back", n=1)), ("switch to the last drawing", Intent("back", n=1)),
+    ("create 4", Intent("variations", n=4)), ("generate three", Intent("variations", n=3)),
+    ("agin", Intent("again")), ("try agian", Intent("again")),
+])
+def test_misses_from_the_twelfth(said, intent):
+    assert parse(said) == intent
+
+
+@pytest.mark.parametrize("said, kind", [
+    ("the last one", "select"), ("show me the last one", "select"), ("all clear", None),
+    ("clear the sky", None), ("create a castle", "new"), ("make the clearing bigger", "edit"),
+])
+def test_near_the_new_phrases(said, kind):
+    assert (parse(said) or Intent("none")).kind == (kind or "none")

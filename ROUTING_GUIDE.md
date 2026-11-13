@@ -4,7 +4,7 @@
 with Claude (paid). Updated as evidence accumulates. Every rule here comes from an
 observed outcome on this box, not from theory.
 
-Last updated: 2026-11-12
+Last updated: 2026-11-13
 
 ---
 
@@ -2153,3 +2153,10 @@ Evidence: plans/LLM_UPGRADE_PLAN.md step 3; ~/homeai-bench/coder-eval.jsonl, kv.
   split, which ran on 11 of ~24 art turns that evening and mostly cut Adam's own final word ("dragon.",
   "karma.", "mode."). The synthetic bench (99/99 owner words kept) didn't predict this; the household did.
   A way out must not depend on a filter that can eat words.
+
+2026-11-13:
+- "All clear" failed twice (11-06, 11-11) because Jarvis typed the phrase to an Echo: HA history showed no light change
+  after 06:24 on 11-11. alexa_devices already exposed every routine as a `button.` entity; Jarvis now presses it.
+  Look at what an integration exposes before driving another device by text. `tools/ha/inspect_light_history.py`.
+- A flaky memory-backup test (3 of 4 runs) was dropdb --force failing on a server worker still in the fresh scratch db;
+  dropdb now retries that one error. A flake in code I didn't touch is still worth a cause, not a rerun.

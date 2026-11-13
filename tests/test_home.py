@@ -248,7 +248,40 @@ def test_find_routine_rejects(text):
     assert find_routine(text) is None
 
 
-def test_routine_sends_only_the_fixed_phrase_to_the_kitchen_echo(home, ha):
+@pytest.mark.parametrize("text,button", [
+    ("all clear", "button.angrybob_gmail_com_all_clear"),
+    ("run the movie time routine", "button.angrybob_gmail_com_it_s_movie_time"),
+    ("it's business time", "button.angrybob_gmail_com_its_business_time"),
+    ("red alert", "button.angrybob_gmail_com_alexa_red_alert"),
+    ("lights back to normal", "button.angrybob_gmail_com_all_clear"),
+])
+def test_routine_presses_its_home_assistant_button_not_typed_text(home, ha, text, button):
+    """Typed 'all clear' left the lights dim twice (2026-11-06, 2026-11-11); the button runs the routine."""
+    home.routine(text)
+    assert ha.calls == [("button", "press", {"entity_id": button})]
+    assert ha.alexa_commands() == []
+
+
+def test_routine_button_is_never_a_restart_button_or_a_longer_name(home, ha):
+    ha._states.insert(0, {"entity_id": "sensor.angrybob_gmail_com_all_clear", "state": "unknown",
+                          "attributes": {"friendly_name": "angrybob@gmail.com all clear"}})
+    ha._states += [{"entity_id": "button.kitchen_alexa_restart", "state": "unknown",
+                    "attributes": {"friendly_name": "Kitchen alexa Restart"}},
+                   {"entity_id": "button.x_all_clear_now", "state": "unknown",
+                    "attributes": {"friendly_name": "x all clear now"}}]
+    assert home.routine_button("all clear") == "button.angrybob_gmail_com_all_clear"
+    assert home.routine_button("red alert") == "button.angrybob_gmail_com_alexa_red_alert"
+    ha._states[:] = [s for s in ha._states if s["entity_id"] != "button.angrybob_gmail_com_all_clear"]
+    assert home.routine_button("all clear") is None
+
+
+def test_unavailable_routine_button_is_skipped(home, ha):
+    ha.set_state("button.angrybob_gmail_com_all_clear", "unavailable")
+    assert home.routine_button("all clear") is None
+
+
+def test_routine_without_a_button_sends_only_the_fixed_phrase_to_the_kitchen_echo(home, ha):
+    ha._states[:] = [s for s in ha._states if not s["entity_id"].startswith("button.")]
     assert home.routine("run the movie time routine") == "It's movie time."
     assert ha.alexa_commands() == [("dev-kitchen_alexa", "it's movie time")]
 

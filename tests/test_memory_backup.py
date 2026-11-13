@@ -9,6 +9,7 @@ import os
 import shutil
 import stat
 import subprocess
+import types
 from datetime import datetime, timedelta
 
 import pytest
@@ -206,3 +207,36 @@ def test_cli_backup_reports_failure(mem_store, pg_dsn, tmp_path, monkeypatch):
     monkeypatch.setattr(backup, "dump", bad)
     code, _ = make_cli(pg_dsn, tmp_path, enabled=True)("backup", "--dir", str(tmp_path))
     assert code == 1
+
+
+class _Run:
+    """subprocess.run stand-in: fails with ``errors`` in turn, then succeeds."""
+
+    def __init__(self, errors):
+        self.errors, self.calls = list(errors), 0
+
+    def __call__(self, cmd, **kw):
+        self.calls += 1
+        err = self.errors.pop(0) if self.errors else ""
+        return types.SimpleNamespace(returncode=1 if err else 0, stderr=err)
+
+
+BUSY = "dropdb: error: database removal failed: ERROR:  permission denied to terminate process"
+
+
+def test_dropdb_waits_out_a_server_worker_still_connected():
+    """Right after a restore a server worker can hold the scratch database (2026-11-13, 3 of 4 runs failed)."""
+    run, slept = _Run([BUSY, BUSY]), []
+    backup._dropdb("scratch", run, slept.append)
+    assert run.calls == 3 and slept == [backup.DROP_WAIT_S] * 2
+
+
+def test_dropdb_gives_up_in_the_end_and_never_retries_other_errors():
+    run = _Run([BUSY] * backup.DROP_TRIES)
+    with pytest.raises(backup.BackupError, match="terminate"):
+        backup._dropdb("scratch", run, lambda s: None)
+    assert run.calls == backup.DROP_TRIES
+    run = _Run(["dropdb: error: could not connect"])
+    with pytest.raises(backup.BackupError, match="connect"):
+        backup._dropdb("scratch", run, lambda s: None)
+    assert run.calls == 1

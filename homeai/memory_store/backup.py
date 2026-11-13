@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
@@ -51,6 +52,23 @@ def _run(cmd: list[str], run: Callable = subprocess.run) -> None:
     if r.returncode:
         tail = (r.stderr or "").strip().splitlines()[-3:]
         raise BackupError(f"{cmd[0]} failed: {' / '.join(tail) or f'exit {r.returncode}'}")
+
+
+DROP_TRIES = 10
+DROP_WAIT_S = 0.5
+
+
+def _dropdb(name: str, run: Callable = subprocess.run, sleep: Callable[[float], None] = time.sleep) -> None:
+    """dropdb --force, retried: right after a restore a server background worker (not ours to terminate) can still
+    be connected, and dropdb fails with "permission denied to terminate process" (3 of 4 test runs, 2026-11-13)."""
+    for attempt in range(DROP_TRIES):
+        try:
+            _run(["dropdb", "--if-exists", "--force", name], run)
+            return
+        except BackupError as exc:
+            if "permission denied to terminate" not in str(exc) or attempt == DROP_TRIES - 1:
+                raise
+            sleep(DROP_WAIT_S)
 
 
 def counts(conn) -> dict[str, int]:
@@ -124,7 +142,7 @@ def restore_check(path: Path, *, scratch: str | None = None) -> dict[str, Any]:
     except (OSError, ValueError) as exc:
         raise BackupError(f"no readable counts beside {path.name}: {exc}") from exc
     name = scratch or f"homeai_restore_{os.getpid()}"
-    _run(["dropdb", "--if-exists", "--force", name])
+    _dropdb(name)
     _run(["createdb", name])
     try:
         _run(["pg_restore", "--exit-on-error", "--single-transaction", "--no-comments", f"--dbname={name}",
@@ -136,7 +154,7 @@ def restore_check(path: Path, *, scratch: str | None = None) -> dict[str, Any]:
                 "SELECT relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace"
                 " WHERE n.nspname = 'memory' AND c.relforcerowsecurity")}
     finally:
-        _run(["dropdb", "--if-exists", "--force", name])
+        _dropdb(name)
     problems = [f"{t}: dump had {meta['counts'].get(t)}, restored {got.get(t)}"
                 for t in TABLES if got.get(t) != meta["counts"].get(t)
                 and (t in meta["counts"] or "." not in t)]   # counts files from before 0004 have no auth.*

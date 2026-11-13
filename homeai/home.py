@@ -387,8 +387,27 @@ class Home:
         if phrase is None:
             raise HomeError(f"I don't know a routine called {name or 'that'}. "
                             f"I know {join_names(list(ROUTINES))}.")
-        self._alexa(self.echo(None), phrase)
+        button = self.routine_button(phrase)
+        if button:
+            self.client.call_service("button", "press", {"entity_id": button})
+        else:
+            log.warning("no Home Assistant button for routine %r; sending it to Alexa as text", phrase)
+            self._alexa(self.echo(None), phrase)
         return f"{_capital(phrase)}."
+
+    def routine_button(self, phrase: str) -> str | None:
+        """The alexa_devices button that runs routine ``phrase`` ('angrybob@gmail.com all clear'), or None.
+        Typed text didn't run 'all clear' (2026-11-06, 2026-11-11: no light changed); pressing the button runs
+        the routine itself."""
+        want = routine_key(phrase).split()
+        for state in self.client.states():
+            eid = state.get("entity_id", "")
+            if not eid.startswith("button.") or state.get("state") == "unavailable":
+                continue
+            words = routine_key((state.get("attributes") or {}).get("friendly_name", "")).split()
+            if words[-len(want):] == want:
+                return eid
+        return None
 
     def goodnight(self) -> str:
         """Bedtime: every light off. Lights that are unreachable are not an error."""

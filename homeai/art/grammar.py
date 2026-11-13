@@ -70,11 +70,20 @@ PATTERNS: list[tuple[str, re.Pattern]] = [(kind, re.compile(rx)) for kind, rx in
               r"(art( mode)?|(drawing|draw|picture) mode)|((go|switch|change) )?(back )?to (voice|normal|talking) mode|"
               r"voice mode|(i'?m|we'?re|i am|we are) (all )?(done|finished)( drawing| with (the )?(drawing|pictures?|art))?|"
               r"stop drawing|no more drawing|that'?s enough drawing)$"),
-    ("again", r"^((try )?again|another one|one more|do it again|draw it again|redo it|re-?roll)$"),
-    ("variations", rf"^(give me|show me|draw|make)( me)? {NUM}( more)?( options| versions| variations| ones)?$"),
+    # Typed "agin" (2026-11-12) missed: the common misspellings of again count.
+    ("again", r"^((try )?(again|agin|agian|agan)|another one|one more|do it again|draw it again|redo it|re-?roll)$"),
+    # Typed "create 4" added a feature called "4" (2026-11-12).
+    ("variations", rf"^(give me|show me|draw|make|create|generate)( me)? {NUM}( more)?( options| versions| variations| ones)?$"),
     ("variations", r"^(a few|some) (options|versions|variations)$"),
     ("back", rf"^(go |step )?back( {NUM})?( steps?)?$"),
     ("back", r"^undo( that)?$"),
+    # "Go to the last image" (2026-11-12) meant the picture before this one.
+    # ("The last one" alone stays "select": the last of the numbered options.)
+    ("back", r"^(go |switch |change )(back )?to (the )?(last|previous) (one|picture|image|drawing)$"),
+    ("back", r"^((go )?back to )?(the )?previous (one|picture|image|drawing)$"),
+    # "Clear." (2026-11-12) meant start a new picture.
+    ("fresh", r"^(clear|wipe|erase)( (it|that|this|everything|the (picture|image|drawing|canvas|screen)))?$"),
+    ("fresh", r"^start (over|fresh|from scratch)$"),
     ("select", r"^(i like |pick |use |show me |go with |let'?s (see|go with|have) )?(the )?"
                r"(first|second|third|fourth|fifth|sixth|seventh|eighth|last) "
                r"(one|picture|image|option|try)$"),

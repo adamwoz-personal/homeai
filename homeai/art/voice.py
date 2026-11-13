@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Callable
 
 from homeai.art import grammar, policy
+from homeai.home import find_routine
 from homeai.fsutil import atomic_copy, atomic_write_json
 
 log = logging.getLogger("homeai.art.voice")
@@ -85,8 +86,8 @@ COMMON = {"the", "and", "with", "its", "his", "her", "for", "are", "was", "that"
 def for_jarvis(text: str, subject: str = "") -> bool:
     """In art mode: house talk, or a question that isn't about the picture (nor names what's in it)."""
     said = grammar._tidy(text)
-    if grammar.HOUSE.search(said):
-        return True
+    if grammar.HOUSE.search(said) or find_routine(said):
+        return True                         # "all clear" in art mode went to the picture (2026-11-13)
     if not QUESTION.match(said) or ABOUT_PICTURE.search(said):
         return False
     words = set(re.findall(r"[a-z]{3,}", subject.lower())) - COMMON

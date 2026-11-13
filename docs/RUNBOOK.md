@@ -179,6 +179,8 @@ homeai-mode voice     # ComfyUI stopped, coder back (~7 s warm, ~27 s cold)
   goes to Jarvis. In art mode, house talk ("turn off the lights") still works.
 - In art mode: "make it night time", "again", "give me four", "the second one",
   "go back", "keep that", "what prompt made this", "cancel that".
+  Also: "clear" / "start over" (new picture), "go to the last image" / "the previous one" (back one),
+  "create 4" (four options), "agin" (again).
   Looking back (F7): "show me the last four" (up to 8 pictures from this session, numbered; say a number to
   pick one, even from an earlier picture), "compare" (before and now side by side), "compare two and four",
   "upscale it" / "print size" (a 2x copy, ~3 s, saved as `<project>-<node>-2x.png`; the original stays
@@ -693,7 +695,10 @@ agent, and keep the garage out of Assist exposure.
   `garage-hardware`.
 - Alexa routines: "all clear", "red alert", "condition yellow", "it's
   movie time", "it's business time" ("run red alert", "movie time" also
-  work). Jarvis asks the default Echo to run them by phrase; the routines
+  work). Jarvis presses the routine's Home Assistant button
+  (`button.<account>_<phrase>`, from alexa_devices); typed text to the Echo
+  is only the fallback when no button exists, and it did not run "all clear"
+  (2026-11-06, 2026-11-11). They also work in art mode. The routines
   themselves live in the Alexa app. Add or rename one: edit `ROUTINES` in
   `homeai/home.py` (the exact phrase Alexa answers to), run the tests,
   restart homeai and zeroclaw (`home.ROUTINES`, matched from the words; the voice model has no routine, lights or music tool).
