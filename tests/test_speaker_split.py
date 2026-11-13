@@ -59,6 +59,8 @@ class Art:
 def mixed(voiced, monkeypatch):
     """Two seconds of Adam (audio 0.1), then two of someone else (0.5); windows straddling both score in between."""
     from tests.test_daemon import ADAM, STRANGER, _unit
+    import dataclasses
+    voiced.cfg = dataclasses.replace(voiced.cfg, art=dataclasses.replace(voiced.cfg.art, split=True))
     voiced.art = Art()
     voiced._speak = lambda text: 1.0
     voiced.transcript = MagicMock()
@@ -112,3 +114,15 @@ def test_leaving_is_never_split(mixed):
     q.stt.words.return_value = [(0.2, 0.6, "cancel"), (0.6, 1.0, "art"), (2.6, 3.0, "mode.")]
     _art_turn(q, audio, "cancel art mode.")
     assert q.art.seen == [("cancel art mode.", False)] and not q.stt.words.called
+
+
+
+def test_the_split_is_off_by_default(mixed):
+    """Adam 2026-11-13: off until measured; it ate his last word on most sentences it touched."""
+    import dataclasses
+    from homeai.config import ArtConfig
+    q, audio = mixed
+    assert ArtConfig().split is False
+    q.cfg = dataclasses.replace(q.cfg, art=dataclasses.replace(q.cfg.art, split=False))
+    _art_turn(q, audio, "again. It has two")
+    assert q.art.seen == [("again. It has two", False)] and not q.stt.words.called

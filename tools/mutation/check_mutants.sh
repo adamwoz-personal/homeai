@@ -980,6 +980,18 @@ MUTANTS=(
   "art-leave-done-missed|homeai/art/grammar.py|s/(all )?(done/(all )?(dXne/|tests/test_art_grammar.py -k more_ways_out"
   "art-leave-split|homeai/daemon.py|s/ and not _is_leave(text):/:/|tests/test_speaker_split.py -k leaving_is_never_split"
   "art-leave-never-recognised|homeai/daemon.py|s/    return intent is not None and intent.kind == \"leave\"/    return False/|tests/test_speaker_split.py -k leaving_is_never_split"
+  "art-split-on-by-default|homeai/config.py|s/_env_bool(\"HOMEAI_ART_SPLIT\", False)/_env_bool(\"HOMEAI_ART_SPLIT\", True)/|tests/test_speaker_split.py -k off_by_default"
+  "art-split-ignores-config|homeai/daemon.py|s/ and self.cfg.art.split and not _is_leave(text):/ and not _is_leave(text):/|tests/test_speaker_split.py -k off_by_default"
+  "art-clips-not-kept|homeai/daemon.py|s/            self._keep_art_clip(owner, audio, text, ident, other)/            pass/|tests/test_art_clips.py -k adult_s_art_turn"
+  "art-clips-forever|homeai/art_clips.py|s/    return (today or dt.date.today()) <= last/    return True/|tests/test_art_clips.py -k window"
+  "art-clips-date-ignored|homeai/daemon.py|s/ or not art_clips.recording_on(self.cfg.art.keep_clips_until):/:/|tests/test_art_clips.py -k after_the_date"
+  "art-clips-children-kept|homeai/daemon.py|s/            return                                    # never a child/            pass                                    # never a child/|tests/test_art_clips.py -k child_s_session"
+  "art-clips-never-pruned|homeai/art_clips.py|s/            if now - path.stat().st_mtime > days \* 86400:/            if False:/|tests/test_art_clips.py -k prune_deletes"
+  "art-clips-prune-all|homeai/art_clips.py|s/            if now - path.stat().st_mtime > days \* 86400:/            if True:/|tests/test_art_clips.py -k prune_deletes"
+  "art-clips-prune-other-files|homeai/art_clips.py|s/        if path.suffix not in (\".wav\", \".json\"):/        if False:/|tests/test_art_clips.py -k prune_deletes"
+  "art-clips-failure-stops-turn|homeai/daemon.py|s/            log.warning(\"keeping the art clip failed\", exc_info=True)/            raise/|tests/test_art_clips.py -k clip_failure"
+  "art-clips-prune-thread-once|homeai/daemon.py|s/            if self._stop.wait(art_clips.PRUNE_EVERY_S):/            if True:/|tests/test_art_clips.py -k prune_thread"
+  "art-clips-prune-not-started|homeai/daemon.py|s/        threading.Thread(target=self._prune_art_clips, name=\"art-clips\", daemon=True).start()/        pass/|tests/test_daemon.py -k runs_the_art_clips_prune"
 )
 
 filter="${1:-}"

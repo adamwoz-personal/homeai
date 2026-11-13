@@ -1199,6 +1199,18 @@ def test_start_adopts_art_mode_left_on(assistant, monkeypatch) -> None:
     assert calls == ["adopt"]
 
 
+def test_start_runs_the_art_clips_prune(assistant, monkeypatch) -> None:
+    """Week-old art-mode recordings are deleted even if art mode is never used again (Adam 2026-11-13)."""
+    started = []
+    for name in ("_start_voice_id", "_start_home", "_start_status"):
+        monkeypatch.setattr(assistant, name, lambda: None)
+    monkeypatch.setattr(assistant, "_prune_art_clips", lambda: started.append("prune"))
+    assistant.art = None
+    assistant._start_services()
+    from tests.test_avatar_bus import wait_until
+    assert wait_until(lambda: started == ["prune"])
+
+
 # -- text typed in the art features window (ART_FEATURES_PLAN F6) ----------------
 
 class FakeArt:

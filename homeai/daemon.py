@@ -766,8 +766,9 @@ class VoiceAssistant(VoiceIdTurns):
             other, _ = self.voice_id.is_someone_else(owner, ident, emb)
             # "Cancel art mode" lost "mode." to the split on 2026-11-12 and art mode stayed on: a way out is
             # never split (leaving is harmless; whoever says it, they can say "let's draw" again).
-            if not other and audio is not None and not _is_leave(text):
+            if not other and audio is not None and self.cfg.art.split and not _is_leave(text):
                 text, other = self._owner_words(owner, audio, text)
+            self._keep_art_clip(owner, audio, text, ident, other)
         try:
             reply = self.art.handle(text, speaker, other=other)
         except Exception:  # noqa: BLE001 - a broken art mode must not take Jarvis down
@@ -828,6 +829,35 @@ class VoiceAssistant(VoiceIdTurns):
                 reply = MSG_TYPED_NOT_ART
             log.info("typed art: %r -> %r", text, reply)
         self.presence.publish("typed_reply", {"text": reply})
+
+    def _keep_art_clip(self, owner: str, audio, text: str, ident, other: bool) -> None:
+        """An adult owner's art-mode recording, kept for a week to measure the split (homeai/art_clips.py)."""
+        from . import art_clips
+        if audio is None or not art_clips.recording_on(self.cfg.art.keep_clips_until):
+            return
+        if owner.lower() not in {a.lower() for a in self.cfg.art.adults}:
+            return                                    # never a child's session
+        try:
+            meta = {"owner": owner, "heard": text, "speaker": getattr(ident, "name", None),
+                    "score": getattr(ident, "score", None), "best": getattr(ident, "best", None),
+                    "margin": getattr(ident, "margin", None), "someone_else": bool(other),
+                    "split_on": bool(self.cfg.art.split)}
+            art_clips.save(art_clips.DIR / owner.lower(), audio, self.cfg.audio.sample_rate, meta)
+            art_clips.prune(art_clips.DIR / owner.lower())
+        except Exception:  # noqa: BLE001 - a clip is a nicety; the turn goes on
+            log.warning("keeping the art clip failed", exc_info=True)
+
+    def _prune_art_clips(self) -> None:
+        """Delete week-old art clips at start and every few hours, even if art mode is never used again."""
+        from . import art_clips
+        while True:
+            try:
+                for folder in (art_clips.DIR.iterdir() if art_clips.DIR.is_dir() else ()):
+                    art_clips.prune(folder)
+            except OSError:
+                log.warning("pruning art clips failed", exc_info=True)
+            if self._stop.wait(art_clips.PRUNE_EVERY_S):
+                return
 
     def _owner_words(self, owner: str, audio: np.ndarray, text: str) -> tuple[str, bool]:
         """Art mode: drop the words another voice said into the owner's recording (ART_FEATURES_PLAN S1).
@@ -934,6 +964,7 @@ class VoiceAssistant(VoiceIdTurns):
         self._start_status()
         if self.art is not None:
             self.art.adopt()        # art mode left on from before a restart still idles back to voice
+        threading.Thread(target=self._prune_art_clips, name="art-clips", daemon=True).start()
 
     def start(self) -> bool:
         problems = self.preflight()

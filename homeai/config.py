@@ -422,6 +422,12 @@ class ArtConfig:
         u.strip() for u in _env_str("HOMEAI_ART_ADULTS", "Adam").split(",") if u.strip()))
     # Count heads and riders with a vision model and redraw wrong pictures before showing them (F4).
     check: bool = field(default_factory=lambda: _env_bool("HOMEAI_ART_CHECK", True))
+    # Drop another voice's words from the owner's recording (S1). Off since 2026-11-13: it ate Adam's own last
+    # word on most sentences it touched. Back on only after it is measured and fixed (Adam's look).
+    split: bool = field(default_factory=lambda: _env_bool("HOMEAI_ART_SPLIT", False))
+    # Keep an adult owner's art-mode recordings until this date (each deleted 7 days after it was made), to
+    # measure the split (homeai/art_clips.py; Adam 2026-11-13). Empty: none kept.
+    keep_clips_until: str = field(default_factory=lambda: _env_str("HOMEAI_ART_KEEP_CLIPS_UNTIL", "2026-11-20"))
 
 
 @dataclass(frozen=True)

@@ -183,7 +183,12 @@ homeai-mode voice     # ComfyUI stopped, coder back (~7 s warm, ~27 s cold)
   pick one, even from an earlier picture), "compare" (before and now side by side), "compare two and four",
   "upscale it" / "print size" (a 2x copy, ~3 s, saved as `<project>-<node>-2x.png`; the original stays
   current), "save that as Ember" (`~/Pictures/homeai/<person>/ember.png`, `ember-2.png` if taken).
-  Every saved picture has a `.json` beside it with the prompt, seed and model. The upscaler is
+  Every saved picture has a `.json` beside it with the prompt, seed and model.
+- The other-voice split (S1) is **off** since 2026-11-13 (`HOMEAI_ART_SPLIT=1` turns it on): it cut Adam's own
+  last word on most sentences. Until 2026-11-20 (`HOMEAI_ART_KEEP_CLIPS_UNTIL`) an adult owner's art-mode
+  recordings are kept in `~/.local/share/homeai/art-clips/<person>/` (wav + json with what was heard and the
+  speaker scores), each deleted 7 days after it was made. Never a child's session. They may contain other
+  household voices. The upscaler is
   `RealESRGAN_x2plus.pth` in ComfyUI's `models/upscale_models` (sha256 49fafd45...6abb).
   "I'm done drawing" goes back to voice mode (~25 s for the coder to reload,
   in the background). 20 minutes with nothing said or drawing does the same.
