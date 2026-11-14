@@ -122,6 +122,8 @@ def test_a_failed_save_never_raises(tmp_path, monkeypatch):
 # -- the worker ----------------------------------------------------------------
 
 class FakeSTT:
+    engine = "fake"
+
     def transcribe_file(self, wav):
         return Transcript(ok=True, text="hello there")
 
@@ -133,7 +135,7 @@ def test_worker_transcribes_waiting_segments_once_and_times_them(tmp_path, monke
     [path] = W.waiting(folder)
     times = iter([1000.5, 1001.25])
     row = W.transcribe(path, FakeSTT(), clock=lambda: next(times))
-    assert row["text"] == "hello there" and row["lag_s"] == 1.25 and row["wall_s"] == 0.75
+    assert row["text"] == "hello there" and row["lag_s"] == 1.25 and row["wall_s"] == 0.75 and row["engine"] == "fake"
     assert row["rtf"] == 0.75 and row["comfy_busy"] is True and row["art_active"] is True
     assert json.loads(path.read_text())["stt"]["lag_s"] == 1.25
     assert W.waiting(folder) == []
@@ -161,7 +163,7 @@ def test_worker_never_retries_a_clip_that_raised(tmp_path, monkeypatch, capsys):
     class Broken:
         def transcribe_file(self, wav):
             raise UnicodeDecodeError("utf-8", b"\xe2", 0, 1, "unexpected end of data")
-    monkeypatch.setattr(W, "Transcriber", lambda cfg: Broken())
+    monkeypatch.setattr(W, "make_transcriber", lambda cfg, engine: Broken())
     LP.art_clips.save(tmp_path, tone(1), SR, {"end": 1000.0, "duration": 1.0}, now=1000.0)
     assert W.main(["--once", "--folder", str(tmp_path)]) == 0
     assert W.waiting(tmp_path) == []
@@ -196,5 +198,21 @@ def test_recording_is_kept_for_clients_that_connect_later():
 
 
 def test_worker_exits_after_its_date_once_nothing_waits(tmp_path, monkeypatch):
-    monkeypatch.setattr(W, "Transcriber", lambda cfg: FakeSTT())
+    monkeypatch.setattr(W, "make_transcriber", lambda cfg, engine: FakeSTT())
     assert W.main(["--until", "2000-01-01", "--folder", str(tmp_path)]) == 0
+
+
+def test_worker_transcribes_the_room_with_parakeet_by_default(tmp_path, monkeypatch):
+    engines = []
+    monkeypatch.setattr(W, "make_transcriber", lambda cfg, engine: engines.append(engine) or FakeSTT())
+    W.main(["--once", "--folder", str(tmp_path)])
+    W.main(["--once", "--folder", str(tmp_path), "--engine", "whisper"])
+    assert engines == ["parakeet", "whisper"]
+
+
+def test_report_splits_rows_by_engine_old_rows_are_small_en():
+    old = rows([5.0], False)
+    new = [{**r, "engine": "parakeet"} for r in rows([1.0, 1.0], False)]
+    lines = R.report(old + new).splitlines()
+    assert next(l for l in lines if l.startswith("small.en")).split()[1] == "segments=1"
+    assert next(l for l in lines if l.startswith("parakeet")).split()[1] == "segments=2"

@@ -2,8 +2,8 @@
 
 Why: can Jarvis keep up transcribing a whole room beside voice turns and art jobs (plans/INTERACTIVE_MODE_PLAN.md
 step 0)? Jarvis (homeai/listen_probe.py) saves each stretch of speech to ~/.local/share/homeai/listen-probe; this
-worker runs the same whisper.cpp binary and model as Jarvis on each new one, at lower priority so a real voice turn
-keeps the CPU first, and records how far behind real time it fell and what else the box was doing:
+worker runs Parakeet TDT (whisper.cpp parakeet-cli; `--engine whisper` for small.en) on each new one, at lower
+priority so a real voice turn keeps the CPU first, and records how far behind real time it fell and what else the box was doing:
 
   lag_s     seconds from the end of the speech to its transcript (the go/no-go number: under 2 s with art running)
   wall_s    whisper time for the segment, rtf = wall_s / duration
@@ -30,10 +30,11 @@ from pathlib import Path
 from homeai import art_clips, gpu_info, listen_probe
 from homeai.config import load
 from homeai.fsutil import atomic_write_json
-from homeai.stt import Transcriber
+from homeai.stt import Transcriber, make_transcriber
 
 BENCH = Path.home() / "homeai-bench"
 COMFY = "http://127.0.0.1:8188"
+ENGINE = "parakeet"           # Adam 2026-11-13: fewest mistakes on room clips (tools/bench_stt_room.py)
 
 
 def cpu_times() -> tuple[int, int]:
@@ -74,7 +75,7 @@ def transcribe(path: Path, stt: Transcriber, clock=time.time) -> dict:
     card = gpu_info.biggest()
     duration = float(meta.get("duration") or 0) or 1e-6
     out = {"ok": result.ok, "text": result.text, "error": result.error, "wall_s": round(t1 - t0, 3),
-           "rtf": round((t1 - t0) / duration, 3), "lag_s": round(t1 - float(meta.get("end", t1)), 3),
+           "engine": stt.engine, "rtf": round((t1 - t0) / duration, 3), "lag_s": round(t1 - float(meta.get("end", t1)), 3),
            "cpu_busy": round((busy1 - busy0) / max(1, total1 - total0), 3), "load1": os.getloadavg()[0],
            "vram_used": round(card.used / 2**30, 2) if card else None, "comfy_busy": comfy_busy()}
     meta["stt"] = out
@@ -96,7 +97,7 @@ def mark_failed(path: Path, exc: Exception) -> None:
         path.with_suffix(".wav").unlink(missing_ok=True)   # waiting() needs the wav, so this also stops retries
 
 
-def smoke(wav: Path) -> dict:
+def smoke(wav: Path, engine: str = ENGINE) -> dict:
     """One clip through the real whisper, as if the probe had saved it now: proves the binary, model and timing."""
     import tempfile
     import wave
@@ -110,7 +111,7 @@ def smoke(wav: Path) -> dict:
     folder = Path(tempfile.mkdtemp(prefix="listen-smoke-"))
     end = time.time()
     art_clips.save(folder, audio, 16000, {"end": end, "duration": round(len(audio) / 16000, 2)}, now=end)
-    return transcribe(waiting(folder)[0], Transcriber(load().stt))
+    return transcribe(waiting(folder)[0], make_transcriber(load().stt, engine))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -118,12 +119,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--once", action="store_true", help="transcribe what is waiting, then exit")
     ap.add_argument("--folder", type=Path, default=listen_probe.DIR)
     ap.add_argument("--smoke", type=Path, help="transcribe one wav file through the real whisper and exit")
+    ap.add_argument("--engine", choices=("parakeet", "whisper"), default=ENGINE)
     ap.add_argument("--until", default="", help="YYYY-MM-DD: exit once past it and nothing is waiting")
     args = ap.parse_args(argv)
     if args.smoke:
-        print(json.dumps(smoke(args.smoke)))
+        print(json.dumps(smoke(args.smoke, args.engine)))
         return 0
-    stt = Transcriber(load().stt)
+    stt = make_transcriber(load().stt, args.engine)
     BENCH.mkdir(exist_ok=True)
     while True:
         for path in waiting(args.folder):

@@ -39,7 +39,10 @@ def report(rows: list[dict]) -> str:
     groups = {"all": rows,
               "art job running": [r for r in rows if r.get("comfy_busy")],
               "art mode on": [r for r in rows if r.get("art_active")],
-              "Jarvis talking": [r for r in rows if r.get("jarvis_speaking")]}
+              "Jarvis talking": [r for r in rows if r.get("jarvis_speaking")],
+              # rows before 2026-11-13 20:30 have no engine: small.en
+              "small.en": [r for r in rows if r.get("engine", "whisper") == "whisper"],
+              "parakeet": [r for r in rows if r.get("engine") == "parakeet"]}
     lines = []
     for name, group in groups.items():
         s = summary(group)

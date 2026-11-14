@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BUSL-1.1
 # Licensed under the Business Source License 1.1; see LICENSE at the
 # repository root. Converts to Apache-2.0 on 2030-09-15.
-"""Speech-to-text via whisper.cpp.
+"""Speech-to-text via whisper.cpp (whisper models, and Parakeet for the room recorder).
 
 Runs the ``whisper-cli`` binary as a subprocess. A subprocess boundary is used
 deliberately rather than Python bindings: it keeps the heavy C++ dependency out
@@ -17,7 +17,7 @@ import re
 import subprocess
 import tempfile
 import wave
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -65,6 +65,8 @@ def clean_transcript(raw: str) -> str:
 
 
 class Transcriber:
+    engine = "whisper"
+
     def __init__(self, cfg: SttConfig) -> None:
         self._cfg = cfg
 
@@ -75,12 +77,8 @@ class Transcriber:
             return False, f"whisper model not found: {self._cfg.model}"
         return True, ""
 
-    def transcribe_file(self, wav_path: Path) -> Transcript:
-        ok, problem = self.available()
-        if not ok:
-            return Transcript(ok=False, error=problem)
-
-        cmd = [
+    def _command(self, wav_path: Path) -> list[str]:
+        return [
             str(self._cfg.binary),
             "-m", str(self._cfg.model),
             "-f", str(wav_path),
@@ -89,6 +87,12 @@ class Transcriber:
             "--no-prints",  # keep stdout to the transcript alone
         ]
 
+    def transcribe_file(self, wav_path: Path) -> Transcript:
+        ok, problem = self.available()
+        if not ok:
+            return Transcript(ok=False, error=problem)
+
+        cmd = self._command(wav_path)
         try:
             proc = subprocess.run(
                 cmd,
@@ -146,3 +150,35 @@ class Transcriber:
             except (OSError, ValueError) as exc:
                 return Transcript(ok=False, error=f"failed to write wav: {exc}")
             return self.transcribe_file(wav_path)
+
+
+class ParakeetTranscriber(Transcriber):
+    """NVIDIA Parakeet TDT 0.6B v3 through whisper.cpp's ``parakeet-cli`` (built beside ``whisper-cli``), CPU.
+
+    Chosen for the room recorder (interactive mode) on 2026-11-13: on 50 real room clips it was twice as fast as
+    small.en (0.58 s/clip) and invented the fewest words on noise; Adam judged it made the fewest mistakes
+    (tools/bench_stt_room.py). Same contract as ``Transcriber``; no word timings.
+    """
+
+    engine = "parakeet"
+
+    def __init__(self, cfg: SttConfig) -> None:
+        super().__init__(replace(cfg, binary=cfg.binary.parent / "parakeet-cli", model=cfg.parakeet_model))
+
+    def _command(self, wav_path: Path) -> list[str]:
+        return [str(self._cfg.binary), "-m", str(self._cfg.model), "-t", str(self._cfg.threads),
+                "-ng",               # CPU: the GPU belongs to the voice model and ComfyUI
+                "-np",               # stdout is the transcript alone
+                "-f", str(wav_path)]
+
+    def words(self, audio: np.ndarray, sample_rate: int) -> list[tuple[float, float, str]]:
+        return []
+
+
+def make_transcriber(cfg: SttConfig, engine: str = "whisper") -> Transcriber:
+    """``engine``: "whisper" (Jarvis's voice turns) or "parakeet" (the room recorder)."""
+    if engine == "parakeet":
+        return ParakeetTranscriber(cfg)
+    if engine == "whisper":
+        return Transcriber(cfg)
+    raise ValueError(f"unknown speech-to-text engine: {engine}")

@@ -20,7 +20,6 @@ import argparse
 import json
 import random
 import re
-import subprocess
 import sys
 import time
 from dataclasses import replace
@@ -31,7 +30,7 @@ sys.path.insert(0, str(REPO))
 
 from homeai import listen_probe  # noqa: E402
 from homeai.config import SttConfig  # noqa: E402
-from homeai.stt import Transcriber, Transcript, clean_transcript  # noqa: E402
+from homeai.stt import ParakeetTranscriber, Transcriber  # noqa: E402
 
 BENCH = Path.home() / "homeai-bench"
 MODELS = ["small.en", "medium.en", "parakeet", "large-v3-turbo"]
@@ -65,23 +64,9 @@ def pick(folder: Path, clips: int, noise: int, seed: int = 13) -> list[tuple[Pat
     return rng.sample(heard, min(clips, len(heard))) + rng.sample(quiet, min(noise, len(quiet)))
 
 
-class Parakeet:
-    """NVIDIA Parakeet TDT 0.6B v3 through whisper.cpp's parakeet-cli (built beside whisper-cli), CPU only."""
-
-    def __init__(self, binary: Path, model: Path, threads: int) -> None:
-        self.cmd = [str(binary), "-m", str(model), "-t", str(threads), "-ng", "-np", "-f"]
-
-    def transcribe_file(self, wav: Path) -> Transcript:
-        proc = subprocess.run([*self.cmd, str(wav)], capture_output=True, encoding="utf-8", errors="replace",
-                              timeout=60)
-        text = clean_transcript(proc.stdout)
-        return Transcript(ok=proc.returncode == 0 and bool(text), text=text, error=proc.stderr[-200:])
-
-
 def model_for(name: str, base: SttConfig):
     if name == "parakeet":
-        path = base.model.parent / "ggml-parakeet-tdt-0.6b-v3-f16.bin"
-        return path, Parakeet(base.binary.parent / "parakeet-cli", path, base.threads)
+        return base.parakeet_model, ParakeetTranscriber(base)
     path = base.model.parent / f"ggml-{name}.bin"
     return path, Transcriber(replace(base, model=path))
 

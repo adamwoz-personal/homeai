@@ -108,6 +108,38 @@ class TestTranscriberAvailability:
         result = Transcriber(replace(SttConfig(), binary=binary, model=model)).transcribe_file(tmp_path / "x.wav")
         assert result.ok is True and result.text == "cold after midnight"
 
+    def test_parakeet_runs_parakeet_cli_beside_whisper_on_the_cpu(self, tmp_path: Path) -> None:
+        from homeai.stt import make_transcriber
+        (tmp_path / "whisper-cli").touch()
+        log = tmp_path / "args"
+        binary = tmp_path / "parakeet-cli"
+        binary.write_text(f"#!/bin/sh\necho \"$@\" > {log}\necho ' (laughs) Yeah, not there yet. '\n")
+        binary.chmod(0o755)
+        model = tmp_path / "parakeet.bin"
+        model.touch()
+        cfg = replace(SttConfig(), binary=tmp_path / "whisper-cli", parakeet_model=model)
+        stt = make_transcriber(cfg, "parakeet")
+        result = stt.transcribe_file(tmp_path / "x.wav")
+        assert result.ok and result.text == "Yeah, not there yet." and stt.engine == "parakeet"
+        args = log.read_text().split()
+        assert args[args.index("-m") + 1] == str(model) and "-ng" in args and str(tmp_path / "x.wav") in args
+
+    def test_parakeet_silence_is_noise_like_whisper(self, tmp_path: Path) -> None:
+        from homeai.stt import make_transcriber
+        binary = tmp_path / "parakeet-cli"
+        binary.write_text("#!/bin/sh\necho ''\n")
+        binary.chmod(0o755)
+        model = tmp_path / "parakeet.bin"
+        model.touch()
+        stt = make_transcriber(replace(SttConfig(), binary=tmp_path / "whisper-cli", parakeet_model=model), "parakeet")
+        assert "minimum length" in stt.transcribe_file(tmp_path / "x.wav").error
+
+    def test_unknown_engine_is_refused_and_whisper_is_the_default(self) -> None:
+        from homeai.stt import make_transcriber
+        assert make_transcriber(SttConfig()).engine == "whisper"
+        with pytest.raises(ValueError):
+            make_transcriber(SttConfig(), "parakeat")
+
     def test_empty_audio_rejected(self) -> None:
         result = Transcriber(SttConfig()).transcribe_audio(np.array([], dtype=np.float32), 16000)
         assert result.ok is False

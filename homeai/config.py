@@ -108,6 +108,12 @@ class SttConfig:
             _env_str("HOMEAI_WHISPER_MODEL", str(VENDOR / "whisper.cpp/models/ggml-small.en.bin"))
         )
     )
+    # Parakeet TDT (homeai/stt.py ParakeetTranscriber): the room recorder's model.
+    parakeet_model: Path = field(
+        default_factory=lambda: Path(
+            _env_str("HOMEAI_PARAKEET_MODEL", str(VENDOR / "whisper.cpp/models/ggml-parakeet-tdt-0.6b-v3-f16.bin"))
+        )
+    )
     threads: int = field(default_factory=lambda: _env_int("HOMEAI_STT_THREADS", 8))
     timeout_s: float = field(default_factory=lambda: _env_float("HOMEAI_STT_TIMEOUT", 30.0))
     # Transcripts shorter than this are treated as noise and discarded.

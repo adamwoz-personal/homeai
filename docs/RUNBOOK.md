@@ -545,7 +545,9 @@ after the probe ends). The avatar's hair is white and she doesn't doze off while
 mic exclusively, so this is a thread inside Jarvis (`homeai/listen_probe.py`), not a second process.
 
 - Worker: `homeai-listen-worker.service` (user unit, from `deploy/systemd/homeai-listen-worker.service.in`)
-  transcribes each segment at Nice=10 and times it; exits after the date.
+  transcribes each segment with Parakeet TDT 0.6B v3 (`--engine whisper` for small.en) at Nice=10 and times it;
+  exits after the date. Model: `vendor/whisper.cpp/models/ggml-parakeet-tdt-0.6b-v3-f16.bin` (1.2 GB, from
+  huggingface ggml-org/parakeet-GGUF; env `HOMEAI_PARAKEET_MODEL`). Jarvis's voice turns still use small.en.
   `journalctl --user -u homeai-listen-worker -f` shows each line as it's heard.
 - Report: `.venv/bin/python tools/report_interactive_listen.py` (speech hours, lag p50/p95, GO/NO-GO).
 - Stop early: remove the line from `.env`, restart Jarvis, `systemctl --user disable --now homeai-listen-worker`.

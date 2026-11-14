@@ -2168,3 +2168,5 @@ Evidence: plans/LLM_UPGRADE_PLAN.md step 3; ~/homeai-bench/coder-eval.jsonl, kv.
 - Room-clip bake-off (`tools/bench_stt_room.py`, 50 real clips, CPU): s/clip small.en 1.09, medium.en 2.44,
   Parakeet TDT 0.6B v3 0.58, large-v3-turbo 2.60. Turbo hears hard far-field lines best but invents "Thank you." /
   "Okay." on 6 of 10 noise clips; Parakeet invents least and is fastest. No ground truth yet: Adam marks the sheet.
+- Adam read the room sheet and judged Parakeet made the fewest mistakes: the listen worker now uses it
+  (`homeai/stt.py` ParakeetTranscriber, `make_transcriber`). Jarvis's voice turns stay on small.en until measured.
