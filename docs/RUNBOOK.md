@@ -556,6 +556,8 @@ mic exclusively, so this is a thread inside Jarvis (`homeai/listen_probe.py`), n
 - Hair look: `.venv/bin/python tools/avatar/probe_recording_hair.py` (off and on, side by side).
 - Report columns: `noise` = whisper heard no words (not a failure, not counted as speech); `failed` = real errors.
   A clip the worker can't process is marked failed in its json and never retried.
+- TV windows (for step 3): `tools/inspect_listen_timeline.py [YYYYMMDD]` shows the room per 10 min; label a window
+  with `--label tv "YYYY-MM-DD HH:MM" "YYYY-MM-DD HH:MM" note` (to `~/homeai-bench/tv-labels.jsonl`).
 - Which model hears the room best: `nice -n 10 .venv/bin/python tools/bench_stt_room.py` (small.en, medium.en,
   Parakeet TDT 0.6B v3, large-v3-turbo on 50 real clips; side-by-side sheet in `~/homeai-bench/stt-room-*.md`).
 

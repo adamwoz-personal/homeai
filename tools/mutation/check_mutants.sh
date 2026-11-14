@@ -1053,6 +1053,8 @@ MUTANTS=(
   "pk-worker-whisper-default|tools/bench_interactive_listen.py|s/^ENGINE = \"parakeet\"/ENGINE = \"whisper\"/|tests/test_listen_probe.py -k parakeet_by_default"
   "pk-worker-no-engine-recorded|tools/bench_interactive_listen.py|s/\"engine\": stt.engine, //|tests/test_listen_probe.py -k worker_transcribes"
   "pk-report-old-rows-lost|tools/report_interactive_listen.py|s/r.get(\"engine\", \"whisper\") == \"whisper\"/r.get(\"engine\") == \"whisper\"/|tests/test_listen_probe.py -k by_engine"
+  "tl-full-never-counted|tools/inspect_listen_timeline.py|s/ >= max_s - 0.5)/ > max_s)/|tests/test_inspect_listen_timeline.py -k buckets"
+  "tl-noise-counts-ok|tools/inspect_listen_timeline.py|s/if s and not s.get(\"ok\"))/if s)/|tests/test_inspect_listen_timeline.py -k buckets"
   "rec-daemon-silent|homeai/daemon.py|s/        self.presence.publish(\"recording\", /        (lambda *a: None)(\"recording\", /|tests/test_daemon.py -k show_recording"
   "lp-worker-forever|tools/bench_interactive_listen.py|s/ or (args.until and not art_clips.recording_on(args.until) and not waiting(args.folder))://|tests/test_listen_probe.py -k exits_after"
   "inspect-bus-no-snapshot|tools/avatar/inspect_bus.py|s/    elif event.get(\"type\") == \"snapshot\":/    elif False:/|tests/test_avatar_spikes.py -k new_client"
