@@ -284,12 +284,26 @@ The answer is built without the model (~0.8 s). "Last update" is per person in
 `~/.local/share/homeai/status_update.json`, moved on only after a complete update.
 Check what it would say, without moving that time: `tools/probe_status_update.py`.
 
-**Ring events stuck since 2026-10-15.** Home Assistant's `event.front_door_ding`
+**Ring events stuck 2026-10-15 to 11-15 (fixed).** Home Assistant's `event.front_door_ding`
 and `event.front_door_motion` haven't changed since then, while
 `sensor.front_door_last_activity` (polled) still updates. The status update reads
 both. The doorbell *announcements* watch the event entities, so they have been
-silent since then. Check with `tools/inspect_ring_entities.py`; the likely fix is
-reloading or re-authenticating the Ring integration in Home Assistant (unverified).
+silent since then. Check with `tools/inspect_ring_entities.py`.
+**Cause (found 2026-11-15 in `~/homeassistant-config/home-assistant.log`):** ding and
+motion arrive by push (firebase_messaging `FcmPushClient`). On 2026-10-16 10:28 it got
+a malformed message (`Unknown error: Incorrect padding, shutting down FcmPushClient`)
+and never restarted; HA (2026.10.0) has run since 10-09, so nothing restarted it.
+**Fixed 2026-11-15 by patching the library in the container**
+(`tools/ha/patch_firebase_messaging.py`: pad the key and salt; one bad message is
+logged as `homeai patch: skipped a message` instead of ending the listener).
+`tools/ha/ha_container.sh start|update` re-applies it and restarts HA when needed
+(a recreate loses it; a plain restart keeps it); `tools/ha/ha_container.sh patch` by hand.
+If it reports "lines changed", the library was updated: check whether upstream fixed it.
+Listener dead anyway (grep the HA log for `shutting down FcmPushClient`): Settings >
+Devices & services > Ring > ⋮ > Reload, or `docker restart homeassistant`.
+Jarvis's token isn't admin, so `tools/ha/reload_integration.py` is refused with it.
+What was missed: `tools/inspect_ring_entities.py --history 31` (history keeps ~10 days;
+44 activities 11-05..11-15, ~/homeai-bench/ring-activity-20261115.txt).
 
 ## Changing Jarvis's voice
 

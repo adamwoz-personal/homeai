@@ -2170,3 +2170,8 @@ Evidence: plans/LLM_UPGRADE_PLAN.md step 3; ~/homeai-bench/coder-eval.jsonl, kv.
   "Okay." on 6 of 10 noise clips; Parakeet invents least and is fastest. No ground truth yet: Adam marks the sheet.
 - Adam read the room sheet and judged Parakeet made the fewest mistakes: the listen worker now uses it
   (`homeai/stt.py` ParakeetTranscriber, `make_transcriber`). Jarvis's voice turns stay on small.en until measured.
+- Ring alerts were dead for a month: firebase-messaging 0.4.5 (HA's Ring push listener) hit an unpadded base64
+  key on 2026-10-16, and its catch-all *shut the client down* instead of skipping the message; nothing restarts it.
+  A polled sensor kept updating, which hid it. Patched in the container (tools/ha/patch_firebase_messaging.py,
+  re-applied by ha_container.sh). Lessons: when an event entity goes quiet but a polled sibling doesn't, read the
+  integration's log first; and HA's `/api/history/period/<start>` without `end_time` returns one day only.

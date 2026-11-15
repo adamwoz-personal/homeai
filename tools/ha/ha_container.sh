@@ -5,6 +5,7 @@
 #   tools/ha/ha_container.sh start    # create (first time) or start
 #   tools/ha/ha_container.sh status   # container state + HTTP check
 #   tools/ha/ha_container.sh update   # pull new stable image and recreate
+#   tools/ha/ha_container.sh patch    # Ring push-listener fix (patch_firebase_messaging.py; start/update run it)
 #   tools/ha/ha_container.sh logs     # follow logs
 #   tools/ha/ha_container.sh stop
 #
@@ -46,19 +47,31 @@ wait_http() {
     return 1
 }
 
+# Ring's push listener dies on a malformed message (firebase-messaging 0.4.5); patch it in the container and
+# restart HA once if it changed. A container restart keeps the patch; only a recreate (update) loses it.
+patch_fcm() {
+    docker_ exec -i "$NAME" python3 - < "$(dirname "$0")/patch_firebase_messaging.py"
+    case $? in
+        0) docker_ restart "$NAME" >/dev/null && wait_http ;;
+        3) ;;
+        *) echo "firebase-messaging patch not applied; Ring alerts may stop again (docs/RUNBOOK.md)" >&2 ;;
+    esac
+}
+
 case "${1:-status}" in
     start)
         if exists; then docker_ start "$NAME" >/dev/null; else docker_ pull "$IMAGE" && create; fi
-        wait_http ;;
+        wait_http && patch_fcm ;;
+    patch)  patch_fcm ;;
     stop)   docker_ stop "$NAME" ;;
     update)
         docker_ pull "$IMAGE"
         if exists; then docker_ rm -f "$NAME" >/dev/null; fi
-        create && wait_http ;;
+        create && wait_http && patch_fcm ;;
     logs)   docker_ logs -f --tail 100 "$NAME" ;;
     status)
         if ! exists; then echo "container $NAME: not created"; exit 1; fi
         docker_ inspect -f 'container {{.Name}}: {{.State.Status}} (image {{.Config.Image}}, restart {{.HostConfig.RestartPolicy.Name}})' "$NAME"
         if curl -fs -o /dev/null "$URL/manifest.json"; then echo "http: ok ($URL)"; else echo "http: not answering ($URL)"; exit 1; fi ;;
-    *) echo "usage: $0 start|stop|update|logs|status" >&2; exit 2 ;;
+    *) echo "usage: $0 start|stop|update|patch|logs|status" >&2; exit 2 ;;
 esac
