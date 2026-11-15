@@ -26,6 +26,39 @@ PATCHES = [
      '        crypto_key = urlsafe_b64decode(crypto_key_str.encode("ascii") + b"========")  # homeai patch\n'),
     ('        salt = urlsafe_b64decode(salt_str.encode("ascii"))\n',
      '        salt = urlsafe_b64decode(salt_str.encode("ascii") + b"========")  # homeai patch\n'),
+    # 2026-11-15: padding alone wasn't it; three pushes still failed with "Invalid EC key". The library slices
+    # "dh=" off the crypto-key header by position, so a header with more params ("dh=..;p256ecdsa=..") feeds
+    # junk to the decoder (urlsafe_b64decode silently drops ';' and '='). Pick the params out by name.
+    ('_logger = logging.getLogger(__name__)\n',
+     '_logger = logging.getLogger(__name__)\n'
+     '\n\n'
+     'def _homeai_param(header: str, name: str) -> str:  # homeai patch: headers can carry several params\n'
+     '    for part in header.replace(",", ";").split(";"):\n'
+     '        key, _, value = part.strip().partition("=")\n'
+     '        if key.strip() == name:\n'
+     '            return value.strip()\n'
+     '    return header[len(name) + 1:]\n'
+     '\n\n'
+     'def _homeai_shape(header: str) -> str:  # homeai patch: param names and lengths, never the values\n'
+     '    return ";".join(f"{p.partition(\'=\')[0].strip()}=<{len(p.partition(\'=\')[2].strip())}>"\n'
+     '                    for p in header.replace(",", ";").split(";"))\n'),
+    ('        crypto_key = self._app_data_by_key(msg, "crypto-key")[3:]  # strip dh=\n'
+     '        salt = self._app_data_by_key(msg, "encryption")[5:]  # strip salt=\n',
+     '        crypto_header = self._app_data_by_key(msg, "crypto-key")  # homeai patch\n'
+     '        salt_header = self._app_data_by_key(msg, "encryption")\n'
+     '        crypto_key = _homeai_param(crypto_header, "dh")\n'
+     '        salt = _homeai_param(salt_header, "salt")\n'),
+    ('        decrypted = self._decrypt_raw_data(\n'
+     '            self.credentials, crypto_key, salt, msg.raw_data\n'
+     '        )\n',
+     '        try:  # homeai patch: say what the headers looked like when a message fails\n'
+     '            decrypted = self._decrypt_raw_data(\n'
+     '                self.credentials, crypto_key, salt, msg.raw_data\n'
+     '            )\n'
+     '        except Exception:\n'
+     '            _logger.warning("homeai patch: decrypt failed; crypto-key %s, encryption %s, %d bytes",\n'
+     '                            _homeai_shape(crypto_header), _homeai_shape(salt_header), len(msg.raw_data))\n'
+     '            raise\n'),
     ('                    elif msg := await self._receive_msg():\n'
      '                        await self._handle_message(msg)\n',
      '                    elif msg := await self._receive_msg():\n'

@@ -298,6 +298,12 @@ and never restarted; HA (2026.10.0) has run since 10-09, so nothing restarted it
 logged as `homeai patch: skipped a message` instead of ending the listener).
 `tools/ha/ha_container.sh start|update` re-applies it and restarts HA when needed
 (a recreate loses it; a plain restart keeps it); `tools/ha/ha_container.sh patch` by hand.
+Padding alone wasn't enough: three pushes at 15:10–15:20 still failed with
+`Invalid EC key`. So the patch also picks `dh=`/`salt=` out of the headers by name (the
+library slices them off by position), and a failed decrypt logs
+`homeai patch: decrypt failed; crypto-key dh=<n>;...` (param names and lengths only). After that, the
+first motion test (20:34 UTC) reached `event.front_door_motion`. It's unverified
+whether header parsing or the fresh restart fixed it: if it fails again, that log line says why.
 If it reports "lines changed", the library was updated: check whether upstream fixed it.
 Listener dead anyway (grep the HA log for `shutting down FcmPushClient`): Settings >
 Devices & services > Ring > ⋮ > Reload, or `docker restart homeassistant`.

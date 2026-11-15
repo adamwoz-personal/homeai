@@ -12,7 +12,7 @@ REAL = (Path(__file__).parent / "fixtures" / "fcmpushclient-0.4.5.py.txt").read_
 
 def test_patches_the_real_file_once_and_it_still_compiles():
     text, status = P.patch(REAL)
-    assert status == "patched" and text.count("homeai patch") == 4
+    assert status == "patched" and text.count("homeai patch") == 9
     compile(text, "fcmpushclient.py", "exec")
     again, status = P.patch(text)
     assert status == "already" and again == text
@@ -47,3 +47,35 @@ def test_patched_key_and_salt_lines_decode_unpadded_base64():
         scope = {"urlsafe_b64decode": base64.urlsafe_b64decode, f"{name}_str": unpadded}
         exec(line, scope)
         assert scope[name] == b"sixteen byte key!"
+
+
+def _helpers():
+    """The two module-level helpers the patch adds, run for real."""
+    text, _ = P.patch(REAL)
+    start = text.index("def _homeai_param")
+    end = text.index(".split(\";\"))\n", text.index("def _homeai_shape")) + len(".split(\";\"))\n")
+    scope: dict = {}
+    exec(text[start:end], scope)
+    return scope["_homeai_param"], scope["_homeai_shape"]
+
+
+def test_dh_and_salt_are_picked_by_name_not_by_position():
+    param, _ = _helpers()
+    assert param("dh=AAAA", "dh") == "AAAA"                       # the plain header still works
+    assert param("dh=AAAA;p256ecdsa=BBBB", "dh") == "AAAA"        # extra params no longer leak into the key
+    assert param("p256ecdsa=BBBB; dh=AAAA==", "dh") == "AAAA=="   # any order; base64 padding kept
+    assert param("salt=CCCC", "salt") == "CCCC"
+    assert param("keyid=p256dh,salt=CCCC", "salt") == "CCCC"
+
+
+def test_header_shape_logs_names_and_lengths_never_values():
+    _, shape = _helpers()
+    assert shape("dh=AAAA;p256ecdsa=BBBBBB") == "dh=<4>;p256ecdsa=<6>"
+    assert "AAAA" not in shape("dh=AAAA")
+
+
+def test_failed_decrypt_is_logged_with_header_shape_then_reraised():
+    text, _ = P.patch(REAL)
+    body = text[text.index("def _handle_data_message"):text.index("decrypted_json = None")]
+    assert 'crypto_key = _homeai_param(crypto_header, "dh")' in body
+    assert "_homeai_shape(crypto_header)" in body and body.rstrip().endswith("raise")
