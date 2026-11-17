@@ -4,7 +4,7 @@
 with Claude (paid). Updated as evidence accumulates. Every rule here comes from an
 observed outcome on this box, not from theory.
 
-Last updated: 2026-11-13
+Last updated: 2026-11-17
 
 ---
 
@@ -2175,3 +2175,11 @@ Evidence: plans/LLM_UPGRADE_PLAN.md step 3; ~/homeai-bench/coder-eval.jsonl, kv.
   A polled sensor kept updating, which hid it. Patched in the container (tools/ha/patch_firebase_messaging.py,
   re-applied by ha_container.sh). Lessons: when an event entity goes quiet but a polled sibling doesn't, read the
   integration's log first; and HA's `/api/history/period/<start>` without `end_time` returns one day only.
+- The padding fix alone wasn't enough: pushes then failed with "Invalid EC key". The library slices `dh=` off the
+  header by position; picking params by name fixed it (motion seen 2026-11-15 20:34). Upstream already had issues
+  #40/#42/#44 and PR #43 for exactly this; search open PRs before writing one (Adam posted a field report on #43).
+- 2026-11-17 "all clear"/"red alert" didn't run, and Jarvis said "All clear." anyway. The cause wasn't DNS: the
+  MT7925 Wi-Fi lost its AP at 04:31:57 and NetworkManager never retried (silent for 5 h 40 min until a reboot).
+  "DNS server refused query" was the local stub with no link behind it. Lessons: check `nmcli -t d` and the
+  NetworkManager journal before blaming DNS; never report success for a fallback that is known to do nothing.
+  Fixed with an "I can't reach Alexa" reply (152753a) and a root Wi-Fi watchdog that also tells Jarvis what it fixed.

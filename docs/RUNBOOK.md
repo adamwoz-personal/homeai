@@ -292,6 +292,12 @@ until a reboot at 10:12. Alexa's routine buttons went `unavailable`, so "all cle
 "All clear.". Check with `nmcli -t d` and `journalctl -u NetworkManager`. Without a reboot, try
 `nmcli c up bednarz` (unverified). Adding a nameserver to `/etc/resolv.conf` can't help with no link,
 and the file lives in /run anyway.
+**Wi-Fi watchdog** (`tools/net/wifi_watchdog.py`): a root timer, run every minute. If the gateway is
+silent for 3 min it reconnects; 3 min later it reloads `mt7925e`; then it reconnects every 10 min
+and reloads at most hourly. Install or update: `sudo tools/net/install_wifi_watchdog.sh` (copies it
+root-owned to /usr/local/lib/homeai). Undo: `... --remove`. Logs: `journalctl -u homeai-wifi-watchdog`.
+Fixed outages go to `/var/lib/homeai-wifi-watchdog/events.jsonl`, and Adam's status update
+reports them ("My Wi-Fi dropped at 4:32 am for six minutes; reconnecting fixed it.").
 
 **Ring events stuck 2026-10-15 to 11-15 (fixed).** Home Assistant's `event.front_door_ding`
 and `event.front_door_motion` haven't changed since then, while

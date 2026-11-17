@@ -4,6 +4,8 @@ For an admin (HOMEAI_STATUS_ADMINS, default Adam):
 - voice profiles created since their last update (first time: the last week),
 - doorbell rings and motion since their last update, at most the last 24 hours,
 - failed remote-app logins and locked logins since their last update (Adam, 2026-11-12),
+- Wi-Fi outages the watchdog fixed (tools/net/wifi_watchdog.py; Adam 2026-11-17: Jarvis should know about
+  her own problems),
 - a short weather summary.
 Anyone else gets the weather. Nothing goes to the agent: the sentences are
 built here, so the reply is short and can't wander off into a lookup.
@@ -72,6 +74,42 @@ def doors_sentence(alerts: dict[tuple[str, str], list[float]]) -> str:
     return " ".join(parts)
 
 
+WIFI_EVENTS = Path("/var/lib/homeai-wifi-watchdog/events.jsonl")   # written by tools/net/wifi_watchdog.py
+_FIX = {"reconnect": "reconnecting", "reload": "restarting the Wi-Fi driver"}
+
+
+def wifi_outages(path: Path = WIFI_EVENTS) -> Callable[[float, float], list[dict]]:
+    """Outages the Wi-Fi watchdog fixed that ended in (since, until]. No watchdog or no file: none."""
+    def ask(since: float, until: float) -> list[dict]:
+        try:
+            lines = Path(path).read_text().splitlines()
+        except FileNotFoundError:
+            return []
+        out = []
+        for line in lines:
+            try:
+                event = json.loads(line)
+                if since < float(event["back_at"]) <= until and event.get("down_since") is not None:
+                    out.append(event)
+            except (ValueError, KeyError, TypeError):
+                continue
+        return out
+    return ask
+
+
+def outages_sentence(events: list[dict]) -> str:
+    """'My Wi-Fi dropped at 4:32 am for six minutes; reconnecting fixed it.' (several: count, then the latest)"""
+    latest = max(events, key=lambda e: e["back_at"])
+    minutes = max(1, round((latest["back_at"] - latest["down_since"]) / 60))
+    span = _count(minutes, "minute", "minutes") if minutes < 120 else f"{round(minutes / 60)} hours"
+    fixed = [a for a in latest.get("actions") or [] if a.get("ok")]
+    how = f"{_FIX.get(fixed[-1].get('action'), 'reconnecting')} fixed it" if fixed else "it came back"
+    when = f"at {_clock_time(latest['down_since'])} for {span}"
+    if len(events) == 1:
+        return f"My Wi-Fi dropped {when}; {how}."
+    return f"My Wi-Fi dropped {_count(len(events), 'time', 'times')}, the latest {when}; {how}."
+
+
 def logins_sentence(alerts) -> str:
     """'Four failed app logins for Ani; that login is locked until 3:40 pm.' (alerts: accounts.LoginAlerts)"""
     parts = []
@@ -122,9 +160,10 @@ class StatusUpdate:
     def __init__(self, profiles: Callable[[], list], door_alerts: Callable[[float, float], dict] | None,
                  weather: Callable[[], str], admins: tuple[str, ...] = ("Adam",), ledger: Ledger | None = None,
                  clock: Callable[[], float] = time.time,
-                 login_alerts: Callable[[float, float], object] | None = None) -> None:
+                 login_alerts: Callable[[float, float], object] | None = None,
+                 outages: Callable[[float, float], list[dict]] | None = None) -> None:
         self._profiles, self._doors, self._weather = profiles, door_alerts, weather
-        self._logins = login_alerts
+        self._logins, self._outages = login_alerts, outages
         self.admins = tuple(a.lower() for a in admins)
         self.ledger, self._clock = ledger or Ledger(), clock
 
@@ -164,6 +203,13 @@ class StatusUpdate:
                     log.warning("status update: login check failed: %s", exc)
                     news.append(MSG_LOGINS_FAILED)
                     complete = False
+            if self._outages is not None:
+                try:
+                    dropped = self._outages(since_voices, now)
+                    if dropped:
+                        news.append(outages_sentence(dropped))
+                except Exception as exc:  # noqa: BLE001 - an unreadable outage log never spoils the update
+                    log.warning("status update: Wi-Fi outage log failed: %s", exc)
             parts += news or [MSG_NO_NEWS]
         try:
             parts.append(self._weather())
@@ -199,4 +245,4 @@ def build(home, admins: tuple[str, ...], profiles: Callable[[], list], location:
 
     doors = (lambda since, until: door_alerts(home, since, until)) if home is not None else None
     return StatusUpdate(profiles, doors, lambda: get_weather(location).spoken(include_place=False), admins=admins,
-                        login_alerts=db_login_alerts(memory_dsn) if memory_dsn else None)
+                        login_alerts=db_login_alerts(memory_dsn) if memory_dsn else None, outages=wifi_outages())

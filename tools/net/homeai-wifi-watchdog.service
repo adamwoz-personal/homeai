@@ -1,0 +1,8 @@
+[Unit]
+Description=HomeAI Wi-Fi watchdog: reconnect when the gateway stops answering
+After=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -I /usr/local/lib/homeai/wifi_watchdog.py --connection bednarz --driver mt7925e
+TimeoutStartSec=150

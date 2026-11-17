@@ -1,6 +1,7 @@
 """'Status update' (homeai/status_update.py) and the daemon hook."""
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -205,3 +206,44 @@ class FakeStatus:
         if isinstance(self.reply, Exception):
             raise self.reply
         return self.reply
+
+
+# -- Wi-Fi outages the watchdog fixed (tools/net/wifi_watchdog.py; Adam 2026-11-17) ------------------------
+
+def _event(down, back, *actions):
+    return {"down_since": down, "back_at": back, "actions": [{"at": down + 180, "action": a, "ok": ok}
+                                                              for a, ok in actions]}
+
+
+def test_outage_sentence_says_when_how_long_and_what_fixed_it():
+    down = datetime(2026, 11, 17, 4, 32).timestamp()
+    one = S.outages_sentence([_event(down, down + 360, ("reconnect", True))])
+    assert one == "My Wi-Fi dropped at 4:32 am for six minutes; reconnecting fixed it."
+    several = S.outages_sentence([_event(down - DAY, down - DAY + 60, ("reconnect", True)),
+                                  _event(down, down + 6 * 3600, ("reconnect", False), ("reload", True))])
+    assert several == "My Wi-Fi dropped two times, the latest at 4:32 am for 6 hours; " \
+                      "restarting the Wi-Fi driver fixed it."
+    assert S.outages_sentence([_event(down, down + 600, ("reconnect", False))]).endswith("; it came back.")
+
+
+def test_outage_log_reads_only_the_window_and_skips_bad_lines(tmp_path):
+    path = tmp_path / "events.jsonl"
+    path.write_text("\n".join([json.dumps(_event(NOW - 2 * DAY, NOW - 2 * DAY + 60)), "not json",
+                               json.dumps({"back_at": NOW - 10}), json.dumps(_event(NOW - 600, NOW - 300))]))
+    assert [e["back_at"] for e in S.wifi_outages(path)(NOW - DAY, NOW)] == [NOW - 300]
+    assert S.wifi_outages(tmp_path / "missing.jsonl")(0, NOW) == []
+
+
+def test_admin_update_mentions_the_outage_and_a_broken_log_doesnt_spoil_it(tmp_path):
+    down = NOW - 3600
+    st = S.StatusUpdate(lambda: [], None, lambda: "Clear.", ledger=S.Ledger(tmp_path / "l.json"),
+                        clock=lambda: NOW, outages=lambda since, until: [_event(down, down + 240, ("reconnect", True))])
+    said = st.handle("status update", "Adam")
+    assert "My Wi-Fi dropped at" in said and S.MSG_NO_NEWS not in said
+    assert "Wi-Fi" not in st.handle("status update", "Ani")               # only admins hear house problems
+
+    def broken(since, until):
+        raise OSError("unreadable")
+    st = S.StatusUpdate(lambda: [], None, lambda: "Clear.", ledger=S.Ledger(tmp_path / "m.json"),
+                        clock=lambda: NOW, outages=broken)
+    assert st.handle("status update", "Adam") == f"{S.MSG_NO_NEWS} Clear."
