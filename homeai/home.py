@@ -390,19 +390,23 @@ class Home:
         button = self.routine_button(phrase)
         if button:
             self.client.call_service("button", "press", {"entity_id": button})
+        elif self.routine_button(phrase, offline=True):
+            # 2026-11-17: Wi-Fi was down 04:32-10:12, the buttons went unavailable, typed text ran nothing and
+            # Jarvis still said "All clear." An unavailable button means Alexa is unreachable: say so.
+            raise HomeError(f"I can't reach Alexa right now, so {phrase} didn't run.")
         else:
             log.warning("no Home Assistant button for routine %r; sending it to Alexa as text", phrase)
             self._alexa(self.echo(None), phrase)
         return f"{_capital(phrase)}."
 
-    def routine_button(self, phrase: str) -> str | None:
+    def routine_button(self, phrase: str, offline: bool = False) -> str | None:
         """The alexa_devices button that runs routine ``phrase`` ('angrybob@gmail.com all clear'), or None.
         Typed text didn't run 'all clear' (2026-11-06, 2026-11-11: no light changed); pressing the button runs
-        the routine itself."""
+        the routine itself. ``offline``: only a matching button that is unavailable."""
         want = routine_key(phrase).split()
         for state in self.client.states():
             eid = state.get("entity_id", "")
-            if not eid.startswith("button.") or state.get("state") == "unavailable":
+            if not eid.startswith("button.") or (state.get("state") == "unavailable") != offline:
                 continue
             words = routine_key((state.get("attributes") or {}).get("friendly_name", "")).split()
             if words[-len(want):] == want:

@@ -280,6 +280,18 @@ def test_unavailable_routine_button_is_skipped(home, ha):
     assert home.routine_button("all clear") is None
 
 
+def test_routine_with_alexa_offline_says_so_and_sends_nothing(home, ha):
+    """2026-11-17: Wi-Fi down, buttons unavailable, typed text ran nothing, and Jarvis said "All clear." anyway."""
+    for eid in ("button.angrybob_gmail_com_all_clear", "button.angrybob_gmail_com_alexa_red_alert"):
+        ha.set_state(eid, "unavailable")
+    for text in ("all clear", "red alert"):
+        with pytest.raises(HomeError, match=f"can't reach Alexa right now, so {text} didn't run"):
+            home.routine(text)
+    assert ha.calls == [] and ha.alexa_commands() == []
+    assert home.routine_button("red alert", offline=True) == "button.angrybob_gmail_com_alexa_red_alert"
+    assert home.routine_button("it's movie time", offline=True) is None   # that one is still up
+
+
 def test_routine_without_a_button_sends_only_the_fixed_phrase_to_the_kitchen_echo(home, ha):
     ha._states[:] = [s for s in ha._states if not s["entity_id"].startswith("button.")]
     assert home.routine("run the movie time routine") == "It's movie time."

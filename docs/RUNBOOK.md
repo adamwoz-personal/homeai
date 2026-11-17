@@ -284,6 +284,15 @@ The answer is built without the model (~0.8 s). "Last update" is per person in
 `~/.local/share/homeai/status_update.json`, moved on only after a complete update.
 Check what it would say, without moving that time: `tools/probe_status_update.py`.
 
+**Routines fail and "DNS server refused query" (Wi-Fi lost, 2026-11-17).** At 04:31:57 the
+kernel logged `wlp9s0: Connection to AP ... lost` (MT7925, driver mt7925e, SSID `bednarz`).
+NetworkManager failed the connection with `ssid-not-found` and then logged nothing for 5 h 40 min,
+until a reboot at 10:12. Alexa's routine buttons went `unavailable`, so "all clear" (06:34) and
+"red alert" (10:09) didn't run. Jarvis now says "I can't reach Alexa right now" instead of
+"All clear.". Check with `nmcli -t d` and `journalctl -u NetworkManager`. Without a reboot, try
+`nmcli c up bednarz` (unverified). Adding a nameserver to `/etc/resolv.conf` can't help with no link,
+and the file lives in /run anyway.
+
 **Ring events stuck 2026-10-15 to 11-15 (fixed).** Home Assistant's `event.front_door_ding`
 and `event.front_door_motion` haven't changed since then, while
 `sensor.front_door_last_activity` (polled) still updates. The status update reads
