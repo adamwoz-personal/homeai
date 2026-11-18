@@ -732,12 +732,13 @@ class VoiceAssistant(VoiceIdTurns):
         switcher = gpu_mode.ModeSwitcher(gpu_mode.System(), log=lambda line: log.info("mode: %s", line),
                                          lock_path=gpu_mode.mode_lock_path(),
                                          lock_wait_s=gpu_mode.VOICE_LOCK_WAIT_S)
-        checker = None
+        checker = reword = None
         if self.cfg.art.check:
             from homeai.art import checker as art_checker
-            checker = art_checker.ollama_ask
+            from homeai.art import patcher as art_patcher
+            checker, reword = art_checker.ollama_ask, art_patcher.ollama_chat   # both Jarvis's own voice model
         return ArtVoice(switcher, build_studio, self.presence.publish, adults=self.cfg.art.adults,
-                        on_state=self.presence.state, checker=checker)
+                        on_state=self.presence.state, checker=checker, reword_chat=reword)
 
     def _handle_status(self, turn: Turn, text: str, ident, total: Stopwatch) -> bool:
         """'Status update': built from the voice registry, doorbell history and weather, no agent."""

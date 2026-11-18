@@ -12,10 +12,12 @@ from __future__ import annotations
 
 import random
 import re
+from pathlib import Path
 from dataclasses import dataclass, field
 
 from homeai.art import grammar, policy, prompt_spec, workflows
 from homeai.art import features as F
+from homeai.art import wording as W
 from homeai.art.patcher import MSG_NOT_CAUGHT, features_patch_for
 from homeai.art.store import StoreError
 
@@ -61,10 +63,12 @@ def drawing_sentence(said: str) -> str:
 MODEL = "klein9"
 
 
-def render_spec(spec: dict, steer: list[str] | tuple = ()):
-    """The prompt for a stored spec: lettered features (plus hidden policy words), or the older PromptSpec fields."""
+def render_spec(spec: dict, steer: list[str] | tuple = (), learned: W.Learned | None = None):
+    """The prompt for a stored spec: lettered features (plus hidden policy words), or the older PromptSpec fields.
+    Each feature is said the way the image model draws it right (homeai/art/wording.py, F8)."""
     if "features" in spec:
-        return F.render(F.features_of(spec), spec.get("aspect") or "square", steer)
+        features = F.features_of(spec)
+        return F.render(features, spec.get("aspect") or "square", steer, W.wordings(features, spec, learned))
     return prompt_spec.render(spec)
 
 
@@ -86,6 +90,8 @@ class ArtSession:
     def __init__(self, store, queue, owner: str, rules=None, patch=features_patch_for, rng=None,
                  kind: str = "general"):
         self.store, self.queue, self.owner = store, queue, owner
+        root = getattr(store, "root", None)
+        self.learned = W.Learned(Path(root).parent / "wording.json") if root is not None else None
         self.rules = rules or policy.load("allow-all")
         self._patch, self._rng, self.kind = patch, rng or random.Random(), kind
         self.project = None
@@ -116,7 +122,7 @@ class ArtSession:
               meta: dict | None = None) -> str:
         spec = {**spec, "seed": spec.get("seed") if spec.get("seed") is not None else self._seed()}
         steer = getattr(self.rules, "steer", None)
-        rendered = render_spec(spec, steer(F.text_of(spec)) if steer and "features" in spec else ())
+        rendered = render_spec(spec, steer(F.text_of(spec)) if steer and "features" in spec else (), self.learned)
         node = self.project.add(instruction, spec, parent=parent,
                                 meta={"prompt": rendered.text, "model": MODEL, "seed": spec["seed"],
                                       "size": [rendered.width, rendered.height], "by": self.speaker or self.owner,
@@ -220,9 +226,14 @@ class ArtSession:
             self.project.select(node_id)
         return False
 
-    def redraw(self, node_id: str, reason: str) -> str | None:
+    def allowed_wording(self, text: str) -> bool:
+        """A rewrite reaches the image model, so it passes the same rules as the person's own words (kid-safe)."""
+        return self.rules.check_request(text, self.owner).allowed
+
+    def redraw(self, node_id: str, reason: str, wording: dict | None = None) -> str | None:
         """A checked picture came out wrong: mark it failed and draw it again with a new seed (F4).
 
+        ``wording``: {letter: {"for": feature text, "text": new prompt words}} from a rewrite (F8).
         The new try takes the old one's place (current, and its slot among numbered options).
         Returns the new job id, or None if the picture isn't in this project any more.
         """
@@ -231,7 +242,10 @@ class ArtSession:
         node = self.project.nodes[node_id]
         before = self.project.current
         self.project.fail(node_id, reason)
-        job = self._draw(node.instruction, {**node.spec, "seed": None}, node.parent,
+        spec = {**node.spec, "seed": None}
+        if wording:
+            spec["wording"] = {**(node.spec.get("wording") or {}), **wording}
+        job = self._draw(node.instruction, spec, node.parent,
                          meta={"tries": node.meta.get("tries", 0) + 1, "redraw_of": node_id,
                                **({"by": node.meta["by"]} if node.meta.get("by") else {})})
         new = self.project.current

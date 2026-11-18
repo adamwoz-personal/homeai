@@ -65,15 +65,20 @@ def test_ollama_chat_pins_by_default_and_sends_only_what_is_given(wire):
     assert sent[1]["body"]["options"] == {"temperature": 0} and sent[1]["timeout"] == 5
 
 
-def test_the_checker_asks_with_the_picture_and_lets_the_model_go(wire, tmp_path):
+def test_the_checker_asks_with_the_picture_and_lets_another_model_go(wire, tmp_path, monkeypatch):
+    """Jarvis's own voice model checks by default and stays loaded (F8); another vision model is let go."""
+    from homeai import voice_model
     from homeai.art import checker as CK
+    monkeypatch.setattr(voice_model, "current", lambda: "qwen35-voice")
     sent, replies = wire
-    replies.append(b'{"message": {"content": " 2 \\n"}}')
+    replies += [b'{"message": {"content": " 2 \\n"}}', b'{"message": {"content": "1"}}']
     image = tmp_path / "x.png"
     image.write_bytes(b"png")
     assert CK.ollama_ask(image, "How many heads?") == "2"
     body = sent[0]["body"]
-    assert body["model"] == "minicpm-v" and body["keep_alive"] == "2m" and body["messages"][0]["images"] == ["cG5n"]
+    assert body["model"] == "qwen35-voice" and body["keep_alive"] == -1 and body["messages"][0]["images"] == ["cG5n"]
+    assert CK.ollama_ask(image, "How many heads?", "minicpm-v") == "1"
+    assert sent[1]["body"]["model"] == "minicpm-v" and sent[1]["body"]["keep_alive"] == "2m"
 
 
 def _chat_fake(reject_think: bool, code: int = 400):

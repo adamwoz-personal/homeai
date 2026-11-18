@@ -202,16 +202,19 @@ def keep_details(instruction: str, features: list[Feature], changed: list[str]) 
     return out, touched
 
 
-def render(features: list[Feature], aspect: str = "square", steer: list[str] | tuple = ()):
+def render(features: list[Feature], aspect: str = "square", steer: list[str] | tuple = (),
+           wording: dict[str, str] | None = None):
     """The prompt: main subject first, then what's placed relative to it, where, and the look.
 
     ``steer``: policy words (kid-safe) added to the prompt but never shown as features.
+    ``wording``: what the image model is told for a letter instead of its text (homeai/art/wording.py, F8).
     """
     from homeai.art.prompt_spec import Rendered, _cap
+    said = {f.id: (wording or {}).get(f.id) or f.text for f in features}
     ordered = sorted(features, key=lambda f: (ORDER[f.kind], f.id))
-    sentences = [_cap(f.text) + "." for f in ordered if f.kind in ("subject", "element", "setting",
-                                                                   "composition", "camera")]
-    look = [f.text for f in ordered if f.kind in ("style", "colour", "lighting")]
+    sentences = [_cap(said[f.id]) + "." for f in ordered if f.kind in ("subject", "element", "setting",
+                                                                       "composition", "camera")]
+    look = [said[f.id] for f in ordered if f.kind in ("style", "colour", "lighting")]
     look += [w for w in steer if w.lower() not in " ".join(sentences + look).lower()]
     if look:
         sentences.append(_cap(", ".join(look)) + ".")

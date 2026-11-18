@@ -2183,3 +2183,12 @@ Evidence: plans/LLM_UPGRADE_PLAN.md step 3; ~/homeai-bench/coder-eval.jsonl, kv.
   "DNS server refused query" was the local stub with no link behind it. Lessons: check `nmcli -t d` and the
   NetworkManager journal before blaming DNS; never report success for a fallback that is known to do nothing.
   Fixed with an "I can't reach Alexa" reply (152753a) and a root Wi-Fi watchdog that also tells Jarvis what it fixed.
+- 2026-11-18 art: "a chimera" drew a dragon 18/18 and "a katana" two blades 18/18 with klein9; saying "one katana
+  with one blade" didn't help. Describing instead of naming did ("a lion ... a second head, a goat's head, rising
+  from its back ... a living snake for a tail"; "both hands on its one hilt"): chimera parts mostly right, one
+  blade 10/16. Lessons: an image model that doesn't know a word needs what it looks like, not counts; a colon
+  definition style pulls klein toward plain white character sheets. Jarvis's own voice model (qwen3.5, sees)
+  beats minicpm-v as the picture checker (goat's head 40/42 vs 24/42; heads/riders 16/16) once thinking is
+  off (with thinking on: 3.2 s and riders 14/16). A checker that answers "ok" must say what it checked: today's
+  "ok" was only a people count. The model's own check questions must ask one thing each; a rewrite must copy the
+  rest of the prompt word for word, or it fixes one part and breaks another.

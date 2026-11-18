@@ -18,12 +18,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import base64
 import json
 import re
 import sys
 import time
-import urllib.request
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -31,7 +29,6 @@ sys.path.insert(0, str(REPO))
 
 from homeai import gpu_mode as G  # noqa: E402
 
-from homeai.httpjson import OLLAMA  # noqa: E402
 from homeai.benchio import bench_path  # noqa: E402
 # Labels by eye, checked at full size (thumbnails misled: a first pass called old-005 one-headed, and all
 # three vision models disagreed correctly). Per picture: riders on the dragon, dragon heads, seated astride.
@@ -49,13 +46,9 @@ QUESTIONS = {
 
 
 def ask(model: str, image: Path, question: str) -> str:
-    payload = {"model": model, "stream": False, "options": {"temperature": 0}, "keep_alive": "5m",
-               "messages": [{"role": "user", "content": question,
-                             "images": [base64.b64encode(image.read_bytes()).decode()]}]}
-    req = urllib.request.Request(f"{OLLAMA}/api/chat", data=json.dumps(payload).encode(),
-                                 headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=300) as reply:
-        return json.loads(reply.read())["message"]["content"].strip()
+    """Asked exactly as Jarvis's checker asks (homeai/art/checker.py: temperature 0, thinking off)."""
+    from homeai.art.checker import ollama_ask
+    return ollama_ask(image, question, model)
 
 
 def parse(kind: str, answer: str):

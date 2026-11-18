@@ -180,7 +180,8 @@ class ArtVoice:
                  background: Callable[[Callable[[], None]], None] | None = None,
                  wall: Callable[[], float] = time.time,
                  checker: Callable[[Path, str], str] | None = None,
-                 warm_voice: Callable[[], None] | None = None) -> None:
+                 warm_voice: Callable[[], None] | None = None,
+                 reword_chat: Callable[[list[dict], dict], str] | None = None) -> None:
         self.switcher, self._build, self._publish = switcher, build, publish
         self.viewer = viewer or Viewer()
         self.adults = tuple(u.lower() for u in adults)
@@ -191,6 +192,8 @@ class ArtVoice:
         self._wall = wall
         self.checker = checker                  # ask(image, question) -> answer; None: pictures aren't checked
         self._warm_voice = warm_voice or _warm_voice_model
+        self.reword_chat = reword_chat          # chat(messages, schema) -> json; None: failures aren't reworded
+        self._asked: dict[str, list] = {}       # feature text -> the model's own check questions (F8)
         self.session = None
         self.queue = None
         self.owner: str | None = None
@@ -441,10 +444,12 @@ class ArtVoice:
         self._publish_state()
 
     def _check(self, session, event: dict) -> tuple[list[str], bool]:
-        """(what's wrong, whether it is being redrawn) for a finished picture (ART_FEATURES_PLAN F4).
+        """(what's wrong, whether it is being redrawn) for a finished picture (ART_FEATURES_PLAN F4, F8).
 
-        A picture whose heads or riders don't match its features is redrawn with a new seed, up to
-        MAX_REDRAWS times, before it is shown. Any failure of the checker shows the picture as it is.
+        A picture that fails its checks (heads, riders, blades, a chimera's parts) is redrawn with a new seed,
+        up to MAX_REDRAWS times, before it is shown. From the second failure on, the failing features are
+        reworded first (F8). A rewrite that ends in a passing picture is remembered for next time. Any failure
+        of the checker shows the picture as it is.
         """
         from homeai.art import checker as CK
         from homeai.art import features as F
@@ -454,28 +459,91 @@ class ArtVoice:
         node = project.nodes.get(event.get("node"))
         if node is None or "features" not in node.spec or node.kind != "image":
             return [], False                    # a bigger copy is the same picture: nothing new to check
+        features = F.features_of(node.spec)
         try:
-            checks = CK.checklist(F.features_of(node.spec))
+            checks = CK.checklist(features)
+            checks += self._asked_checks(features, checks)
             if not checks:
+                log.info("art: %s/%s: nothing to check", project.id, node.id)
                 return [], False
             self.status = "Checking..."
             self._publish_state()
-            issues = CK.problems(Path(event["image"]), checks, self.checker)
+            failures = CK.failed(Path(event["image"]), checks, self.checker)
         except Exception as exc:  # noqa: BLE001 - an unchecked picture beats no picture
             log.warning("checking %s/%s failed: %s", project.id, node.id, exc)
             self._background(self._warm_voice)
             return [], False
-        log.info("art: checked %s/%s: %s", project.id, node.id, ", ".join(issues) or "ok")
+        issues = [said for _, said in failures]
+        log.info("art: checked %s/%s (%s): %s", project.id, node.id, ", ".join(c.kind for c in checks),
+                 ", ".join(issues) or "ok")
+        if not issues:
+            self._learn(session, features, node.spec)
         with self._lock:
             if self.session is not session:
                 return issues, False
-            again = session.checked(node.id, issues) and node.meta.get("tries", 0) < CK.MAX_REDRAWS
-            job = session.redraw(node.id, "checked: " + ", ".join(issues)) if again else None
+            # Only the model's own questions failing (an unknown creature, 2026-11-18 ki-rin): klein rarely gets
+            # it in four tries (~65 s), so reword at once, one redraw, then show it. Measured checks keep all three.
+            own_only = bool(failures) and all(c.kind == "asked" for c, _ in failures)
+            tries = node.meta.get("tries", 0)
+            again = session.checked(node.id, issues) and tries < (1 if own_only else CK.MAX_REDRAWS)
+            wording = self._reword(session, features, node, failures, Path(event["image"])) \
+                if again and (tries >= 1 or own_only) else None
+            job = session.redraw(node.id, "checked: " + ", ".join(issues), wording) if again else None
             if job is not None:
-                self.status = f"Redrawing: it came out with {', '.join(issues)}."
+                self.status = f"Redrawing: it came out with {', '.join(issues)}." + \
+                    (" Trying other words for it." if wording else "")
                 return issues, True
-        self._background(self._warm_voice)      # the vision model pushed Jarvis's voice model out; bring it back
+        self._background(self._warm_voice)      # a check can leave a different model loaded; bring the voice back
         return issues, False
+
+    def _asked_checks(self, features, checks) -> list:
+        """F8 step 2: for a subject or element nothing else checks, the voice model's own yes/no questions.
+        Cached per feature text, so a redraw doesn't ask the model again."""
+        from homeai.art import checker as CK
+        from homeai.art import wording as W
+        if self.reword_chat is None:
+            return []
+        covered = {c.feature for c in checks}
+        out = []
+        for f in features:
+            if f.kind not in ("subject", "element") or f.id in covered:
+                continue
+            if f.text not in self._asked:
+                self._asked[f.text] = W.asked(f.text, self.reword_chat)
+            out += [CK.Check(a.kind, a.question, a.expect, a.kind, f.id, a.wrong) for a in self._asked[f.text]]
+        return out
+
+    def _reword(self, session, features, node, failures, image: Path) -> dict | None:
+        """New prompt words for each feature that failed again (F8), or None. Any failure: no rewrite."""
+        from homeai.art import wording as W
+        if self.reword_chat is None:
+            return None
+        by_id = {f.id: f for f in features}
+        out = {}
+        try:
+            seen = self.checker(image, "Describe what is in this picture in one sentence.")
+        except Exception as exc:  # noqa: BLE001 - the rewrite can do without it
+            log.warning("describing the picture failed: %s", exc)
+            seen = ""
+        for letter in dict.fromkeys(c.feature for c, _ in failures if c.feature in by_id):
+            feature = by_id[letter]
+            current = W.prompt_text(feature, node.spec, session.learned)
+            said = [s for c, s in failures if c.feature == letter]
+            new = W.reword(feature.text, current, said, seen, self.reword_chat)
+            if new and session.allowed_wording(new):
+                out[letter] = {"for": feature.text, "text": new}
+                log.info("art: reworded %s for %s: %r", letter, ", ".join(said), new)
+        return out or None
+
+    def _learn(self, session, features, spec: dict) -> None:
+        """A picture with this picture's own rewrites passed: remember the words for the same feature next time."""
+        if session.learned is None:
+            return
+        own = spec.get("wording") or {}
+        for f in features:
+            entry = own.get(f.id)
+            if isinstance(entry, dict) and entry.get("for") == f.text and entry.get("text"):
+                session.learned.remember(f.text, entry["text"])
 
     def _export(self, event: dict, session=None) -> None:
         """The picture into the asker's own folder, always with a JSON beside it (prompt, seed, model)."""

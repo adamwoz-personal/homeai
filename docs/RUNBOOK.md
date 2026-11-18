@@ -202,12 +202,18 @@ homeai-mode voice     # ComfyUI stopped, coder back (~7 s warm, ~27 s cold)
   "change B to a knight" works by letter. A complaint ("it has two heads") draws four
   new tries, numbered in the picture window: "the second one", "image three" or
   "option 3" picks. Questions ("what is that in his hand?") never change the picture.
-- Before a picture is shown, a vision model (minicpm-v) counts the dragon's heads
-  and the riders the features promise; a wrong picture is redrawn with a new seed
-  (up to 3 times, the window says "Checking..." then "Redrawing: ..."), and if none
-  pass the last try is shown ("Best I could do: 2 heads"). A check takes ~3 s the
-  first time (Jarvis's voice model is pushed out of Ollama and reloaded in the
-  background, ~2 s), ~0.7 s after. `HOMEAI_ART_CHECK=0` turns it off.
+- Before a picture is shown, Jarvis's own voice model (it sees; since 2026-11-18,
+  was minicpm-v) checks what the features promise: heads, riders, people, sword
+  blades, a chimera's goat's head and snake tail, and for anything else its own
+  yes/no questions. A wrong picture is redrawn with a new seed (up to 3 times, the
+  window says "Checking..." then "Redrawing: ..."); from the second failure the
+  failing feature is reworded first ("Trying other words for it."). If none pass,
+  the last try is shown ("Best I could do: 2 sword blades"). ~0.9 s a question,
+  no model swap. `HOMEAI_ART_CHECK=0` turns checking and rewording off.
+- The features stay as said; the prompt says names klein9 gets wrong as what they
+  look like (`homeai/art/wording.py`: chimera, one katana or sword). Rewrites that
+  fixed a feature are remembered in `~/.local/share/homeai/art/wording.json`; delete
+  a line (or the file) to forget one.
 - Numbered options (after a complaint, or "give me four"): a wrong option is not
   redrawn while another may be right; its thumbnail says what is wrong ("2: 2 heads")
   and the window moves to the first right one, unless the person already picked.

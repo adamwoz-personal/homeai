@@ -111,7 +111,9 @@ def features_patch_for(spec: dict, instruction: str, chat=None, clock=time.monot
         after, changed = F.keep_details(instruction, after, changed)
         new = {"features": F.dump(after), "aspect": aspect if aspect in SIZES else (spec or {}).get("aspect", "square"),
                "letters_used": sorted(used | {f.id for f in before} | {f.id for f in after}),
-               "seed": (spec or {}).get("seed")}
+               "seed": (spec or {}).get("seed"),
+               # F8: rewrites that fixed this picture stay; one whose feature changed is ignored (wording.prompt_text)
+               **({"wording": spec["wording"]} if spec and spec.get("wording") else {})}
     except (urllib.error.URLError, OSError, TimeoutError, KeyError, ValueError) as exc:
         detail = f"{type(exc).__name__}: {exc}; model said {raw[:200]!r}"[:400]
         log.warning("features for %r not caught: %s", instruction, detail)
