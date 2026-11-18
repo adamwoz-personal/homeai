@@ -48,6 +48,10 @@ CASES = {
     "v3": "An anime girl holding a single katana with both hands on its one hilt, its one long curved blade "
           "pointing at the monster. Fighting a chimera, a lion with a golden mane that has a second head, a "
           "goat's head, rising from the middle of its back, and a living snake for a tail.",
+    # Adam 2026-11-18: a katana can be held in one hand or two, so the words mustn't say "both hands".
+    "v4": "An anime girl holding a single katana by its one hilt, its one long curved blade pointing forward. "
+          "Fighting a chimera, a lion with a golden mane that has a second head, a goat's head, rising from the "
+          "middle of its back, and a living snake for a tail.",
 }
 
 

@@ -189,3 +189,13 @@ def test_a_missing_file_fails_without_running_anything(tmp_path):
     wt = _repo(tmp_path, E._PLAN_HIDDEN_TESTS)
     (wt / "tools" / "say_duration.py").unlink()
     assert E._accept_plan(wt) == (False, "missing: tools/say_duration.py")
+
+
+def test_gradle_leaves_no_daemon_behind(tmp_path, monkeypatch):
+    """A Gradle and a Kotlin daemon left by the gate (~6.5 GB) got ComfyUI OOM-killed on 2026-11-18."""
+    (tmp_path / "gradlew").write_text("")
+    seen = []
+    monkeypatch.setattr(E, "run", lambda cmd, cwd, timeout=600: seen.append(cmd) or
+                        subprocess.CompletedProcess(cmd, 0, "", ""))
+    E._gradle(tmp_path, "assembleDebug")
+    assert "--no-daemon" in seen[0] and "kotlin.compiler.execution.strategy=in-process" in seen[0]

@@ -30,10 +30,12 @@ def test_a_chimera_is_said_as_what_it_looks_like():
     ("an anime girl wielding one katana with one blade", "katana", " curved"),     # Adam's own fix, swallowed
     ("a knight holding a sword", "sword", ""),
     ("a samurai with his katana", "katana", " curved")])
-def test_one_sword_is_said_as_one_hilt_held_with_both_hands(said, noun, curve):
+def test_one_sword_is_said_as_one_hilt_and_one_blade_without_choosing_hands(said, noun, curve):
     text, asks = W.expand(said)
-    assert f"holding a single {noun} with both hands on its one hilt, its one long{curve} blade" in text
+    assert f"holding a single {noun} by its one hilt, its one long{curve} blade" in text
     assert "with one blade" not in text and text.count(noun) == 1
+    assert "hand" not in text                       # Adam: one hand or two is the person's choice
+    assert W.expand(said + " in her left hand")[0].endswith("in her left hand")
     assert [(a.kind, a.expect, a.question) for a in asks] == [("blades", 1, W.BLADES_Q)]
 
 
@@ -46,7 +48,7 @@ def test_features_stay_as_said_and_the_prompt_says_what_they_look_like():
     from homeai.art.session import render_spec
     spec = {"features": F.dump(ADAM), "aspect": "square"}
     prompt = render_spec(spec).text
-    assert prompt.startswith("An anime girl holding a single katana with both hands on its one hilt")
+    assert prompt.startswith("An anime girl holding a single katana by its one hilt")
     assert "Fighting a chimera, a lion with a golden mane" in prompt
     assert [f.text for f in F.features_of(spec)] == ["an anime girl wielding a katana", "fighting a chimera"]
 

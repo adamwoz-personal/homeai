@@ -62,11 +62,12 @@ TERMS = (
          "its back, and a living snake for a tail",
          (Ask("goat", GOAT_Q, True, "no goat's head on its back"),
           Ask("snake", SNAKE_Q, True, "no snake for a tail"))),
-    # The second blade came with the two-handed grip: say where both hands go, on one hilt (v2: 6/8, v3: 4/8).
+    # One hilt, one blade. "With both hands on its one hilt" did better (v2+v3 10/16 vs v4 ~3/8, bench 2026-11-18),
+    # but Adam: a katana can be wielded with one hand or two, so the words don't choose; the checker and the
+    # redraws make up the difference. Hands the person asks for stay in their own words.
     Term(re.compile(rf"\b{_HOLD}\s+(?:a single|a|one|her|his|their)\s+(?P<noun>katana|sword|longsword)"
                     r"(?:\s+with one blade)?\b", re.I),
-         # measured as "... its one long curved blade pointing at the monster"; "forward" fits any scene
-         "holding a single {noun} with both hands on its one hilt, its one long{curve} blade pointing forward",
+         "holding a single {noun} by its one hilt, its one long{curve} blade pointing forward",
          (Ask("blades", BLADES_Q, 1, "{n} sword blades"),)),
 )
 
@@ -177,9 +178,10 @@ def reword_messages(feature_text: str, current: str, issues: list[str], seen: st
         {"role": "system", "content":
             "You write prompts for an image model that draws literally and often miscounts. A picture came out "
             "wrong. Rewrite the prompt so the next picture gets the WRONG PART right. Rules: change how the wrong "
-            "part is described: make it more concrete, put it first, say its count in words and where it sits "
-            "or where the hands go. Describe what should be drawn, never the picture that came out: add nothing "
-            "the person didn't ask for (no clothes, hair or colours of your own). Say only what should be there, "
+            "part is described: make it more concrete, put it first, say its count in words and where it sits. "
+            "Describe what should be drawn, never the picture that came out: add nothing the person didn't ask "
+            "for (no clothes, hair, colours, or how many hands hold something, of your own). Say only what should "
+            "be there, "
             "never what should not (no 'no', 'not', 'without', 'avoid'). Copy every other part of the old prompt "
             "word for word: its words for the parts that came out right are why they came out right. "
             "Under 70 words. Answer as JSON: {\"wording\": \"...\"}"},

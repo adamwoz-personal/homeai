@@ -61,7 +61,8 @@ delegation in the scorecard at the end.
    scope's 4 GB cap is enforced by the OOM killer. A test of a loop guard wraps
    the loop in the `memory_cap` fixture so a broken guard raises MemoryError
    instead. After a gate, `journalctl -k --since <start> | grep -c "out of
-   memory"` and `ls /var/crash` should both be empty.
+   memory"` and `ls /var/crash` should both be empty, and `pgrep -f "GradleDaemon\|kotlin-daemon"` too
+   (a test that builds with Gradle uses `--no-daemon`, OOM 2026-11-18).
 
 **Long-term memory (Phases 1-3 built 2026-11-01; `plans/MEMORY_PLAN.md` §15):**
 Postgres `homeai` (socket, peer auth), code in `homeai/memory_store/`, CLI
@@ -2192,3 +2193,10 @@ Evidence: plans/LLM_UPGRADE_PLAN.md step 3; ~/homeai-bench/coder-eval.jsonl, kv.
   off (with thinking on: 3.2 s and riders 14/16). A checker that answers "ok" must say what it checked: today's
   "ok" was only a people count. The model's own check questions must ask one thing each; a rewrite must copy the
   rest of the prompt word for word, or it fixes one part and breaks another.
+- 2026-11-18 Adam: a katana can be held in one hand or two, so the glossary says "by its one hilt" and never picks
+  hands (v4: one blade ~3/8 vs "both hands" 10/16; the checker and redraws make up the difference). The words we
+  add must not choose what the person left open.
+- 2026-11-18 the gate's Android and Noise tests left two Gradle daemons and two Kotlin daemons (~6.5 GB) resident;
+  the next art-mode start was OOM-killed loading klein (Adam saw the pop-up). I hadn't run rule 7's post-gate check.
+  Both tools now run Gradle with `--no-daemon` and the Kotlin compiler in-process. After every gate:
+  `journalctl -k --since <start> | grep -c "Out of memory"`, `ls /var/crash`, and `pgrep -f GradleDaemon`.

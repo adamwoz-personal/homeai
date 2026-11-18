@@ -81,3 +81,11 @@ def test_kotlin_reports_a_changed_byte(tmp_path):
     N.write(bad, vec)
     proc = N.kotlin(tmp_path / "k.txt", bad)
     assert proc.returncode != 0 and "a2h_1_cipher differs" in proc.stdout
+
+
+def test_kotlin_build_leaves_no_daemon_behind(tmp_path, monkeypatch):
+    import subprocess
+    seen = []
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: seen.append(cmd) or subprocess.CompletedProcess(cmd, 0))
+    N.kotlin(tmp_path / "out.txt")
+    assert "--no-daemon" in seen[0] and "-Pkotlin.compiler.execution.strategy=in-process" in seen[0]

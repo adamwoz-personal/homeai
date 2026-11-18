@@ -705,7 +705,10 @@ def _gradle(project: Path, *tasks: str, timeout: float = 900) -> subprocess.Comp
     gradlew = project / "gradlew"
     if not gradlew.exists():
         return subprocess.CompletedProcess([], 1, "", "no ./gradlew in the project")
-    cmd = f"ANDROID_HOME={ANDROID_HOME} timeout {int(timeout)} ./gradlew -q {' '.join(tasks)}"
+    # No daemons: on 2026-11-18 the gate's Android test left a Gradle daemon and a Kotlin daemon resident (~6.5 GB);
+    # the next art-mode start had no room for klein and the OOM killer took ComfyUI (ROUTING_GUIDE rule 7).
+    cmd = (f"ANDROID_HOME={ANDROID_HOME} timeout {int(timeout)} ./gradlew -q --no-daemon "
+           f"-Pkotlin.compiler.execution.strategy=in-process {' '.join(tasks)}")
     try:
         return run(cmd, project, timeout=timeout + 30)
     except subprocess.TimeoutExpired:

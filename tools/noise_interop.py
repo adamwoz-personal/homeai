@@ -162,7 +162,9 @@ def frame_problems(vec: dict[str, bytes]) -> list[str]:
 def kotlin(out: Path, vectors_file: Path = FIXTURES / "nk-python.txt") -> subprocess.CompletedProcess:
     """Build and run the Kotlin side: it checks ``vectors_file`` (Python's) and writes its own to ``out``."""
     env = {**os.environ, "GRADLE_USER_HOME": os.environ.get("GRADLE_USER_HOME", str(Path.home() / ".gradle"))}
-    return subprocess.run(["./gradlew", "-q", "--console=plain", "run", f"--args={vectors_file} {out}"],
+    # No daemons left behind after a test (~6.5 GB with eval_local_coder's; ComfyUI OOM-killed 2026-11-18)
+    return subprocess.run(["./gradlew", "-q", "--console=plain", "--no-daemon",
+                           "-Pkotlin.compiler.execution.strategy=in-process", "run", f"--args={vectors_file} {out}"],
                           cwd=KOTLIN, env=env, capture_output=True, text=True, timeout=900)
 
 
