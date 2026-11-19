@@ -21,8 +21,12 @@ ADAM = feats(("subject", "an anime girl wielding a katana"), ("element", "fighti
 def test_a_chimera_is_said_as_what_it_looks_like():
     text, asks = W.expand("fighting a chimera")
     assert text.startswith("fighting a chimera, a lion with a golden mane")
-    assert "a goat's head, rising from the middle of its back" in text and "a living snake for a tail" in text
-    assert [(a.kind, a.expect) for a in asks] == [("goat", True), ("snake", True)]
+    assert "a horned goat's head on its own long neck, rising straight up from the middle of its back" in text
+    assert "a lion's face with round lion ears" in text               # horns went on the lion (node 002)
+    assert text.endswith("a long snake for a tail, the tail ending in a snake's head with open jaws")
+    assert [(a.kind, a.expect) for a in asks] == [("goat", True), ("snake", True), ("horns", False)]
+    assert "snake's head" in asks[1].question                         # a scaly tail isn't a snake
+    assert "lion's head have horns" in asks[2].question
 
 
 @pytest.mark.parametrize("said, noun, curve", [
@@ -32,11 +36,19 @@ def test_a_chimera_is_said_as_what_it_looks_like():
     ("a samurai with his katana", "katana", " curved")])
 def test_one_sword_is_said_as_one_hilt_and_one_blade_without_choosing_hands(said, noun, curve):
     text, asks = W.expand(said)
-    assert f"holding a single {noun} by its one hilt, its one long{curve} blade" in text
+    assert f"holding a single {noun} by its short hilt, its one long{curve} blade pointing forward" in text
+    assert "the blade three times as long as the hilt" in text      # Adam: a hilt as long as the blade (002)
     assert "with one blade" not in text and text.count(noun) == 1
     assert "hand" not in text                       # Adam: one hand or two is the person's choice
     assert W.expand(said + " in her left hand")[0].endswith("in her left hand")
     assert [(a.kind, a.expect, a.question) for a in asks] == [("blades", 1, W.BLADES_Q)]
+
+
+def test_a_rewrite_of_the_glossary_sentence_has_room_to_add_words():
+    # The rewriter copies the whole prompt and adds to the wrong part; at 420 the v7 glossary left it 0 room.
+    text = W.expand("an anime girl wielding a katana fighting a chimera")[0]
+    assert len(text) + 100 <= W.MAX_WORDING
+    assert len(text.split()) + 10 <= 100 and "Under 100 words" in W.reword_messages("x", text, [], "")[0]["content"]
 
 
 @pytest.mark.parametrize("said", ["a girl wielding two katanas", "a sword in a stone", "a chimney", "a dragon"])
@@ -48,7 +60,7 @@ def test_features_stay_as_said_and_the_prompt_says_what_they_look_like():
     from homeai.art.session import render_spec
     spec = {"features": F.dump(ADAM), "aspect": "square"}
     prompt = render_spec(spec).text
-    assert prompt.startswith("An anime girl holding a single katana by its one hilt")
+    assert prompt.startswith("An anime girl holding a single katana by its short hilt")
     assert "Fighting a chimera, a lion with a golden mane" in prompt
     assert [f.text for f in F.features_of(spec)] == ["an anime girl wielding a katana", "fighting a chimera"]
 
@@ -123,7 +135,7 @@ def test_the_model_writes_yes_no_checks_for_what_the_glossary_doesnt_know():
 def test_the_checklist_asks_about_blades_and_the_chimera_per_feature():
     checks = CK.checklist(ADAM)
     assert [(c.kind, c.expect, c.feature) for c in checks] == [
-        ("people", 1, "A"), ("blades", 1, "A"), ("goat", True, "B"), ("snake", True, "B")]
+        ("people", 1, "A"), ("blades", 1, "A"), ("goat", True, "B"), ("snake", True, "B"), ("horns", False, "B")]
 
 
 @pytest.mark.parametrize("answer, yes", [("Yes.", True), ("yes, there is", True), ("No", False),
@@ -133,15 +145,16 @@ def test_parse_yes(answer, yes):
 
 
 def test_failed_says_what_is_wrong_per_check(tmp_path):
-    answers = {"people": "1", "blades": "2", "goat": "No.", "snake": "Yes"}
+    answers = {"people": "1", "blades": "2", "goat": "No.", "snake": "Yes", "horns": "Yes"}
 
     def ask(image, question):
         return next(v for k, v in answers.items() if (k == "people" and "people" in question)
                     or (k == "blades" and "blades" in question) or (k == "goat" and "goat" in question)
-                    or (k == "snake" and "snake" in question))
+                    or (k == "snake" and "snake" in question) or (k == "horns" and "horns" in question))
     got = CK.failed(tmp_path / "x.png", CK.checklist(ADAM), ask)
-    assert [(c.feature, said) for c, said in got] == [("A", "2 sword blades"), ("B", "no goat's head on its back")]
-    answers.update(blades="1", goat="maybe")
+    assert [(c.feature, said) for c, said in got] == [("A", "2 sword blades"), ("B", "no goat's head on its back"),
+                                                      ("B", "horns on the lion's head")]
+    answers.update(blades="1", goat="maybe", horns="No")
     assert CK.problems(tmp_path / "x.png", CK.checklist(ADAM), ask) == []
 
 

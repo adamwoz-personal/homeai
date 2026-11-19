@@ -52,6 +52,22 @@ CASES = {
     "v4": "An anime girl holding a single katana by its one hilt, its one long curved blade pointing forward. "
           "Fighting a chimera, a lion with a golden mane that has a second head, a goat's head, rising from the "
           "middle of its back, and a living snake for a tail.",
+    # Adam 2026-11-18 live (node 002): the hilt as long as the blade. v4 with the sword's proportions said.
+    "v5": "An anime girl holding a single katana by its short hilt, its one long curved blade pointing forward, "
+          "the blade three times as long as the hilt. Fighting a chimera, a lion with a golden mane that has a "
+          "second head, a goat's head, rising from the middle of its back, and a living snake for a tail.",
+    # Same node: goat horns on the lion's head, the goat's head on its shoulder, a scaly tail with no snake's
+    # head. v4 with the chimera's parts each given their own place.
+    "v6": "An anime girl holding a single katana by its one hilt, its one long curved blade pointing forward. "
+          "Fighting a chimera, a lion with a golden mane and a lion's face with round lion ears, that has a "
+          "second head, a horned goat's head on its own long neck, rising straight up from the middle of its "
+          "back, and a long snake for a tail, the tail ending in a snake's head with open jaws.",
+    # v5's sword and v6's chimera together.
+    "v7": "An anime girl holding a single katana by its short hilt, its one long curved blade pointing forward, "
+          "the blade three times as long as the hilt. Fighting a chimera, a lion with a golden mane and a lion's "
+          "face with round lion ears, that has a second head, a horned goat's head on its own long neck, rising "
+          "straight up from the middle of its back, and a long snake for a tail, the tail ending in a snake's "
+          "head with open jaws.",
 }
 
 

@@ -29,13 +29,18 @@ from homeai.fsutil import atomic_write_json
 
 log = logging.getLogger("homeai.art.wording")
 
-MAX_WORDING = 420             # the glossary alone makes Adam's one-feature sentence 266 characters
+MAX_WORDING = 560             # the glossary alone makes Adam's one-feature sentence 421 characters (v7 wording)
 
 # Questions measured on 42 labelled pictures with Jarvis's voice model, thinking off (tools/art/probe_vision_parts.py,
 # 2026-11-18): blades 26/34 (good pictures flagged 2/13, wrong ones caught 15/21), goat's head 40/42, snake 37/42.
 BLADES_Q = "How many sword blades are in this picture? Answer with one number only."
 GOAT_Q = "Is there a goat's head on the creature's back? Answer yes or no."
-SNAKE_Q = "Is the creature's tail a snake? Answer yes or no."
+# "Is the creature's tail a snake?" said yes to scaly lion tails with no snake's head (live node 002, 2026-11-18).
+# These two, on 25 and 15 pictures labelled by eye, asked twice each: 46/50 and 26/30
+# (~/homeai-bench/vision-parts-20261118-200216). The horns question missed node 002's horned lion, so it's a
+# second net, not the only one.
+SNAKE_Q = "Does the creature's tail end in a snake's head? Answer yes or no."
+HORNS_Q = "Does the lion's head have horns? Answer yes or no."
 
 
 @dataclass(frozen=True)
@@ -57,17 +62,23 @@ class Term:
 
 _HOLD = r"(?:wielding|holding|brandishing|swinging|carrying|gripping|with)"
 TERMS = (
+    # Bench v4 vs v7 (2026-11-18 evening, 8 seeds, by eye): snake's head on the tail 0/8 -> 8/8; goat's head
+    # apart from the lion's ~4/8 -> 5/8; horns on the lion's own head still 3/8 (hence HORNS_Q).
     Term(re.compile(r"\b(?:a|an|one|the)\s+chimera\b", re.I),
-         "a chimera, a lion with a golden mane that has a second head, a goat's head, rising from the middle of "
-         "its back, and a living snake for a tail",
+         "a chimera, a lion with a golden mane and a lion's face with round lion ears, that has a second head, a "
+         "horned goat's head on its own long neck, rising straight up from the middle of its back, and a long "
+         "snake for a tail, the tail ending in a snake's head with open jaws",
          (Ask("goat", GOAT_Q, True, "no goat's head on its back"),
-          Ask("snake", SNAKE_Q, True, "no snake for a tail"))),
+          Ask("snake", SNAKE_Q, True, "no snake's head on its tail"),
+          Ask("horns", HORNS_Q, False, "horns on the lion's head"))),
     # One hilt, one blade. "With both hands on its one hilt" did better (v2+v3 10/16 vs v4 ~3/8, bench 2026-11-18),
     # but Adam: a katana can be wielded with one hand or two, so the words don't choose; the checker and the
     # redraws make up the difference. Hands the person asks for stay in their own words.
+    # Adam, live node 002: a hilt as long as the blade. Saying the proportion (v5/v7): about 7/8 hilts right.
     Term(re.compile(rf"\b{_HOLD}\s+(?:a single|a|one|her|his|their)\s+(?P<noun>katana|sword|longsword)"
                     r"(?:\s+with one blade)?\b", re.I),
-         "holding a single {noun} by its one hilt, its one long{curve} blade pointing forward",
+         "holding a single {noun} by its short hilt, its one long{curve} blade pointing forward, the blade three "
+         "times as long as the hilt",
          (Ask("blades", BLADES_Q, 1, "{n} sword blades"),)),
 )
 
@@ -184,7 +195,7 @@ def reword_messages(feature_text: str, current: str, issues: list[str], seen: st
             "be there, "
             "never what should not (no 'no', 'not', 'without', 'avoid'). Copy every other part of the old prompt "
             "word for word: its words for the parts that came out right are why they came out right. "
-            "Under 70 words. Answer as JSON: {\"wording\": \"...\"}"},
+            "Under 100 words. Answer as JSON: {\"wording\": \"...\"}"},
         {"role": "user", "content":
             f"The person asked for: {feature_text}\nThe prompt said: {current}\n"
             f"What came out wrong: {', '.join(issues)}\nWhat the picture shows: {seen or 'unknown'}"},
