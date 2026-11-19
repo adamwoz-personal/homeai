@@ -61,8 +61,9 @@ delegation in the scorecard at the end.
    scope's 4 GB cap is enforced by the OOM killer. A test of a loop guard wraps
    the loop in the `memory_cap` fixture so a broken guard raises MemoryError
    instead. After a gate, `journalctl -k --since <start> | grep -c "out of
-   memory"` and `ls /var/crash` should both be empty, and `pgrep -f "GradleDaemon\|kotlin-daemon"` too
-   (a test that builds with Gradle uses `--no-daemon`, OOM 2026-11-18).
+   memory"` and `ls /var/crash` should both be empty, and `pgrep -f "[G]radleDaemon|[K]otlinCompileDaemon"` too
+   (a test that builds with Gradle uses `--no-daemon`, OOM 2026-11-18). The brackets matter: without them pgrep
+   counts the shell running it (a false "daemons=1", 2026-11-18).
 
 **Long-term memory (Phases 1-3 built 2026-11-01; `plans/MEMORY_PLAN.md` §15):**
 Postgres `homeai` (socket, peer auth), code in `homeai/memory_store/`, CLI
