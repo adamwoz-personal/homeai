@@ -1072,6 +1072,7 @@ MUTANTS=(
   "f9-practice-takes-art-back|tools/art/practice.py|s/    if started and not night.art_taken():/    if started:/|tests/test_practice.py"
   "f9-practice-glossary-skipped|tools/art/practice.py|s/    asks = W.expand(text)\[1\]/    asks = []/|tests/test_practice.py"
   "f9-practice-trusts-own-questions|tools/art/practice.py|s/ and not measured:/ and False:/|tests/test_practice.py"
+  "f9-practice-user-journal|tools/art/practice.py|s/    if (scope or service_scope.scope)() != \"system\":/    if True:/|tests/test_practice.py"
   "f9-practice-best-not-kept|tools/art/practice.py|s/            self._keep(topic, text, checks, best, \"best\", first)/            pass/|tests/test_practice.py"
   "gradle-keeps-daemon|tools/eval_local_coder.py|s/ -q --no-daemon / -q /|tests/test_eval_local_coder.py -k no_daemon"
   "gradle-kotlin-daemon|tools/eval_local_coder.py|s/-Pkotlin.compiler.execution.strategy=in-process //|tests/test_eval_local_coder.py -k no_daemon"

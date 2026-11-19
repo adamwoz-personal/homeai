@@ -4,7 +4,7 @@
 with Claude (paid). Updated as evidence accumulates. Every rule here comes from an
 observed outcome on this box, not from theory.
 
-Last updated: 2026-11-17
+Last updated: 2026-11-19
 
 ---
 
@@ -2201,3 +2201,11 @@ Evidence: plans/LLM_UPGRADE_PLAN.md step 3; ~/homeai-bench/coder-eval.jsonl, kv.
   the next art-mode start was OOM-killed loading klein (Adam saw the pop-up). I hadn't run rule 7's post-gate check.
   Both tools now run Gradle with `--no-daemon` and the Kotlin compiler in-process. After every gate:
   `journalctl -k --since <start> | grep -c "Out of memory"`, `ls /var/crash`, and `pgrep -f GradleDaemon`.
+
+## 2026-11-19: "is Jarvis in use?" must read the system journal
+
+`homeai.service` is a system unit on this box, so `journalctl --user -u homeai` is always empty. Art practice's
+"nobody spoke for 5 minutes" check used `--user` and would never have seen anyone (found before the nightly timer
+went on; the live test run happened to be in a quiet spell). Any "heard:" check goes through
+`homeai.service_scope.scope()` (as `tools/switch_voice_model.py` and `tools/art/practice.py` now do), and is tested
+once against a log known to contain "heard:" before it is trusted.

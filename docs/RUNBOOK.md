@@ -255,7 +255,11 @@ homeai-mode voice     # ComfyUI stopped, coder back (~7 s warm, ~27 s cold)
   5 min; stops before the next picture on any `heard:`; goes back to voice mode
   unless Jarvis entered art mode for someone (`art: entered for ...`). Results
   in `~/homeai-bench/practice-<time>/`, history in
-  `~/.local/share/homeai/art/practice-history.json`.
+  `~/.local/share/homeai/art/practice-history.json`. Nightly 01:00-06:30 via
+  the user timer `homeai-art-practice.timer` (Adam, 2026-11-19); install or
+  remove with `tools/art/install_practice_timer.sh [--uninstall]`; logs
+  `journalctl --user -u homeai-art-practice`. Stopping it (SIGINT) still
+  brings voice mode back.
 
 ## False wakes ("it answered and nobody said Jarvis")
 

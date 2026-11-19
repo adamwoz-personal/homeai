@@ -227,8 +227,13 @@ class Practice:
 
 # -- the night around it --------------------------------------------------------------------------------------
 
-def journal(since: str, run=subprocess.run) -> str:
-    argv = ["journalctl", "--user", "-u", "homeai", "--since", since, "--no-pager", "-q", "-o", "cat"]
+def journal(since: str, run=subprocess.run, scope: Callable[[], str] | None = None) -> str:
+    """Jarvis's log since ``since``. homeai.service is a system unit here: the user journal has none of its lines
+    (2026-11-19: the first live run's quiet check read the empty user journal)."""
+    from homeai import service_scope
+    argv = ["journalctl", "-u", "homeai", "--since", since, "--no-pager", "-q", "-o", "cat"]
+    if (scope or service_scope.scope)() != "system":
+        argv.insert(1, "--user")
     return run(argv, capture_output=True, text=True, check=False).stdout
 
 

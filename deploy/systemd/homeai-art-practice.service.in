@@ -1,0 +1,19 @@
+# Template rendered by tools/art/install_practice_timer.sh: @REPO@ is substituted.
+# Art practice night (ART_FEATURES_PLAN F9): klein draws Adam's settings, the
+# checker and rewriter work through them, candidates wait in the review queue.
+# Yields to anyone speaking to Jarvis; back to voice mode by --until.
+# `journalctl --user -u homeai-art-practice` shows what it did.
+[Unit]
+Description=Home AI art practice night
+Documentation=file://@REPO@/docs/RUNBOOK.md
+
+[Service]
+Type=oneshot
+WorkingDirectory=@REPO@
+EnvironmentFile=-@REPO@/.env
+ExecStart=@REPO@/.venv/bin/python @REPO@/tools/art/practice.py --until 06:30
+# SIGINT, not SIGTERM: Python runs its finally block, so voice mode comes back if it is stopped.
+KillSignal=SIGINT
+TimeoutStartSec=6h
+TimeoutStopSec=5min
+Nice=10

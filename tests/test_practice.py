@@ -188,6 +188,16 @@ def test_the_journal_is_read_from_the_start_of_the_night():
     assert seen == ["2026-11-19 01:02:03"]
 
 
+@pytest.mark.parametrize("scope, user", [("system", False), ("user", True)])
+def test_jarvis_s_log_is_read_where_his_service_runs(scope, user):
+    seen = []
+
+    class Done:
+        stdout = "heard: hi"
+    assert P.journal("-300s", run=lambda argv, **kw: seen.append(argv) or Done(), scope=lambda: scope) == "heard: hi"
+    assert ("--user" in seen[0]) is user and seen[0][seen[0].index("-u") + 1] == "homeai"
+
+
 def test_art_mode_entered_for_someone_is_left_on():
     night = P.Night(datetime(2026, 11, 19), datetime(2026, 11, 20), read=lambda since: "art: entered for Adam")
     assert night.art_taken()

@@ -1,0 +1,9 @@
+[Unit]
+Description=Nightly Home AI art practice, 01:00 to 06:30
+
+[Timer]
+OnCalendar=*-*-* 01:00:00
+# Not Persistent: a missed night must not start at boot in the daytime and run until 06:30 next day.
+
+[Install]
+WantedBy=timers.target
