@@ -41,7 +41,7 @@ def test_one_sword_is_said_as_one_hilt_and_one_blade_without_choosing_hands(said
     assert "with one blade" not in text and text.count(noun) == 1
     assert "hand" not in text                       # Adam: one hand or two is the person's choice
     assert W.expand(said + " in her left hand")[0].endswith("in her left hand")
-    assert [(a.kind, a.expect, a.question) for a in asks] == [("blades", 1, W.BLADES_Q)]
+    assert [(a.kind, a.expect, a.question) for a in asks] == [("blades", 1, W.QUESTIONS["blades"])]
 
 
 def test_a_rewrite_of_the_glossary_sentence_has_room_to_add_words():

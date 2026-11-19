@@ -1,0 +1,36 @@
+{
+ "note": "Names klein9 draws wrong, said as what they look like (homeai/art/wording.py, ART_FEATURES_PLAN F8/F9). Data, so most fixes are an edit here plus a test. A question fails pictures only once it has been measured on at least min_labelled pictures labelled by eye (tools/art/probe_vision_parts.py); one with fewer is left out, with a warning.",
+ "min_labelled": 30,
+ "questions": {
+  "blades": {"question": "How many sword blades are in this picture? Answer with one number only.",
+             "labelled": 34, "agreed": "26/34",
+             "measured": "2026-11-18 voice model qwen35-voice, thinking off; good pictures flagged 2/13, wrong ones caught 15/21"},
+  "goat": {"question": "Is there a goat's head on the creature's back? Answer yes or no.",
+           "labelled": 42, "agreed": "40/42", "measured": "2026-11-18 voice model"},
+  "snake": {"question": "Does the creature's tail end in a snake's head? Answer yes or no.",
+            "labelled": 73, "agreed": "138/146 (asked twice)",
+            "measured": "2026-11-18 ~/homeai-bench/vision-parts-20261118-200216 (46/50) + 2026-11-19 vision-parts-20261119-113841 (92/96, one wrong picture of 48, missed both times); 'Is the creature's tail a snake?' said yes to scaly lion tails (live node 002)"},
+  "horns": {"question": "Does the lion's head have horns? Answer yes or no.",
+            "labelled": 53, "agreed": "102/106 (asked twice)",
+            "measured": "2026-11-18 vision-parts-20261118-200216 (26/30) + 2026-11-19 vision-parts-20261119-113841 (76/76, only 1 horned lion among 38); missed node 002's horned lion, so a second net"}
+ },
+ "terms": [
+  {"name": "chimera",
+   "why": "klein9 drew a dragon 10/10 for the name. Bench v4 vs v7 (2026-11-18, 8 seeds, by eye): snake's head on the tail 0/8 -> 8/8; goat's head apart from the lion's ~4/8 -> 5/8; horns on the lion's own head still 3/8 (hence the horns question).",
+   "pattern": "\\b(?:a|an|one|the)\\s+chimera\\b",
+   "visual": "a chimera, a lion with a golden mane and a lion's face with round lion ears, that has a second head, a horned goat's head on its own long neck, rising straight up from the middle of its back, and a long snake for a tail, the tail ending in a snake's head with open jaws",
+   "asks": [
+    {"q": "goat", "expect": true, "wrong": "no goat's head on its back"},
+    {"q": "snake", "expect": true, "wrong": "no snake's head on its tail"},
+    {"q": "horns", "expect": false, "wrong": "horns on the lion's head"}
+   ]},
+  {"name": "sword",
+   "why": "One hilt, one blade. 'With both hands on its one hilt' did better (v2+v3 10/16 vs v4 ~3/8, 2026-11-18), but Adam: a katana can be wielded with one hand or two, so the words don't choose; the checker and redraws make up the difference. Adam, live node 002: a hilt as long as the blade; saying the proportion (v5/v7) got about 7/8 hilts right.",
+   "pattern": "\\b(?:wielding|holding|brandishing|swinging|carrying|gripping|with)\\s+(?:a single|a|one|her|his|their)\\s+(?P<noun>katana|sword|longsword)(?:\\s+with one blade)?\\b",
+   "visual": "holding a single {noun} by its short hilt, its one long{curve} blade pointing forward, the blade three times as long as the hilt",
+   "fill": {"curve": {"katana": " curved"}},
+   "asks": [
+    {"q": "blades", "expect": 1, "wrong": "{n} sword blades"}
+   ]}
+ ]
+}

@@ -10,7 +10,7 @@ Describing instead of naming did (tools/art/bench_wording.py, 8 seeds each):
 So the features Adam sees stay as he said them, and the prompt gets, per feature, in this order:
   1. this picture's own rewrite, if the feature's text hasn't changed since (``spec["wording"]``);
   2. a rewrite that fixed the same feature text before (``Learned``, saved when a reworded picture passed);
-  3. the glossary below: names klein9 gets wrong, said as what they look like, each with its own checks;
+  3. the glossary (glossary.json): names klein9 gets wrong, said as what they look like, each with its own checks;
   4. the feature's text as it is.
 
 When a picture fails its checks twice, ``reword`` asks the voice model for new wording for the failing feature,
@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
@@ -31,16 +31,7 @@ log = logging.getLogger("homeai.art.wording")
 
 MAX_WORDING = 560             # the glossary alone makes Adam's one-feature sentence 421 characters (v7 wording)
 
-# Questions measured on 42 labelled pictures with Jarvis's voice model, thinking off (tools/art/probe_vision_parts.py,
-# 2026-11-18): blades 26/34 (good pictures flagged 2/13, wrong ones caught 15/21), goat's head 40/42, snake 37/42.
-BLADES_Q = "How many sword blades are in this picture? Answer with one number only."
-GOAT_Q = "Is there a goat's head on the creature's back? Answer yes or no."
-# "Is the creature's tail a snake?" said yes to scaly lion tails with no snake's head (live node 002, 2026-11-18).
-# These two, on 25 and 15 pictures labelled by eye, asked twice each: 46/50 and 26/30
-# (~/homeai-bench/vision-parts-20261118-200216). The horns question missed node 002's horned lion, so it's a
-# second net, not the only one.
-SNAKE_Q = "Does the creature's tail end in a snake's head? Answer yes or no."
-HORNS_Q = "Does the lion's head have horns? Answer yes or no."
+GLOSSARY = Path(__file__).with_name("glossary.json")
 
 
 @dataclass(frozen=True)
@@ -56,31 +47,47 @@ class Ask:
 @dataclass(frozen=True)
 class Term:
     pattern: re.Pattern
-    visual: str             # replaces the match; "{noun}" is the matched noun
+    visual: str             # replaces the match; "{noun}" is the matched noun, other {names} come from ``fill``
     asks: tuple[Ask, ...]
+    fill: dict = field(default_factory=dict)    # {name: {noun: words}}; a noun not listed gets ""
+    name: str = ""
 
 
-_HOLD = r"(?:wielding|holding|brandishing|swinging|carrying|gripping|with)"
-TERMS = (
-    # Bench v4 vs v7 (2026-11-18 evening, 8 seeds, by eye): snake's head on the tail 0/8 -> 8/8; goat's head
-    # apart from the lion's ~4/8 -> 5/8; horns on the lion's own head still 3/8 (hence HORNS_Q).
-    Term(re.compile(r"\b(?:a|an|one|the)\s+chimera\b", re.I),
-         "a chimera, a lion with a golden mane and a lion's face with round lion ears, that has a second head, a "
-         "horned goat's head on its own long neck, rising straight up from the middle of its back, and a long "
-         "snake for a tail, the tail ending in a snake's head with open jaws",
-         (Ask("goat", GOAT_Q, True, "no goat's head on its back"),
-          Ask("snake", SNAKE_Q, True, "no snake's head on its tail"),
-          Ask("horns", HORNS_Q, False, "horns on the lion's head"))),
-    # One hilt, one blade. "With both hands on its one hilt" did better (v2+v3 10/16 vs v4 ~3/8, bench 2026-11-18),
-    # but Adam: a katana can be wielded with one hand or two, so the words don't choose; the checker and the
-    # redraws make up the difference. Hands the person asks for stay in their own words.
-    # Adam, live node 002: a hilt as long as the blade. Saying the proportion (v5/v7): about 7/8 hilts right.
-    Term(re.compile(rf"\b{_HOLD}\s+(?:a single|a|one|her|his|their)\s+(?P<noun>katana|sword|longsword)"
-                    r"(?:\s+with one blade)?\b", re.I),
-         "holding a single {noun} by its short hilt, its one long{curve} blade pointing forward, the blade three "
-         "times as long as the hilt",
-         (Ask("blades", BLADES_Q, 1, "{n} sword blades"),)),
-)
+def load(path: Path = GLOSSARY) -> tuple[dict[str, str], tuple[Term, ...]]:
+    """(question by kind, terms) from the glossary file (F9 step 1: the glossary is data).
+
+    F9 step 3: a question fails pictures only once it is measured on ``min_labelled`` pictures labelled by eye;
+    one with fewer is left out with a warning, and so is an ask naming a question that isn't there. A term that
+    can't be read is skipped; a file that can't be read gives no glossary (the person's words as they are)."""
+    try:
+        data = json.loads(Path(path).read_text())
+        floor = int(data.get("min_labelled", 30))
+        raw_questions, raw_terms = data["questions"], data["terms"]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        log.error("glossary %s unreadable: %s", path, exc)
+        return {}, ()
+    questions, trusted = {}, set()
+    for kind, q in raw_questions.items():
+        if not isinstance(q, dict) or not q.get("question"):
+            continue
+        questions[kind] = q["question"]
+        if int(q.get("labelled") or 0) >= floor:
+            trusted.add(kind)
+        else:
+            log.warning("glossary: %r measured on %s pictures (< %d): not asked", kind, q.get("labelled"), floor)
+    terms = []
+    for raw in raw_terms:
+        try:
+            asks = tuple(Ask(a["q"], questions[a["q"]], a["expect"], a["wrong"])
+                         for a in raw.get("asks", []) if a.get("q") in trusted)
+            terms.append(Term(re.compile(raw["pattern"], re.I), raw["visual"], asks, raw.get("fill") or {},
+                              raw.get("name", "")))
+        except (KeyError, TypeError, re.error) as exc:
+            log.error("glossary term %r skipped: %s", raw.get("name") if isinstance(raw, dict) else raw, exc)
+    return questions, tuple(terms)
+
+
+QUESTIONS, TERMS = load()
 
 
 def expand(text: str) -> tuple[str, list[Ask]]:
@@ -91,7 +98,12 @@ def expand(text: str) -> tuple[str, list[Ask]]:
         if match is None:
             continue
         noun = (match.groupdict().get("noun") or "").lower()
-        visual = term.visual.format(noun=noun, curve=" curved" if noun == "katana" else "")
+        words = {name: (by_noun.get(noun) or "") for name, by_noun in term.fill.items()}
+        try:
+            visual = term.visual.format(noun=noun, **words)
+        except (KeyError, IndexError, ValueError) as exc:
+            log.error("glossary term %r: bad visual: %s", term.name, exc)
+            continue
         text = text[:match.start()] + visual + text[match.end():]
         asks += term.asks
     return text, asks

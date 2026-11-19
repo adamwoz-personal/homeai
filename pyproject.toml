@@ -33,6 +33,7 @@ remote = ["noiseprotocol>=0.3.1", "cryptography>=42", "argon2-cffi>=25.1"]
 
 [tool.setuptools.package-data]
 "homeai.memory_store" = ["migrations/*.sql"]
+"homeai.art" = ["*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -242,6 +242,20 @@ homeai-mode voice     # ComfyUI stopped, coder back (~7 s warm, ~27 s cold)
 - The window is the transient unit `homeai-art-viewer`; close it with Esc or q,
   or `systemctl --user stop homeai-art-viewer`. Logs: `journalctl --user | grep "art:"`.
 - Live check (types sentences, no mic): `tools/art/art_voice_live.py`.
+- Glossary (names klein draws wrong, said as what they look like): data in
+  `homeai/art/glossary.json`. A question fails pictures only once measured on
+  ≥30 pictures labelled by eye (`tools/art/probe_vision_parts.py`); one with
+  fewer is skipped with a `glossary: ... not asked` warning.
+- Review queue: `~/.local/share/homeai/art/review/` (complaints, "Best I could
+  do" pictures, 1 in 10 passes, practice candidates; capped at 2000).
+  `tools/art/report_review.py` makes a sheet + labels.json; `--apply` moves
+  labelled items to `done/` and writes checker labels.
+- Practice nights: `tools/art/practice.py --until 06:30` (topics in
+  `homeai/art/practice_topics.json`). Starts only if nobody spoke to Jarvis for
+  5 min; stops before the next picture on any `heard:`; goes back to voice mode
+  unless Jarvis entered art mode for someone (`art: entered for ...`). Results
+  in `~/homeai-bench/practice-<time>/`, history in
+  `~/.local/share/homeai/art/practice-history.json`.
 
 ## False wakes ("it answered and nobody said Jarvis")
 

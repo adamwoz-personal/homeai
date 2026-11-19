@@ -1,0 +1,35 @@
+{
+ "note": "What practice nights draw (tools/art/practice.py, ART_FEATURES_PLAN F9 step 2): per setting, things klein may not know. Adam can add to any list. Kept kid-safe: what practice learns reaches everyone's pictures.",
+ "settings": {
+  "D&D": {
+   "creatures": ["an owlbear", "a gelatinous cube", "a mimic disguised as a treasure chest", "a manticore", "a basilisk", "a hydra with five heads", "a kobold", "a griffon", "a wyvern", "a cockatrice"],
+   "weapons": ["a glaive", "a halberd", "a morningstar", "a flail", "a warhammer", "a quarterstaff", "a scimitar", "a hand crossbow"],
+   "gear": ["a bag of holding", "a spellbook with a glowing rune on its cover", "a wizard's crystal-topped staff", "a lit lantern on a pole"],
+   "places": ["a dungeon corridor with a portcullis", "a tavern with a roaring hearth", "a ruined wizard's tower"]
+  },
+  "fantasy": {
+   "creatures": ["a centaur", "a minotaur", "a phoenix", "a kraken", "a pegasus", "a unicorn", "a dryad", "a treant"],
+   "weapons": ["an elven longbow", "a dwarven battle axe", "a trident"],
+   "gear": ["a flying carpet", "a crystal ball", "a magic mirror"],
+   "places": ["an elven city in the treetops", "a dwarven forge under a mountain", "a floating island"]
+  },
+  "steampunk": {
+   "creatures": ["a clockwork owl", "a brass automaton", "a mechanical horse"],
+   "weapons": ["a steam-powered rifle", "a brass ray gun", "a clockwork crossbow"],
+   "gear": ["brass aviator goggles", "a mechanical arm", "a pocket watch with visible gears", "a top hat with goggles"],
+   "places": ["an airship with a balloon and propellers", "an ornithopter", "a steam locomotive", "a clock tower workshop"]
+  },
+  "cyberpunk": {
+   "creatures": ["a robot dog", "a delivery drone", "an android with a visible circuit panel"],
+   "weapons": ["a glowing energy sword", "a plasma pistol"],
+   "gear": ["a cyberdeck", "a holographic visor", "a cybernetic arm", "a hoverboard"],
+   "places": ["a hoverbike", "a mech suit", "a neon-lit night market", "a megacity skyline at night"]
+  },
+  "anime": {
+   "creatures": ["a nine-tailed fox", "an oni", "a tengu", "a kappa", "a giant mecha"],
+   "weapons": ["a naginata", "a pair of sai", "a kusarigama"],
+   "gear": ["a magical girl's wand", "a school backpack", "a paper umbrella"],
+   "places": ["a shrine with a red torii gate", "a cherry blossom street", "a ramen stall at night"]
+  }
+ }
+}

@@ -728,6 +728,7 @@ class VoiceAssistant(VoiceIdTurns):
         if not self.cfg.art.voice:
             return None
         from homeai import gpu_mode
+        from homeai.art import review as art_review
         from homeai.art.voice import ArtVoice, build_studio
         switcher = gpu_mode.ModeSwitcher(gpu_mode.System(), log=lambda line: log.info("mode: %s", line),
                                          lock_path=gpu_mode.mode_lock_path(),
@@ -738,7 +739,8 @@ class VoiceAssistant(VoiceIdTurns):
             from homeai.art import patcher as art_patcher
             checker, reword = art_checker.ollama_ask, art_patcher.ollama_chat   # both Jarvis's own voice model
         return ArtVoice(switcher, build_studio, self.presence.publish, adults=self.cfg.art.adults,
-                        on_state=self.presence.state, checker=checker, reword_chat=reword)
+                        on_state=self.presence.state, checker=checker, reword_chat=reword,
+                        review=art_review.Review())
 
     def _handle_status(self, turn: Turn, text: str, ident, total: Stopwatch) -> bool:
         """'Status update': built from the voice registry, doorbell history and weather, no agent."""

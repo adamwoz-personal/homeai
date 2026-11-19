@@ -106,6 +106,7 @@ class ArtSession:
         self.sheet: list[dict] = []
         self.comparing = False
         self.save_as = None                 # (project, node, name) -> the name it was saved as; set by ArtVoice
+        self.review = None                  # homeai.art.review.Review, set by ArtVoice: complaints kept (F9)
         self.input_dir = workflows.INPUT_DIR
 
     # -- helpers ---------------------------------------------------------------
@@ -192,6 +193,7 @@ class ArtSession:
         else:
             said = f"Changing {prompt_spec.describe(prompt_spec.diff(node.spec, {**spec, 'seed': node.spec.get('seed')}))}."
         if grammar.is_complaint(intent.text):
+            self._keep_complaint(node, intent.text)
             if "features" in spec and DEFECT.search(F.text_of(spec)) and not DEFECT.search(F.text_of(node.spec)):
                 spec, self.last_changed = {**node.spec}, []         # don't write the defect in; just re-roll
             # The same seed keeps the same broken layout (two heads stayed through four edits, 2026-11-07):
@@ -204,6 +206,18 @@ class ArtSession:
             return Reply(f"Fixing it: {TRIES_AFTER_COMPLAINT} new tries. Say which one you like.", "edit", jobs)
         spec = {**spec, "seed": node.spec.get("seed")}      # same seed: only the change should change
         return Reply(said, "edit", [self._draw(intent.text, spec, node.id)])
+
+    def _keep_complaint(self, node, said: str) -> None:
+        """F9: the picture the person complained about, with their words, for Claude's review."""
+        if self.review is None:
+            return
+        image = self.project.image(node.id)
+        if not image.exists():
+            return
+        self.review.add(image, "complaint", said=said, prompt=node.meta.get("prompt", ""),
+                        features=F.features_of(node.spec) if "features" in node.spec else (),
+                        issues=node.meta.get("checked") or [],
+                        extra={"project": self.project.id, "node": node.id, "by": self.speaker or self.owner})
 
     def checked(self, node_id: str, issues: list[str]) -> bool:
         """Record what the check found; True if this picture should be redrawn (F4 + F5 follow-up).

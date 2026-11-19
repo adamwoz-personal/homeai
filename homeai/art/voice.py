@@ -181,7 +181,8 @@ class ArtVoice:
                  wall: Callable[[], float] = time.time,
                  checker: Callable[[Path, str], str] | None = None,
                  warm_voice: Callable[[], None] | None = None,
-                 reword_chat: Callable[[list[dict], dict], str] | None = None) -> None:
+                 reword_chat: Callable[[list[dict], dict], str] | None = None,
+                 review=None) -> None:
         self.switcher, self._build, self._publish = switcher, build, publish
         self.viewer = viewer or Viewer()
         self.adults = tuple(u.lower() for u in adults)
@@ -194,6 +195,7 @@ class ArtVoice:
         self._warm_voice = warm_voice or _warm_voice_model
         self.reword_chat = reword_chat          # chat(messages, schema) -> json; None: failures aren't reworded
         self._asked: dict[str, list] = {}       # feature text -> the model's own check questions (F8)
+        self.review = review                    # homeai.art.review.Review; None: nothing kept for review (F9)
         self.session = None
         self.queue = None
         self.owner: str | None = None
@@ -279,6 +281,8 @@ class ArtVoice:
         self.owner = speaker
         self.session, self.queue = self._build((speaker or "guest").lower(), self._on_job)
         self.session.save_as = self._save_named
+        self.session.review = self.review
+        log.info("art: entered for %s", speaker or "guest")        # tools/art/practice.py yields to this
         self.session.rules = self.rules_for(speaker)
         self.session.speaker = speaker or "guest"
         self._resume_recent()
@@ -493,8 +497,23 @@ class ArtVoice:
                 self.status = f"Redrawing: it came out with {', '.join(issues)}." + \
                     (" Trying other words for it." if wording else "")
                 return issues, True
+        self._keep_for_review(Path(event["image"]), node, features, checks, issues)
         self._background(self._warm_voice)      # a check can leave a different model loaded; bring the voice back
         return issues, False
+
+    def _keep_for_review(self, image: Path, node, features, checks, issues) -> None:
+        """F9: a picture shown wrong ("Best I could do") is kept for Claude's review, and 1 in 10 right ones."""
+        if self.review is None:
+            return
+        kw = {"prompt": node.meta.get("prompt", ""), "features": features, "checks": checks, "issues": issues,
+              "extra": {"node": node.id, "tries": node.meta.get("tries", 0)}}
+        try:
+            if issues:
+                self.review.add(image, "best", **kw)
+            else:
+                self.review.passed(image, **kw)
+        except Exception:  # noqa: BLE001 - the picture is shown whatever happens here
+            log.warning("keeping %s for review failed", node.id, exc_info=True)
 
     def _asked_checks(self, features, checks) -> list:
         """F8 step 2: for a subject or element nothing else checks, the voice model's own yes/no questions.
