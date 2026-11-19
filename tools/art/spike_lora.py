@@ -45,9 +45,13 @@ CAPTION = "An anime girl wielding a katana fighting a chimera."
 VRAM_USED = Path("/sys/class/drm/card1/device/mem_info_vram_used")      # the 7900 XT (card0 is the iGPU)
 
 
-def dataset(out: Path, res: int) -> Path:
-    """The dataset config musubi reads: one jsonl of picture + plain caption."""
-    rows = [{"image_path": str(BENCH / f"{name}.png"), "caption": CAPTION} for name in PICTURES]
+def dataset(out: Path, res: int, data: Path | None = None) -> Path:
+    """The dataset config musubi reads: one jsonl of picture + plain caption (``data``, from
+    tools/art/collect_lora_set.py, or the spike's 10 bench pictures)."""
+    if data is not None:
+        rows = [json.loads(line) for line in Path(data).read_text().splitlines() if line.strip()]
+    else:
+        rows = [{"image_path": str(BENCH / f"{name}.png"), "caption": CAPTION} for name in PICTURES]
     (out / "data.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
     toml = (f"[general]\nresolution = [{res}, {res}]\nbatch_size = 1\nenable_bucket = true\n"
             f"bucket_no_upscale = false\n\n[[datasets]]\nimage_jsonl_file = \"{out / 'data.jsonl'}\"\n"
@@ -140,11 +144,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--steps", type=int, default=50)
     ap.add_argument("--res", type=int, default=512)
     ap.add_argument("--ram-gb", type=int, default=16)
+    ap.add_argument("--data", type=Path, help="data.jsonl from tools/art/collect_lora_set.py")
     ap.add_argument("--dry-run", action="store_true", help="write the config and print the commands only")
     args = ap.parse_args(argv)
     out = bench_path("lora-spike")
     out.mkdir(parents=True)
-    steps = commands(args.model, dataset(out, args.res), out, args.steps)
+    steps = commands(args.model, dataset(out, args.res, args.data), out, args.steps)
     if args.dry_run:
         for name, cmd in steps:
             print(name, " ".join(capped(cmd, args.ram_gb)))
@@ -158,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
     with CoderStopped(voice_off=True):
         results = run_steps(steps, out, args.ram_gb)
     (out / "result.json").write_text(json.dumps({"model": args.model, "steps": args.steps, "res": args.res,
-                                                 "pictures": PICTURES, "caption": CAPTION, "runs": results},
+                                                 "data": str(args.data or PICTURES), "runs": results},
                                                 indent=1))
     print(out)
     return 0 if results and all(r["exit"] == 0 for r in results) else 1

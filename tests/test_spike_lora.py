@@ -25,6 +25,13 @@ def test_default_cap_sits_under_free_ram():
     assert "default=16)" in inspect.getsource(S.main)            # 22 was above the ~20 GB free in voice mode
 
 
+def test_a_collected_set_is_used_as_given(tmp_path):
+    data = tmp_path / "set.jsonl"
+    data.write_text('{"image_path": "/x/a.png", "caption": "A chimera."}\n\n')
+    S.dataset(tmp_path, 512, data)
+    assert (tmp_path / "data.jsonl").read_text() == '{"image_path": "/x/a.png", "caption": "A chimera."}\n'
+
+
 def test_dataset_captions_are_the_plain_words(tmp_path):
     toml = S.dataset(tmp_path, 512).read_text()
     assert "resolution = [512, 512]" in toml
