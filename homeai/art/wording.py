@@ -228,7 +228,29 @@ def reword(feature_text: str, current: str, issues: list[str], seen: str,
     except (ValueError, AttributeError, TypeError, OSError) as exc:
         log.warning("reword failed: %s", exc)
         return None
-    if not text or len(text) > MAX_WORDING or _NEGATIVE.search(text) or text == current:
+    if (not text or len(text) > MAX_WORDING or _NEGATIVE.search(text) or text == current
+            or _echoes(text, seen, f"{feature_text} {current}") or _new_count(text, feature_text)):
         log.info("reword refused: %r", text[:120])
         return None
     return text
+
+
+_ECHO_RUN = 5
+_MANY = re.compile(r"\b(two|double|twin|pair|three|triple|four|five|six|several|multiple)\b", re.I)
+
+
+def _runs(text: str) -> set[tuple[str, ...]]:
+    words = re.findall(r"[a-z']+", text.lower())
+    return {tuple(words[i:i + _ECHO_RUN]) for i in range(len(words) - _ECHO_RUN + 1)}
+
+
+def _echoes(text: str, seen: str, said: str) -> bool:
+    """The rewrite copies the description of the wrong picture (paladin 2026-11-20: "faces off against a
+    green-skinned orc holding a smaller sword" went into the prompt, and the swords multiplied)."""
+    return bool(_runs(text) & (_runs(seen) - _runs(said)))
+
+
+def _new_count(text: str, feature_text: str) -> bool:
+    """The rewrite asks for more of something than the person did ("one longsword" became "two longsword blades")."""
+    asked = {w.lower() for w in _MANY.findall(feature_text)}
+    return any(w.lower() not in asked for w in _MANY.findall(text))

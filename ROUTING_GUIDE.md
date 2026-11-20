@@ -4,7 +4,7 @@
 with Claude (paid). Updated as evidence accumulates. Every rule here comes from an
 observed outcome on this box, not from theory.
 
-Last updated: 2026-11-19
+Last updated: 2026-11-20
 
 ---
 
@@ -2209,3 +2209,11 @@ Evidence: plans/LLM_UPGRADE_PLAN.md step 3; ~/homeai-bench/coder-eval.jsonl, kv.
 went on; the live test run happened to be in a quiet spell). Any "heard:" check goes through
 `homeai.service_scope.scope()` (as `tools/switch_voice_model.py` and `tools/art/practice.py` now do), and is tested
 once against a log known to contain "heard:" before it is trusted.
+
+2026-11-20: "The swords keep growing" was my rewriter, not klein. The F8 reword step gets a one-line description of
+the *wrong* picture to explain what failed, and the voice model pasted it into the new wording ("faces off against a
+green-skinned orc holding a smaller sword"); the wording stuck to the feature, so every later picture asked for the
+mistake, and by node 021 the prompt said "two longsword blades". Read the stored prompts of a bad project before
+blaming the image model. `wording.reword` now refuses a rewrite sharing a 5-word run with the description that the
+person didn't say, or a count (two, double, pair...) the person didn't say. Open: the patcher also writes complaints
+("he's holding two swords instead of a shield") into features as instructions (F10 step 1).

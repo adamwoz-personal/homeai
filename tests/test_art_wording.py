@@ -110,12 +110,39 @@ def test_reword_gives_the_model_what_failed_and_what_the_picture_shows():
 
 
 @pytest.mark.parametrize("answer", [
-    {"wording": "a girl with a katana, not two"},          # klein draws what it's told about
+    {"wording": "a girl with a katana, not a spear"},      # klein draws what it's told about
     {"wording": "x" * (W.MAX_WORDING + 1)},
     {"wording": "old words"},                              # nothing new
     {"wording": ""}, {"other": 1}, "not json", ["a list"]])
 def test_a_bad_rewrite_keeps_the_old_words(answer):
     assert W.reword("a girl", "old words", ["2 sword blades"], "", chat_says(answer)) is None
+
+
+SEEN = "a bearded knight in full plate armor faces off against a muscular green-skinned orc with tusks"
+
+
+@pytest.mark.parametrize("wording, kept", [
+    ("a paladin gripping one longsword, a bearded knight in full plate armor", False),   # copies the bad picture
+    ("a paladin in full plate armor gripping one longsword in his right hand", True),    # 4 shared words: fine
+    ("a paladin holding two longsword blades in his right hand", False),                 # a count nobody asked for
+    ("a paladin holding a single longsword by one hilt in his right hand", True),
+])
+def test_a_rewrite_never_copies_the_wrong_picture_or_adds_a_count(wording, kept):
+    new = W.reword("a paladin wielding a longsword in his right hand", "old words", ["2 sword blades"], SEEN,
+                   chat_says({"wording": wording}))
+    assert (new == wording) is kept
+
+
+def test_the_person_s_own_words_may_be_kept_even_when_the_picture_shows_them():
+    said = "a paladin wielding a longsword in his right hand"
+    wording = "a paladin wielding a longsword in his right hand, one straight blade"
+    assert W.reword(said, "old", ["2 sword blades"], f"{said} beside a troll", chat_says({"wording": wording})) \
+        == wording
+
+
+def test_a_count_the_person_asked_for_may_be_said():
+    assert W.reword("a knight with two swords", "old", ["1 sword blades"], "", chat_says({"wording": "a knight "
+                    "gripping two swords, one in each hand"})) == "a knight gripping two swords, one in each hand"
 
 
 def test_the_model_writes_yes_no_checks_for_what_the_glossary_doesnt_know():
