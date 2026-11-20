@@ -40,10 +40,7 @@ MSG_NOT_CAUGHT_NEW = "I couldn't tell what to draw from that. Say draw, and the 
 # A question is never a change: "what is image three?" changed four features (Adam, 2026-11-07).
 QUESTION = re.compile(r"^(what|who|when|where|why|how|which|is (it|that|this|there)|are (they|there|those)|"
                       r"does (it|that)|did (it|you))\b")
-# Defects a complaint names; a patch that writes them into the features asks for them again
-# ("a single flying dragon with two heads, one on each side", 2026-11-07).
-DEFECT = re.compile(r"\b(two|three|four|several|multiple|many|extra|second|third|2|3|4) "
-                    r"(heads?|riders?|samurais?|legs?|arms?|tails?|wings?|hands?|people|faces?)\b")
+DEFECT = F.DEFECT          # what a complaint names (homeai/art/features.py)
 TRIES_AFTER_COMPLAINT = 4
 
 
@@ -194,8 +191,10 @@ class ArtSession:
             said = f"Changing {prompt_spec.describe(prompt_spec.diff(node.spec, {**spec, 'seed': node.spec.get('seed')}))}."
         if grammar.is_complaint(intent.text):
             self._keep_complaint(node, intent.text)
-            if "features" in spec and DEFECT.search(F.text_of(spec)) and not DEFECT.search(F.text_of(node.spec)):
-                spec, self.last_changed = {**node.spec}, []         # don't write the defect in; just re-roll
+            if "features" in spec and "features" in node.spec:     # don't write the mistake in; just re-roll
+                kept, self.last_changed = F.keep_mistakes_out(F.features_of(node.spec), F.features_of(spec),
+                                                              self.last_changed, intent.text)
+                spec = {**spec, "features": F.dump(kept)}
             # The same seed keeps the same broken layout (two heads stayed through four edits, 2026-11-07):
             # draw several new tries and let the person pick.
             jobs, self.grid, self.picked = [], [], False

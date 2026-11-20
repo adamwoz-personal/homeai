@@ -319,3 +319,77 @@ def test_placeholders_are_not_features():
     after, changed = F.apply_ops(DRAGON[:1], [{"op": "add", "kind": "setting", "text": "nowhere specific"},
                                               {"op": "add", "kind": "style", "text": "None"}])
     assert after == DRAGON[:1] and changed == []
+
+
+# -- a complaint about what the picture shows (Adam's paladin, 2026-11-20) -----------------------------------------
+
+PALADIN_SAID = ("that troll looks a whole lot like an orc and it seems to be wielding swords and the paladin seems to "
+                "be wielding two swords instead of having a sword and a shield buckled to his other arm")
+
+
+@pytest.mark.parametrize("said, named", [
+    (PALADIN_SAID, {"orc", "swords"}),
+    ("it looks like a horse", {"horse"}),
+    ("make the troll so it looks like a cave troll", set()),             # a request, not a mistake
+    ("can it look more like a dragon", set()),
+    ("make the dragon red", set()),
+])
+def test_what_the_picture_wrongly_shows(said, named):
+    assert F.mistakes_named(said) == named
+
+
+@pytest.mark.parametrize("said, complaint", [
+    (PALADIN_SAID, True), ("it looks like an orc", True), ("make it so it looks like a cave troll", False),
+    ("give the paladin a shield", False)])
+def test_seeing_it_wrong_is_a_complaint(said, complaint):
+    from homeai.art import grammar
+    assert grammar.is_complaint(said) is complaint
+
+
+def test_a_complaint_keeps_the_right_part_of_the_patch_and_never_the_mistake():
+    before = [F.Feature("A", "subject", "a paladin wielding a longsword in his right hand and a shield in his left hand"),
+              F.Feature("B", "element", "a troll"), F.Feature("C", "element", "the paladin facing off against the troll")]
+    after = [F.Feature("A", "subject", "a paladin with one longsword in his right hand and a shield on his left arm"),
+             F.Feature("B", "element", "an orc wielding two swords"),
+             F.Feature("C", "element", "the paladin facing off against the orc, wielding two swords in both hands"),
+             F.Feature("D", "element", "a second orc")]
+    kept, changed = F.keep_mistakes_out(before, after, ["A", "B", "C", "D"], PALADIN_SAID)
+    assert [f.text for f in kept] == [after[0].text, "a troll", before[2].text]
+    assert changed == ["A"]
+
+
+def test_a_mistake_already_asked_for_stays():
+    before = [F.Feature("A", "subject", "a knight with two swords")]
+    after = [F.Feature("A", "subject", "a knight with two swords, one in each hand")]
+    assert F.keep_mistakes_out(before, after, ["A"], "it has three swords")[0] == after
+
+
+def test_a_removal_in_a_complaint_stands():
+    before = [F.Feature("A", "subject", "a troll"), F.Feature("B", "element", "an extra goblin")]
+    kept, changed = F.keep_mistakes_out(before, before[:1], ["B"], "it has an extra goblin, it looks like a mess")
+    assert kept == before[:1] and changed == ["B"]
+
+
+def test_the_paladin_complaint_redraws_with_the_troll_kept(tmp_path):
+    patch = scripted({"ops": [{"op": "add", "kind": "subject", "text": "a paladin with a longsword and a shield"},
+                              {"op": "add", "kind": "element", "text": "a troll"}]},
+                     {"ops": [{"op": "change", "id": "B", "text": "an orc wielding two swords"}]})
+    s = ArtSession(Store(tmp_path), Queue(), "adam", patch=patch, rng=random.Random(1))
+    s.handle("draw a paladin with a longsword and a shield fighting a troll")
+    reply = s.handle_free(PALADIN_SAID)
+    assert reply.spoken.startswith("Fixing it") and len(s.grid) == 4
+    for node in s.grid:
+        assert [f.text for f in F.features_of(s.project.nodes[node].spec)][1] == "a troll"
+
+
+def test_the_patcher_is_told_a_complaint_names_the_mistake():
+    from homeai.art.patcher import FEATURE_SYSTEM
+    assert "that is the mistake: never write it into a" in FEATURE_SYSTEM
+    assert "Never rename a thing to what it was mistaken for." in FEATURE_SYSTEM
+    assert "or says something in it came out wrong" in FEATURE_SYSTEM      # still about the picture (eval 2026-11-20)
+
+
+def test_a_complaint_about_two_swords_never_asks_for_two_swords():
+    before = [F.Feature("A", "subject", "a knight holding a longsword")]
+    after = [F.Feature("A", "subject", "a knight holding two swords")]
+    assert F.keep_mistakes_out(before, after, ["A"], "it has two blades now") == (before, [])

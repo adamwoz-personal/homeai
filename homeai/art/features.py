@@ -274,3 +274,54 @@ def letter_command(said: str) -> list[dict] | None:
     if not match:
         return None
     return [{"op": "remove", "id": g.upper()} for g in match.groups() if g]
+
+
+# -- complaints: what came out wrong is never written in --------------------------------------------------------
+# Defects a complaint names; a patch that writes them into the features asks for them again ("a single flying
+# dragon with two heads, one on each side", 2026-11-07; "the paladin ... wielding two swords in both hands" and
+# "an orc wielding two swords" for a troll, 2026-11-20).
+DEFECT = re.compile(r"\b(two|three|four|several|multiple|many|extra|second|third|double|2|3|4) "
+                    r"(heads?|riders?|samurais?|legs?|arms?|tails?|wings?|hands?|people|faces?|swords?|blades?|"
+                    r"weapons?|shields?|axes|spears?|horns?)\b")
+# What the person says the picture shows: "that troll looks a whole lot like an orc", "it seems to be wielding
+# swords". The thing after it is the mistake. "make it so it looks like a cave troll" is a request, not a mistake.
+SEEN_AS = re.compile(r"\blooks (?:a (?:whole )?lot |kind of |sort of |more |just |a bit )?like (?:an? |the )?(\w+)|"
+                     r"\bseems to (?:be )?(?:wielding|holding|carrying|have|has|be) (?:an? |two |some |the )?(\w+)")
+_ASKING = re.compile(r"\b(?:so|make|let|to|should|could|would|can|want)\s+(?:\w+\s+){0,2}$")
+
+
+def mistakes_named(said: str) -> set[str]:
+    """Words for what the picture wrongly shows, from a complaint (lower case)."""
+    out = set()
+    for m in SEEN_AS.finditer(said.lower()):
+        if not _ASKING.search(said.lower()[:m.start()]):
+            out.add(m.group(1) or m.group(2))
+    return out
+
+
+def keep_mistakes_out(before: list[Feature], after: list[Feature], changed: list[str],
+                      said: str) -> tuple[list[Feature], list[str]]:
+    """After a complaint, a feature that newly says the mistake goes back to what it was (a new one is dropped);
+    the rest of the patch stays. Returns (features, letters still changed)."""
+    words = mistakes_named(said)
+    old = {f.id: f for f in before}
+
+    def wrong(text: str, was: str) -> bool:
+        new_defects = {m.group(0) for m in DEFECT.finditer(text.lower())} - \
+            {m.group(0) for m in DEFECT.finditer(was.lower())}
+        new_words = {w for w in words if re.search(rf"\b{re.escape(w)}\b", text.lower())
+                     and not re.search(rf"\b{re.escape(w)}\b", was.lower())}
+        return bool(new_defects or new_words)
+
+    out, kept = [], []
+    for f in after:
+        was = old.get(f.id)
+        if wrong(f.text, was.text if was else ""):
+            if was is not None:
+                out.append(was)
+            continue
+        out.append(f)
+        if f.id in changed:
+            kept.append(f.id)
+    kept += [c for c in changed if c not in {f.id for f in after}]          # removals stand
+    return out, kept

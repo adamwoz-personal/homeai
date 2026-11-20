@@ -61,6 +61,10 @@ composition.
 Write each feature as a short plain phrase. State counts and body parts plainly ("a single head", "four legs",
 "one rider"). Write what should be there, never what shouldn't. If the person complains that something came out
 wrong (two heads, an extra rider, a leg in the wrong place), change that feature to say the right thing plainly.
+When the person describes what the picture shows ("the troll looks like an orc", "it seems to be holding swords",
+"he has two swords instead of a sword and a shield"), that is the mistake: never write it into a
+feature. Keep what they asked for and say it more plainly ("a huge grey troll with a long nose, empty-handed";
+"one longsword in his right hand and a shield on his left arm"). Never rename a thing to what it was mistaken for.
 For a new picture (no features yet), make one subject feature and add only what the person described; don't invent
 a style, colours, lighting, setting or camera they didn't ask for. Keep every detail they said (colours, clothes,
 armour) in the feature it belongs to, and add no detail they didn't say. Whatever is ridden or carries the others is
@@ -73,7 +77,7 @@ Sizes: when the person says something is too small or too big, write its size re
 feature ("a huge steam-powered battleship, many times bigger than the dragon").
 Ignore words that aren't about the picture (exclamations, questions or remarks to other people in the room).
 First set about_picture: true only if the person asks for something in the picture to be drawn, added, changed or
-removed; false for chatter like "oh my gosh, what's that" or "you're talking with my husband" (then no operations).
+removed, or says something in it came out wrong (then fix it as above); false for chatter like "oh my gosh, what's that" or "you're talking with my husband" (then no operations).
 Set aspect only if they ask for a shape (square, portrait, landscape, wide)."""
 
 

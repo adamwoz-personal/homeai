@@ -24,6 +24,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
+from homeai.art import features as F  # noqa: E402
+from homeai.art import grammar  # noqa: E402
 from homeai.art import patcher as P  # noqa: E402
 from homeai.benchio import bench_path  # noqa: E402
 
@@ -38,6 +40,12 @@ BATTLE = {"features": [{"id": "A", "kind": "subject", "text": "a single flying d
                        {"id": "C", "kind": "element", "text": "a cyborg samurai sitting on the dragon's back"},
                        {"id": "D", "kind": "element", "text": "a steam-powered battleship shooting lasers at the dragon"}],
           "aspect": "square"}
+# Adam's paladin session, 2026-11-20 (node 005): complaints were written in as instructions.
+PALADIN = {"features": [{"id": "A", "kind": "subject",
+                         "text": "a paladin wielding a longsword in his right hand and a shield in his left hand"},
+                        {"id": "B", "kind": "element", "text": "a troll"},
+                        {"id": "C", "kind": "element", "text": "the paladin facing off against the troll"}],
+           "aspect": "square"}
 NO_CHANGE = "no change"         # a case whose right answer is "nothing to do" (the patch is refused)
 
 
@@ -101,6 +109,18 @@ CASES = [
                    "aspect": "square"}, "make the dragon green",
      [lambda s, c: "green" in text(s, "A") and "dragon" in text(s, "A") or f"A is {text(s, 'A')!r}",
       lambda s, c: "samurai" in text(s, "B") or f"B is {text(s, 'B')!r}"]),
+    ("looks like orc", PALADIN, "that troll looks a whole lot like an orc and it seems to be wielding swords and the "
+     "paladin seems to be wielding two swords instead of having a sword and a shield buckled to his other arm",
+     [lambda s, c: "troll" in text(s, "B") and "orc" not in text(s, "B") or f"B is {text(s, 'B')!r}",
+      lambda s, c: not has_word(s, "two swords", "orc") or "wrote the complaint in",
+      lambda s, c: "shield" in " ".join(f["text"].lower() for f in s["features"]) or "lost the shield",
+      lambda s, c: "sword" not in text(s, "B") or f"troll has a sword: {text(s, 'B')!r}"]),
+    ("troll no swords", {**PALADIN, "features": [PALADIN["features"][0],
+                                                {"id": "B", "kind": "element", "text": "a troll wielding two swords"},
+                                                PALADIN["features"][2]]},
+     "a troll should not be wielding swords",
+     [lambda s, c: "troll" in text(s, "B") and "sword" not in text(s, "B") or f"B is {text(s, 'B')!r}",
+      lambda s, c: "longsword" in text(s, "A") or f"A is {text(s, 'A')!r}"]),
     ("chatter", BATTLE, "oh gosh, it's fake again. oh my gosh, what's that", NO_CHANGE),
     ("aside", BATTLE, "sure. yeah, you're talking with my husband", NO_CHANGE),
 ]
@@ -119,6 +139,10 @@ def main() -> int:
             continue
         for n in range(args.repeats):
             result = P.features_patch_for(start, said)
+            if result.ok and start and grammar.is_complaint(said):      # as art mode does (session._on_edit)
+                kept, result.changed = F.keep_mistakes_out(F.features_of(start), F.features_of(result.spec),
+                                                           result.changed, said)
+                result.spec = {**result.spec, "features": F.dump(kept)}
             if checks == NO_CHANGE:
                 problems = [f"changed {result.changed}"] if result.ok else []
             else:
