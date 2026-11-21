@@ -131,7 +131,6 @@
  },
  "extra": {
   "source": "CMU 13_17 frame 1474, nearest pose her dials make",
-  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
   "tags": [
    "fists",
    "guard",
@@ -141,6 +140,7 @@
   "fit": {
    "mean": 9.21,
    "max": 29.11
-  }
+  },
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu."
  }
 }

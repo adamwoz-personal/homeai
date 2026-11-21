@@ -131,7 +131,6 @@
  },
  "extra": {
   "source": "CMU 02_07 frame 1566, nearest pose her dials make",
-  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
   "tags": [
    "sword",
    "thrust",
@@ -142,6 +141,7 @@
   "fit": {
    "mean": 12.23,
    "max": 34.31
-  }
+  },
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu."
  }
 }

@@ -233,7 +233,10 @@ def test_every_form_in_the_library_keeps_the_contract():
     assert set(forms) == {B.slug(e["name"]) + ".json" for e in listed}
     for name, spec in forms.items():
         FM.check_spec(spec)
-        assert spec["extra"]["credit"] == FM.CREDIT and spec["extra"]["source"].startswith("CMU ")
+        if spec["extra"]["source"].startswith("CMU "):
+            assert spec["extra"]["credit"] == FM.CREDIT, name
+        else:                                                       # set by hand on her dials: nothing to credit
+            assert spec["extra"]["source"] == "set by hand on her dials" and "credit" not in spec["extra"], name
         assert "pose" not in spec, name                          # Jarvis's copies keep the capture, no dials
     index = json.loads((B.LIBRARY / "index.json").read_text())
     assert index["credit"] == FM.CREDIT and [f["file"] for f in index["forms"]] == sorted(forms, key=[
@@ -339,3 +342,11 @@ def test_a_scene_reference_puts_each_figure_where_its_character_is(tmp_path):
     words = P.prompt_with_reference("A paladin. A troll.", "facing_off")
     assert words.startswith("A paladin. A troll. ") and "the paladin on the left facing right" in words
     assert "the troll on the right facing left" in words and "no mannequin parts" in words
+
+
+def test_a_form_set_by_hand_says_so_and_is_hers_exactly():
+    spec = json.loads((B.FOR_ANI / "sword-and-shield-ready.json").read_text())
+    assert spec["extra"]["source"] == "set by hand on her dials" and spec["extra"]["fit"] == {"mean": 0, "max": 0}
+    assert spec["pose"]["shoulderForwardR"] == 100
+    assert B.source_of({"dials": {}}) == "set by hand on her dials"
+    assert B.source_of({"trial": "02_07", "frame": 9}) == "CMU 02_07 frame 9"

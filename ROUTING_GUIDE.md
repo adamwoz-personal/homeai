@@ -2217,3 +2217,10 @@ mistake, and by node 021 the prompt said "two longsword blades". Read the stored
 blaming the image model. `wording.reword` now refuses a rewrite sharing a 5-word run with the description that the
 person didn't say, or a count (two, double, pair...) the person didn't say. Open: the patcher also writes complaints
 ("he's holding two swords instead of a shield") into features as instructions (F10 step 1).
+
+2026-11-20: A mannequin picture as klein's reference copies the *layout* (two figures facing off, fists up) but
+not *what is held*: klein gives every hand in the reference something to hold, so a sword-and-shield stance came
+back with a shield on both arms and extra blades (1/8 clean vs 4/8 without a reference). Score scene references
+by eye as well as by the checker: the checker scored the layout win and the count loss the same (4/8 vs 3/8).
+Also: a model that scores better on counts (ERNIE Turbo 42/48 vs klein 35/48) can still be the wrong choice if it
+draws the same picture for every seed (redraws and options stop working) - look at the sheets.

@@ -131,7 +131,6 @@
  },
  "extra": {
   "source": "CMU 09_01 frame 30, nearest pose her dials make",
-  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
   "tags": [
    "run",
    "move",
@@ -140,6 +139,7 @@
   "fit": {
    "mean": 12.43,
    "max": 39.25
-  }
+  },
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu."
  }
 }

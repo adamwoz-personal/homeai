@@ -34,6 +34,23 @@
    "fit_mean": 14.89
   },
   {
+   "name": "Sword and shield ready",
+   "file": "sword-and-shield-ready.json",
+   "tags": [
+    "sword",
+    "shield",
+    "guard",
+    "fight",
+    "ready",
+    "knight"
+   ],
+   "ani_fit": {
+    "mean": 0,
+    "max": 0
+   },
+   "fit_mean": 0
+  },
+  {
    "name": "Sword thrust",
    "file": "sword-thrust.json",
    "tags": [

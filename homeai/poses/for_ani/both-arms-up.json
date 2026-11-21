@@ -131,7 +131,6 @@
  },
  "extra": {
   "source": "CMU 13_26 frame 203, nearest pose her dials make",
-  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
   "tags": [
    "cheer",
    "arms up",
@@ -141,6 +140,7 @@
   "fit": {
    "mean": 3.86,
    "max": 13.49
-  }
+  },
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu."
  }
 }

@@ -10,6 +10,7 @@ with the F4 checks (blades, shields: tools/art/bakeoff_multi.py "paladin") plus 
 Two steps like the bake-off (drawing needs ComfyUI, checking needs the voice model):
     .venv/bin/python tools/poses/probe_scene_reference.py draw [--seeds 8] [--scene facing_off]
     .venv/bin/python tools/poses/probe_scene_reference.py check DIR
+    .venv/bin/python tools/poses/probe_scene_reference.py reference --scene shield_wide   (just the mannequins)
 Output: ~/homeai-bench/scene-ref-<time>/ (reference.png, pictures, result.json, check.json, sheet.png)
 """
 from __future__ import annotations
@@ -38,6 +39,10 @@ SCENES = {
     # background gave studio-grey photos. Wider apart, and the words ask for the scene's own background.
     "facing_off_wide": {"scene": "paladin", "figures": [("sword-guard", 90, 0.24, 0.9), ("boxing-guard", 270, 0.77, 1.1)],
                         "who": ["the paladin", "the troll"]},
+    # Second run: the two-handed guard drew a second blade in 5 of 8, so a one-handed sword-and-shield stance.
+    "shield_wide": {"scene": "paladin", "figures": [("sword-and-shield-ready", 90, 0.24, 0.9),
+                                                    ("boxing-guard", 270, 0.77, 1.1)],
+                    "who": ["the paladin", "the troll"]},
 }
 REFERENCE_WORDS = ("Use the reference picture only for the poses and places of the figures: {placed}. Turn the "
                    "wooden mannequins into the real characters described, with real faces, skin and clothes; no wood, "
@@ -124,7 +129,14 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("--scene", default="facing_off", choices=list(SCENES))
     c = sub.add_parser("check")
     c.add_argument("folder")
+    r = sub.add_parser("reference", help="only draw the mannequin scene (no GPU)")
+    r.add_argument("--scene", default="facing_off", choices=list(SCENES))
     args = ap.parse_args(argv)
+    if args.step == "reference":
+        out = bench_path("scene-ref")
+        out.mkdir(parents=True)
+        print(scene_picture(args.scene, out / "reference.png"))
+        return 0
     return draw(args) if args.step == "draw" else check(args)
 
 

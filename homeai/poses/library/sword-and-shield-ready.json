@@ -1,0 +1,121 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Sword and shield ready",
+ "description": "a figure in a ready stance, the right arm raised forward and up, the left forearm held close across the chest, the left foot forward",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 333.86,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 222.0,
+   "y": 333.86,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 232.72,
+   "y": 410.15,
+   "z": 35.92
+  },
+  "ankleL": {
+   "x": 244.51,
+   "y": 494.0,
+   "z": 28.51
+  },
+  "hipR": {
+   "x": 178.0,
+   "y": 333.86,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 166.88,
+   "y": 412.96,
+   "z": -29.07
+  },
+  "ankleR": {
+   "x": 156.64,
+   "y": 485.85,
+   "z": -71.57
+  },
+  "belly": {
+   "x": 200.0,
+   "y": 297.86,
+   "z": 0.0
+  },
+  "chestTop": {
+   "x": 200.0,
+   "y": 213.86,
+   "z": 0.0
+  },
+  "ribL": {
+   "x": 227.57,
+   "y": 277.86,
+   "z": 4.86
+  },
+  "ribR": {
+   "x": 172.43,
+   "y": 277.86,
+   "z": -4.86
+  },
+  "shoulderL": {
+   "x": 245.3,
+   "y": 219.86,
+   "z": 7.99
+  },
+  "elbowL": {
+   "x": 247.81,
+   "y": 269.88,
+   "z": 44.54
+  },
+  "handL": {
+   "x": 245.49,
+   "y": 263.4,
+   "z": 102.13
+  },
+  "shoulderR": {
+   "x": 154.7,
+   "y": 219.86,
+   "z": -7.99
+  },
+  "elbowR": {
+   "x": 146.84,
+   "y": 209.46,
+   "z": 52.63
+  },
+  "handR": {
+   "x": 150.17,
+   "y": 169.85,
+   "z": 94.86
+  },
+  "neckTop": {
+   "x": 200.0,
+   "y": 195.86,
+   "z": 0.0
+  },
+  "head": {
+   "x": 200.0,
+   "y": 171.86,
+   "z": 0.0
+  }
+ },
+ "extra": {
+  "source": "set by hand on her dials",
+  "tags": [
+   "sword",
+   "shield",
+   "guard",
+   "fight",
+   "ready",
+   "knight"
+  ]
+ }
+}

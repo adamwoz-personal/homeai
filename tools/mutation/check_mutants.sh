@@ -731,6 +731,7 @@ MUTANTS=(
   "f10-fit-no-descent|tools/poses/fit_dials.js|s/if (next.score < here.score - 1e-9)/if (false)/|tests/test_poses.py -k dial_fit"
   "f10-verify-lenient|tools/poses/fit_dials.js|s/if (worst > 0.01)/if (worst > 1e9)/|tests/test_poses.py -k dial_fit"
   "f10-fetch-takes-html|tools/poses/fetch_cmu.py|s/ or data\[:1\] == b\"<\"//|tests/test_poses.py -k fetch_downloads"
+  "f10-hand-form-unlabelled|tools/poses/build_forms.py|s/    return \"set by hand on her dials\" if/    return \"CMU\" if/|tests/test_poses.py -k set_by_hand"
   "art-steer-dropped|homeai/art/features.py|s/look += \[w for w in steer/look += [w for w in ()/|tests/test_art_features.py -k steer_the_prompt"
   "art-steer-clothes-always|homeai/art/policy.py|s/\[KID_CLOTHED\] if PEOPLE.search(text) else \[\]/[KID_CLOTHED]/|tests/test_art_features.py -k steer_the_prompt"
   "art-letterless-change-fails|homeai/art/features.py|s/^            continue$/            raise SpecError(\"no letter\")/|tests/test_art_features.py -k letterless"

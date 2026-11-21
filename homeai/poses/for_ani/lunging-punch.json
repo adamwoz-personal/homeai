@@ -131,7 +131,6 @@
  },
  "extra": {
   "source": "CMU 13_17 frame 632, nearest pose her dials make",
-  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
   "tags": [
    "punch",
    "attack",
@@ -141,6 +140,7 @@
   "fit": {
    "mean": 22.68,
    "max": 53.77
-  }
+  },
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu."
  }
 }

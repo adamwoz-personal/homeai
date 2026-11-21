@@ -12,6 +12,7 @@
 //
 // Usage: node tools/poses/fit_dials.js /path/to/pose-core.js < targets.json > fits.json
 //        node tools/poses/fit_dials.js /path/to/pose-core.js --verify < specs.json    (her app's checks)
+//        node tools/poses/fit_dials.js /path/to/pose-core.js --joints < [{name, pose}]  (a form set on her dials)
 //   targets.json: [{"name": "...", "joints": {"hips": {"x":..,"y":..,"z":..}, ...}}, ...]
 //   fits.json:    [{"name": "...", "pose": {...}, "joints": {...her findJoints...}, "mean": 3.1, "max": 7.9}, ...]
 //                 (mean and max: distance from the target joints, canvas units)
@@ -90,6 +91,18 @@ if (require.main === module) {
   const corePath = process.argv[2];
   if (!corePath) { console.error("usage: fit_dials.js pose-core.js [--verify] < targets.json"); process.exit(2); }
   const core = require(path.resolve(corePath));
+  if (process.argv[3] === "--joints") {          // a form set by hand on her dials: her joints for it
+    const asked = JSON.parse(fs.readFileSync(0, "utf8"));
+    const out = asked.map(a => {
+      const pose = { ...core.standing, ...a.pose };
+      core.checkPose(pose);
+      const joints = {};
+      for (const [n, q] of Object.entries(core.findJoints(pose))) joints[n] = { x: q.x, y: q.y, z: q.z || 0 };
+      return { name: a.name, pose, joints, mean: 0, max: 0 };
+    });
+    process.stdout.write(JSON.stringify(out) + "\n");
+    process.exit(0);
+  }
   if (process.argv[3] === "--verify") {
     const specs = JSON.parse(fs.readFileSync(0, "utf8"));
     const out = specs.map(spec => ({ name: spec.name, worst: verify(core, spec) }));

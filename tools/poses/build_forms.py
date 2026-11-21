@@ -78,10 +78,25 @@ def verify_all(core: Path, specs: list[dict]) -> list[dict]:
     return json.loads(done.stdout)
 
 
+def her_joints(core: Path, asked: list[dict]) -> list[dict]:
+    """Forms set by hand on her dials ({name, pose}): the whole pose and the joints her findJoints makes."""
+    done = subprocess.run(["node", str(REPO / "tools/poses/fit_dials.js"), str(core), "--joints"],
+                          input=json.dumps(asked), capture_output=True, text=True, timeout=120)
+    if done.returncode:
+        why = next((line for line in done.stderr.splitlines() if "Error" in line), done.stderr.strip()[:300])
+        raise RuntimeError("her dials would not make a form: " + why.strip())
+    return json.loads(done.stdout)
+
+
 def fit_all(core: Path, targets: list[dict]) -> list[dict]:
     done = subprocess.run(["node", str(REPO / "tools/poses/fit_dials.js"), str(core)], input=json.dumps(targets),
                           capture_output=True, text=True, check=True, timeout=600)
     return json.loads(done.stdout)
+
+
+def source_of(entry: dict) -> str:
+    """Where a form comes from: a CMU frame, or set by hand on her dials."""
+    return "set by hand on her dials" if "dials" in entry else f"CMU {entry['trial']} frame {entry['frame']}"
 
 
 def keeps(fitted: dict | None) -> bool:
@@ -91,14 +106,18 @@ def keeps(fitted: dict | None) -> bool:
 
 def jarvis_copy(entry: dict, joints: dict) -> dict:
     """The captured pose in 3D, no dials."""
-    extra = {"source": f"CMU {entry['trial']} frame {entry['frame']}", "credit": FM.CREDIT, "tags": entry["tags"]}
+    extra = {"source": source_of(entry), "credit": FM.CREDIT, "tags": entry["tags"]}
+    if "dials" in entry:
+        extra = {"source": source_of(entry), "tags": entry["tags"]}
     return FM.to_spec(joints, name=entry["name"], description=entry["description"], extra=extra)
 
 
 def ani_copy(entry: dict, fitted: dict) -> dict:
     """Her dials and the joints her own maths makes from them; how far that is from the capture."""
-    extra = {"source": f"CMU {entry['trial']} frame {entry['frame']}, nearest pose her dials make",
-             "credit": FM.CREDIT, "tags": entry["tags"], "fit": {"mean": fitted["mean"], "max": fitted["max"]}}
+    extra = {"source": source_of(entry) + ("" if "dials" in entry else ", nearest pose her dials make"),
+             "tags": entry["tags"], "fit": {"mean": fitted["mean"], "max": fitted["max"]}}
+    if "dials" not in entry:
+        extra["credit"] = FM.CREDIT
     return FM.to_spec(fitted["joints"], name=entry["name"], description=entry["description"], pose=fitted["pose"],
                       extra=extra)
 
@@ -125,12 +144,15 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     listing = json.loads(LIST.read_text())
     entries = listing["forms"]
-    targets = [{"name": e["name"], "joints": captured(e)} for e in entries]
     tmp = tempfile.TemporaryDirectory()
-    core = None
+    core = her_core(args.pose_repo, args.ref, Path(tmp.name))
+    by_hand = {f["name"]: f for f in her_joints(core, [{"name": e["name"], "pose": e["dials"]}
+                                                       for e in entries if "dials" in e])}
+    targets = [{"name": e["name"], "joints": by_hand[e["name"]]["joints"] if "dials" in e else captured(e)}
+               for e in entries]
     try:
-        core = her_core(args.pose_repo, args.ref, Path(tmp.name))
-        fits = {f["name"]: f for f in fit_all(core, targets)}
+        fits = {f["name"]: f for f in fit_all(core, [t for t, e in zip(targets, entries) if "dials" not in e])}
+        fits.update(by_hand)
     except (OSError, subprocess.SubprocessError) as exc:
         print("no dial fit (her repo or node missing):", exc)
         fits = {}

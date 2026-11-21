@@ -131,7 +131,6 @@
  },
  "extra": {
   "source": "CMU 02_07 frame 99, nearest pose her dials make",
-  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
   "tags": [
    "sword",
    "attack",
@@ -141,6 +140,7 @@
   "fit": {
    "mean": 14.89,
    "max": 41.71
-  }
+  },
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu."
  }
 }

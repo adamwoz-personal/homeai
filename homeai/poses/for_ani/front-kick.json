@@ -131,7 +131,6 @@
  },
  "extra": {
   "source": "CMU 86_01 frame 3358, nearest pose her dials make",
-  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
   "tags": [
    "kick",
    "attack",
@@ -141,6 +140,7 @@
   "fit": {
    "mean": 12.27,
    "max": 30.54
-  }
+  },
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu."
  }
 }
