@@ -1,0 +1,120 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Both arms up",
+ "description": "a figure with both arms raised up",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 330.93,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 221.96,
+   "y": 329.59,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 239.82,
+   "y": 411.16,
+   "z": 15.89
+  },
+  "ankleL": {
+   "x": 260.71,
+   "y": 488.63,
+   "z": -12.15
+  },
+  "hipR": {
+   "x": 178.04,
+   "y": 332.27,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 182.13,
+   "y": 414.91,
+   "z": 19.44
+  },
+  "ankleR": {
+   "x": 173.84,
+   "y": 494.0,
+   "z": -10.58
+  },
+  "belly": {
+   "x": 198.51,
+   "y": 294.98,
+   "z": -1.25
+  },
+  "chestTop": {
+   "x": 195.04,
+   "y": 211.1,
+   "z": -4.16
+  },
+  "ribL": {
+   "x": 225.17,
+   "y": 276.05,
+   "z": -7.16
+  },
+  "ribR": {
+   "x": 170.19,
+   "y": 273.97,
+   "z": 3.28
+  },
+  "shoulderL": {
+   "x": 240.45,
+   "y": 218.8,
+   "z": -12.52
+  },
+  "elbowL": {
+   "x": 264.33,
+   "y": 233.96,
+   "z": 42.65
+  },
+  "handL": {
+   "x": 286.55,
+   "y": 180.83,
+   "z": 49.51
+  },
+  "shoulderR": {
+   "x": 150.12,
+   "y": 215.38,
+   "z": 4.62
+  },
+  "elbowR": {
+   "x": 128.21,
+   "y": 197.9,
+   "z": 59.92
+  },
+  "handR": {
+   "x": 171.56,
+   "y": 159.56,
+   "z": 63.78
+  },
+  "neckTop": {
+   "x": 194.12,
+   "y": 193.13,
+   "z": -4.7
+  },
+  "head": {
+   "x": 195.49,
+   "y": 170.22,
+   "z": 2.3
+  }
+ },
+ "extra": {
+  "source": "CMU 13_26 frame 203",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "cheer",
+   "arms up",
+   "celebrate",
+   "cast"
+  ]
+ }
+}

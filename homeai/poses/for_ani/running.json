@@ -1,0 +1,145 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Running",
+ "description": "a figure running, one leg pushing off behind, arms swinging",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "pose": {
+  "headTilt": -3,
+  "shoulders": -6,
+  "bodyLean": 0,
+  "waistTwist": 0,
+  "shoulderSideL": 8,
+  "elbowSideL": -123,
+  "hipSideL": 0,
+  "kneeSideL": -7,
+  "shoulderForwardL": 30,
+  "elbowForwardL": 26,
+  "hipForwardL": -34,
+  "kneeForwardL": -10,
+  "shoulderSideR": 6,
+  "elbowSideR": 6,
+  "hipSideR": 0,
+  "kneeSideR": 0,
+  "shoulderForwardR": -40,
+  "elbowForwardR": 83,
+  "hipForwardR": 32,
+  "kneeForwardR": -33
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 336.93,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 222.0,
+   "y": 336.93,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 222.0,
+   "y": 407.4,
+   "z": -47.53
+  },
+  "ankleL": {
+   "x": 214.55,
+   "y": 468.09,
+   "z": -106.58
+  },
+  "hipR": {
+   "x": 178.0,
+   "y": 336.93,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 178.0,
+   "y": 409.01,
+   "z": 45.04
+  },
+  "ankleR": {
+   "x": 178.0,
+   "y": 494.0,
+   "z": 43.56
+  },
+  "belly": {
+   "x": 200.0,
+   "y": 300.93,
+   "z": 0.0
+  },
+  "chestTop": {
+   "x": 200.0,
+   "y": 216.93,
+   "z": 0.0
+  },
+  "ribL": {
+   "x": 228.0,
+   "y": 280.93,
+   "z": 0.0
+  },
+  "ribR": {
+   "x": 172.0,
+   "y": 280.93,
+   "z": 0.0
+  },
+  "shoulderL": {
+   "x": 246.0,
+   "y": 228.93,
+   "z": 0.0
+  },
+  "elbowL": {
+   "x": 253.47,
+   "y": 282.1,
+   "z": 31.0
+  },
+  "handL": {
+   "x": 224.08,
+   "y": 268.39,
+   "z": 79.08
+  },
+  "shoulderR": {
+   "x": 154.0,
+   "y": 228.93,
+   "z": 0.0
+  },
+  "elbowR": {
+   "x": 149.04,
+   "y": 276.16,
+   "z": -39.85
+  },
+  "handR": {
+   "x": 140.22,
+   "y": 317.66,
+   "z": -0.3
+  },
+  "neckTop": {
+   "x": 199.53,
+   "y": 198.94,
+   "z": 0.0
+  },
+  "head": {
+   "x": 198.27,
+   "y": 174.97,
+   "z": 0.0
+  }
+ },
+ "extra": {
+  "source": "CMU 09_01 frame 30, nearest pose her dials make",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "run",
+   "move",
+   "chase"
+  ],
+  "fit": {
+   "mean": 12.43,
+   "max": 39.25
+  }
+ }
+}

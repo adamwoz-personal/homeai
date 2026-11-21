@@ -1,0 +1,146 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Sword raised overhead",
+ "description": "a figure with both hands raised above the head, about to strike downward",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "pose": {
+  "headTilt": -7,
+  "shoulders": -1,
+  "bodyLean": -6,
+  "waistTwist": 0,
+  "shoulderSideL": 14,
+  "elbowSideL": 33,
+  "hipSideL": 1,
+  "kneeSideL": 8,
+  "shoulderForwardL": 130,
+  "elbowForwardL": 95,
+  "hipForwardL": 21,
+  "kneeForwardL": -29,
+  "shoulderSideR": 22,
+  "elbowSideR": 12,
+  "hipSideR": -4,
+  "kneeSideR": -2,
+  "shoulderForwardR": 113,
+  "elbowForwardR": 83,
+  "hipForwardR": -1,
+  "kneeForwardR": -23
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 331.52,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 222.0,
+   "y": 331.52,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 223.38,
+   "y": 410.86,
+   "z": 30.46
+  },
+  "ankleL": {
+   "x": 236.55,
+   "y": 494.0,
+   "z": 18.63
+  },
+  "hipR": {
+   "x": 178.0,
+   "y": 331.52,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 183.93,
+   "y": 416.3,
+   "z": -1.48
+  },
+  "ankleR": {
+   "x": 192.05,
+   "y": 493.53,
+   "z": -36.06
+  },
+  "belly": {
+   "x": 196.24,
+   "y": 295.72,
+   "z": 0.0
+  },
+  "chestTop": {
+   "x": 187.46,
+   "y": 212.18,
+   "z": 0.0
+  },
+  "ribL": {
+   "x": 221.99,
+   "y": 272.9,
+   "z": 0.0
+  },
+  "ribR": {
+   "x": 166.3,
+   "y": 278.75,
+   "z": 0.0
+  },
+  "shoulderL": {
+   "x": 233.94,
+   "y": 214.33,
+   "z": 0.0
+  },
+  "elbowL": {
+   "x": 224.3,
+   "y": 175.66,
+   "z": 47.49
+  },
+  "handL": {
+   "x": 194.3,
+   "y": 147.69,
+   "z": 6.48
+  },
+  "shoulderR": {
+   "x": 142.44,
+   "y": 223.95,
+   "z": 0.0
+  },
+  "elbowR": {
+   "x": 151.52,
+   "y": 201.49,
+   "z": 57.07
+  },
+  "handR": {
+   "x": 182.69,
+   "y": 155.27,
+   "z": 41.08
+  },
+  "neckTop": {
+   "x": 184.49,
+   "y": 194.43,
+   "z": 0.0
+  },
+  "head": {
+   "x": 179.09,
+   "y": 171.04,
+   "z": 0.0
+  }
+ },
+ "extra": {
+  "source": "CMU 02_07 frame 99, nearest pose her dials make",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "sword",
+   "attack",
+   "raised",
+   "fight"
+  ],
+  "fit": {
+   "mean": 14.89,
+   "max": 41.71
+  }
+ }
+}

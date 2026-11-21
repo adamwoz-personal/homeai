@@ -1,0 +1,147 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Sword thrust",
+ "description": "a figure reaching forward with both arms, as if thrusting",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "pose": {
+  "headTilt": 19,
+  "shoulders": -8,
+  "bodyLean": -16,
+  "waistTwist": 0,
+  "shoulderSideL": 0,
+  "elbowSideL": -76,
+  "hipSideL": 8,
+  "kneeSideL": -5,
+  "shoulderForwardL": 71,
+  "elbowForwardL": -35,
+  "hipForwardL": 15,
+  "kneeForwardL": -29,
+  "shoulderSideR": 0,
+  "elbowSideR": -120,
+  "hipSideR": 4,
+  "kneeSideR": 0,
+  "shoulderForwardR": 57,
+  "elbowForwardR": -14,
+  "hipForwardR": 10,
+  "kneeForwardR": -31
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 330.33,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 222.0,
+   "y": 330.33,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 233.43,
+   "y": 411.64,
+   "z": 22.0
+  },
+  "ankleL": {
+   "x": 237.74,
+   "y": 494.0,
+   "z": 1.44
+  },
+  "hipR": {
+   "x": 178.0,
+   "y": 330.33,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 172.16,
+   "y": 413.84,
+   "z": 14.76
+  },
+  "ankleR": {
+   "x": 166.63,
+   "y": 493.0,
+   "z": -15.7
+  },
+  "belly": {
+   "x": 190.08,
+   "y": 295.73,
+   "z": 0.0
+  },
+  "chestTop": {
+   "x": 166.92,
+   "y": 214.98,
+   "z": 0.0
+  },
+  "ribL": {
+   "x": 211.48,
+   "y": 268.78,
+   "z": 0.0
+  },
+  "ribR": {
+   "x": 157.65,
+   "y": 284.22,
+   "z": 0.0
+  },
+  "shoulderL": {
+   "x": 215.0,
+   "y": 215.76,
+   "z": 0.0
+  },
+  "elbowL": {
+   "x": 215.0,
+   "y": 235.95,
+   "z": 58.62
+  },
+  "handL": {
+   "x": 169.47,
+   "y": 247.3,
+   "z": 92.71
+  },
+  "shoulderR": {
+   "x": 126.56,
+   "y": 241.12,
+   "z": 0.0
+  },
+  "elbowR": {
+   "x": 126.56,
+   "y": 274.89,
+   "z": 52.0
+  },
+  "handR": {
+   "x": 163.3,
+   "y": 253.68,
+   "z": 91.55
+  },
+  "neckTop": {
+   "x": 164.89,
+   "y": 197.1,
+   "z": 0.0
+  },
+  "head": {
+   "x": 166.14,
+   "y": 173.13,
+   "z": 0.0
+  }
+ },
+ "extra": {
+  "source": "CMU 02_07 frame 1566, nearest pose her dials make",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "sword",
+   "thrust",
+   "attack",
+   "fight",
+   "reach"
+  ],
+  "fit": {
+   "mean": 12.23,
+   "max": 34.31
+  }
+ }
+}

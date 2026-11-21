@@ -1,0 +1,119 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Sitting",
+ "description": "a figure sitting upright, knees bent, hands resting",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 422.51,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 222.0,
+   "y": 422.3,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 245.32,
+   "y": 409.21,
+   "z": 80.68
+  },
+  "ankleL": {
+   "x": 249.62,
+   "y": 494.0,
+   "z": 76.53
+  },
+  "hipR": {
+   "x": 178.0,
+   "y": 422.72,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 162.7,
+   "y": 410.84,
+   "z": 82.76
+  },
+  "ankleR": {
+   "x": 149.37,
+   "y": 493.45,
+   "z": 97.69
+  },
+  "belly": {
+   "x": 201.77,
+   "y": 390.27,
+   "z": 15.92
+  },
+  "chestTop": {
+   "x": 205.91,
+   "y": 315.04,
+   "z": 53.05
+  },
+  "ribL": {
+   "x": 230.61,
+   "y": 373.67,
+   "z": 22.21
+  },
+  "ribR": {
+   "x": 174.91,
+   "y": 371.04,
+   "z": 27.3
+  },
+  "shoulderL": {
+   "x": 251.38,
+   "y": 322.58,
+   "z": 46.22
+  },
+  "elbowL": {
+   "x": 277.74,
+   "y": 378.53,
+   "z": 50.49
+  },
+  "handL": {
+   "x": 248.96,
+   "y": 386.8,
+   "z": 100.16
+  },
+  "shoulderR": {
+   "x": 159.86,
+   "y": 318.25,
+   "z": 54.58
+  },
+  "elbowR": {
+   "x": 125.86,
+   "y": 370.08,
+   "z": 53.17
+  },
+  "handR": {
+   "x": 156.35,
+   "y": 384.21,
+   "z": 100.45
+  },
+  "neckTop": {
+   "x": 207.91,
+   "y": 297.68,
+   "z": 57.35
+  },
+  "head": {
+   "x": 206.3,
+   "y": 273.73,
+   "z": 57.14
+  }
+ },
+ "extra": {
+  "source": "CMU 13_04 frame 635",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "sit",
+   "rest",
+   "seated"
+  ]
+ }
+}

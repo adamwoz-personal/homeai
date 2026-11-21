@@ -1,0 +1,119 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Pointing to the side",
+ "description": "a figure pointing with one arm stretched out to the side",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 333.82,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 221.79,
+   "y": 330.79,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 226.99,
+   "y": 411.46,
+   "z": 26.28
+  },
+  "ankleL": {
+   "x": 242.66,
+   "y": 494.0,
+   "z": 13.4
+  },
+  "hipR": {
+   "x": 178.21,
+   "y": 336.86,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 169.98,
+   "y": 421.24,
+   "z": 6.04
+  },
+  "ankleR": {
+   "x": 159.06,
+   "y": 493.53,
+   "z": -37.32
+  },
+  "belly": {
+   "x": 189.64,
+   "y": 299.46,
+   "z": 2.76
+  },
+  "chestTop": {
+   "x": 165.47,
+   "y": 219.27,
+   "z": 9.2
+  },
+  "ribL": {
+   "x": 206.54,
+   "y": 272.73,
+   "z": -10.29
+  },
+  "ribR": {
+   "x": 161.24,
+   "y": 288.0,
+   "z": 18.88
+  },
+  "shoulderL": {
+   "x": 204.42,
+   "y": 212.46,
+   "z": -15.21
+  },
+  "elbowL": {
+   "x": 265.5,
+   "y": 208.5,
+   "z": -5.36
+  },
+  "handL": {
+   "x": 319.74,
+   "y": 197.15,
+   "z": 11.77
+  },
+  "shoulderR": {
+   "x": 129.99,
+   "y": 237.53,
+   "z": 32.7
+  },
+  "elbowR": {
+   "x": 177.26,
+   "y": 255.92,
+   "z": 68.35
+  },
+  "handR": {
+   "x": 227.64,
+   "y": 227.28,
+   "z": 66.0
+  },
+  "neckTop": {
+   "x": 161.5,
+   "y": 202.15,
+   "z": 13.1
+  },
+  "head": {
+   "x": 163.95,
+   "y": 180.86,
+   "z": 23.91
+  }
+ },
+ "extra": {
+  "source": "CMU 13_26 frame 2221",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "point",
+   "direct",
+   "show"
+  ]
+ }
+}

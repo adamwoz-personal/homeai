@@ -1,0 +1,119 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Crouching",
+ "description": "a figure crouched low on bent knees, leaning forward",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 401.81,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 222.0,
+   "y": 401.82,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 241.5,
+   "y": 418.99,
+   "z": 80.93
+  },
+  "ankleL": {
+   "x": 228.54,
+   "y": 494.0,
+   "z": 43.12
+  },
+  "hipR": {
+   "x": 178.0,
+   "y": 401.81,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 151.91,
+   "y": 475.89,
+   "z": 32.49
+  },
+  "ankleR": {
+   "x": 143.54,
+   "y": 475.96,
+   "z": -52.1
+  },
+  "belly": {
+   "x": 206.73,
+   "y": 381.5,
+   "z": 28.95
+  },
+  "chestTop": {
+   "x": 222.42,
+   "y": 334.09,
+   "z": 96.49
+  },
+  "ribL": {
+   "x": 236.82,
+   "y": 379.55,
+   "z": 43.65
+  },
+  "ribR": {
+   "x": 184.11,
+   "y": 360.86,
+   "z": 46.41
+  },
+  "shoulderL": {
+   "x": 264.61,
+   "y": 352.83,
+   "z": 89.4
+  },
+  "elbowL": {
+   "x": 309.35,
+   "y": 393.23,
+   "z": 74.92
+  },
+  "handL": {
+   "x": 256.36,
+   "y": 410.53,
+   "z": 90.94
+  },
+  "shoulderR": {
+   "x": 178.0,
+   "y": 322.13,
+   "z": 93.94
+  },
+  "elbowR": {
+   "x": 119.31,
+   "y": 340.97,
+   "z": 87.32
+  },
+  "handR": {
+   "x": 119.47,
+   "y": 319.86,
+   "z": 141.34
+  },
+  "neckTop": {
+   "x": 230.16,
+   "y": 324.2,
+   "z": 109.39
+  },
+  "head": {
+   "x": 236.81,
+   "y": 305.94,
+   "z": 123.47
+  }
+ },
+ "extra": {
+  "source": "CMU 23_03 frame 163",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "crouch",
+   "low",
+   "hide"
+  ]
+ }
+}

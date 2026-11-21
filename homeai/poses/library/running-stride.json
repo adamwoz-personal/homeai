@@ -1,0 +1,119 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Running stride",
+ "description": "a figure mid-stride while running, front knee bent, back leg stretched",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 344.9,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 221.99,
+   "y": 344.31,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 217.0,
+   "y": 425.45,
+   "z": -24.84
+  },
+  "ankleL": {
+   "x": 215.18,
+   "y": 494.0,
+   "z": -75.07
+  },
+  "hipR": {
+   "x": 178.01,
+   "y": 345.48,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 178.11,
+   "y": 412.53,
+   "z": 52.25
+  },
+  "ankleR": {
+   "x": 180.87,
+   "y": 477.61,
+   "z": -2.35
+  },
+  "belly": {
+   "x": 200.81,
+   "y": 309.88,
+   "z": 8.32
+  },
+  "chestTop": {
+   "x": 202.69,
+   "y": 228.18,
+   "z": 27.74
+  },
+  "ribL": {
+   "x": 228.8,
+   "y": 292.05,
+   "z": 17.71
+  },
+  "ribR": {
+   "x": 173.71,
+   "y": 288.81,
+   "z": 8.18
+  },
+  "shoulderL": {
+   "x": 247.8,
+   "y": 236.68,
+   "z": 34.19
+  },
+  "elbowL": {
+   "x": 253.18,
+   "y": 298.1,
+   "z": 40.75
+  },
+  "handL": {
+   "x": 227.7,
+   "y": 265.74,
+   "z": 81.58
+  },
+  "shoulderR": {
+   "x": 157.3,
+   "y": 231.35,
+   "z": 18.53
+  },
+  "elbowR": {
+   "x": 152.88,
+   "y": 277.33,
+   "z": -22.82
+  },
+  "handR": {
+   "x": 145.35,
+   "y": 318.55,
+   "z": 17.28
+  },
+  "neckTop": {
+   "x": 203.65,
+   "y": 210.28,
+   "z": 29.33
+  },
+  "head": {
+   "x": 205.05,
+   "y": 186.33,
+   "z": 28.62
+  }
+ },
+ "extra": {
+  "source": "CMU 09_01 frame 109",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "run",
+   "move",
+   "chase"
+  ]
+ }
+}

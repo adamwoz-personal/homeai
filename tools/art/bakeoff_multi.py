@@ -36,6 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from comfy_common import MODELS, Comfy, CoderStopped, workflow  # noqa: E402
 from homeai.art import checker as CK  # noqa: E402
 from homeai.art import features as F  # noqa: E402
+from homeai.art import wording as W  # noqa: E402
 from homeai.benchio import bench_path  # noqa: E402
 
 
@@ -61,6 +62,10 @@ SCENES = {
     "two_people": (_feats(("subject", "a knight and a wizard shaking hands"),
                           ("setting", "in front of a castle")),
                    []),            # people: CK.checklist asks since 2026-11-11
+    # Adam's paladin, 2026-11-20 (project 20261120-165503), as the features read after the complaint fix.
+    "paladin": (_feats(("subject", "a paladin wielding a longsword in his right hand and a shield in his left hand"),
+                       ("element", "a troll"), ("element", "the paladin facing off against the troll")),
+                [_ask("shields", "How many shields are in this picture?", 1)]),
     "fruit": (_feats(("subject", "three red apples and two green pears"), ("setting", "on a wooden table")),
               [_ask("apples", "How many apples are in this picture?", 3),
                _ask("pears", "How many pears are in this picture?", 2)]),
@@ -68,7 +73,9 @@ SCENES = {
 
 
 def prompt_of(scene: str):
-    return F.render(SCENES[scene][0], "square")
+    """What art mode sends: the features in the glossary's words (homeai/art/wording.py), as since 2026-11-18."""
+    features = SCENES[scene][0]
+    return F.render(features, "square", (), W.wordings(features, {}))
 
 
 def checks_of(scene: str) -> list[CK.Check]:
@@ -86,7 +93,7 @@ def draw(args) -> int:
         for model in args.model:
             try:
                 with Comfy(out / f"comfy-{model}.log") as comfy:
-                    for scene in SCENES:
+                    for scene in (args.scene or SCENES):
                         rendered = prompt_of(scene)
                         for seed in range(1, args.seeds + 1):
                             run = comfy.run(workflow(model, rendered.text, seed, rendered.width, rendered.height,
@@ -143,15 +150,16 @@ def check(args) -> int:
             r["problems"] = CK.problems(out / r["image"], checks_of(r["scene"]), CK.ollama_ask)
             print(r["scene"], r["model"], r["seed"], r["problems"], flush=True)
     (out / "check.json").write_text(json.dumps(data, indent=1))
-    for scene in SCENES:
+    scenes = [s for s in SCENES if any(r["scene"] == s for r in data["runs"])]     # --scene may have drawn a few
+    for scene in scenes:
         sheet(out, scene, [r for r in data["runs"] if r["scene"] == scene])
     models = list(dict.fromkeys(r["model"] for r in data["runs"]))
-    print("| model | " + " | ".join(SCENES) + " | clean | median s |")
-    print("|---" * (len(SCENES) + 3) + "|")
+    print("| model | " + " | ".join(scenes) + " | clean | median s |")
+    print("|---" * (len(scenes) + 3) + "|")
     for model in models:
         mine = [r for r in data["runs"] if r["model"] == model]
         cells = []
-        for scene in SCENES:
+        for scene in scenes:
             rs = [r for r in mine if r["scene"] == scene and "image" in r]
             cells.append(f"{sum(1 for r in rs if not r['problems'])}/{len(rs)}")
         drawn = [r for r in mine if "image" in r]
@@ -169,6 +177,7 @@ def main() -> int:
     d.add_argument("--seeds", type=int, default=8)
     d.add_argument("--no-voice", action="store_true", help="stop Jarvis during the run (models that need the card)")
     d.add_argument("--into")
+    d.add_argument("--scene", action="append", choices=list(SCENES), help="only these scenes (default: all)")
     c = sub.add_parser("check")
     c.add_argument("folder")
     args = ap.parse_args()

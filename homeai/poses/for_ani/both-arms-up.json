@@ -1,0 +1,146 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Both arms up",
+ "description": "a figure with both arms raised up",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "pose": {
+  "headTilt": 7,
+  "shoulders": 1,
+  "bodyLean": -3,
+  "waistTwist": 0,
+  "shoulderSideL": 53,
+  "elbowSideL": -69,
+  "hipSideL": 14,
+  "kneeSideL": 0,
+  "shoulderForwardL": 52,
+  "elbowForwardL": 127,
+  "hipForwardL": 10,
+  "kneeForwardL": -29,
+  "shoulderSideR": 138,
+  "elbowSideR": -91,
+  "hipSideR": 1,
+  "kneeSideR": 1,
+  "shoulderForwardR": 64,
+  "elbowForwardR": 108,
+  "hipForwardR": 12,
+  "kneeForwardR": -32
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 331.04,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 222.0,
+   "y": 331.04,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 242.25,
+   "y": 412.27,
+   "z": 14.76
+  },
+  "ankleL": {
+   "x": 261.69,
+   "y": 490.25,
+   "z": -12.91
+  },
+  "hipR": {
+   "x": 178.0,
+   "y": 331.04,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 176.55,
+   "y": 414.17,
+   "z": 17.67
+  },
+  "ankleR": {
+   "x": 173.76,
+   "y": 494.0,
+   "z": -11.4
+  },
+  "belly": {
+   "x": 198.12,
+   "y": 295.09,
+   "z": 0.0
+  },
+  "chestTop": {
+   "x": 193.72,
+   "y": 211.21,
+   "z": 0.0
+  },
+  "ribL": {
+   "x": 225.03,
+   "y": 273.66,
+   "z": 0.0
+  },
+  "ribR": {
+   "x": 169.11,
+   "y": 276.59,
+   "z": 0.0
+  },
+  "shoulderL": {
+   "x": 239.92,
+   "y": 213.8,
+   "z": 0.0
+  },
+  "elbowL": {
+   "x": 270.4,
+   "y": 236.77,
+   "z": 48.86
+  },
+  "handL": {
+   "x": 286.39,
+   "y": 181.02,
+   "z": 49.87
+  },
+  "shoulderR": {
+   "x": 148.04,
+   "y": 218.61,
+   "z": 0.0
+  },
+  "elbowR": {
+   "x": 129.86,
+   "y": 198.41,
+   "z": 55.73
+  },
+  "handR": {
+   "x": 171.86,
+   "y": 159.24,
+   "z": 63.8
+  },
+  "neckTop": {
+   "x": 193.88,
+   "y": 193.21,
+   "z": 0.0
+  },
+  "head": {
+   "x": 195.55,
+   "y": 169.27,
+   "z": 0.0
+  }
+ },
+ "extra": {
+  "source": "CMU 13_26 frame 203, nearest pose her dials make",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "cheer",
+   "arms up",
+   "celebrate",
+   "cast"
+  ],
+  "fit": {
+   "mean": 3.86,
+   "max": 13.49
+  }
+ }
+}

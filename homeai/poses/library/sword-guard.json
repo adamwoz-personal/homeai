@@ -1,0 +1,120 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Sword guard",
+ "description": "a figure in a fighting stance, both hands together in front at chest height, knees bent",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 335.25,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 222.0,
+   "y": 335.55,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 222.27,
+   "y": 409.27,
+   "z": 42.31
+  },
+  "ankleL": {
+   "x": 226.08,
+   "y": 494.0,
+   "z": 36.73
+  },
+  "hipR": {
+   "x": 178.0,
+   "y": 334.95,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 179.81,
+   "y": 419.58,
+   "z": 7.68
+  },
+  "ankleR": {
+   "x": 190.71,
+   "y": 493.71,
+   "z": -32.46
+  },
+  "belly": {
+   "x": 199.51,
+   "y": 302.37,
+   "z": 14.66
+  },
+  "chestTop": {
+   "x": 198.38,
+   "y": 225.66,
+   "z": 48.87
+  },
+  "ribL": {
+   "x": 227.21,
+   "y": 282.9,
+   "z": 23.28
+  },
+  "ribR": {
+   "x": 171.27,
+   "y": 285.32,
+   "z": 22.33
+  },
+  "shoulderL": {
+   "x": 244.41,
+   "y": 229.15,
+   "z": 47.21
+  },
+  "elbowL": {
+   "x": 235.22,
+   "y": 271.04,
+   "z": 91.98
+  },
+  "handL": {
+   "x": 210.68,
+   "y": 283.92,
+   "z": 142.93
+  },
+  "shoulderR": {
+   "x": 152.51,
+   "y": 233.14,
+   "z": 45.64
+  },
+  "elbowR": {
+   "x": 178.13,
+   "y": 286.09,
+   "z": 65.22
+  },
+  "handR": {
+   "x": 218.06,
+   "y": 292.52,
+   "z": 106.79
+  },
+  "neckTop": {
+   "x": 197.54,
+   "y": 208.45,
+   "z": 54.08
+  },
+  "head": {
+   "x": 197.35,
+   "y": 185.07,
+   "z": 59.47
+  }
+ },
+ "extra": {
+  "source": "CMU 02_07 frame 881",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "sword",
+   "guard",
+   "fight",
+   "ready"
+  ]
+ }
+}

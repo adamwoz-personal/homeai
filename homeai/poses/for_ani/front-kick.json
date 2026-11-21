@@ -1,0 +1,146 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Front kick",
+ "description": "a figure standing on one leg, kicking the other leg straight forward",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "pose": {
+  "headTilt": -24,
+  "shoulders": -1,
+  "bodyLean": 13,
+  "waistTwist": 0,
+  "shoulderSideL": 13,
+  "elbowSideL": -103,
+  "hipSideL": 6,
+  "kneeSideL": -23,
+  "shoulderForwardL": 38,
+  "elbowForwardL": 42,
+  "hipForwardL": 18,
+  "kneeForwardL": -36,
+  "shoulderSideR": 32,
+  "elbowSideR": 0,
+  "hipSideR": 120,
+  "kneeSideR": 30,
+  "shoulderForwardR": -26,
+  "elbowForwardR": 42,
+  "hipForwardR": 69,
+  "kneeForwardR": 30
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 336.3,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 222.0,
+   "y": 336.3,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 230.45,
+   "y": 416.69,
+   "z": 26.27
+  },
+  "ankleL": {
+   "x": 206.81,
+   "y": 494.0,
+   "z": 0.0
+  },
+  "hipR": {
+   "x": 178.0,
+   "y": 336.3,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 151.62,
+   "y": 321.06,
+   "z": 79.35
+  },
+  "ankleR": {
+   "x": 158.27,
+   "y": 332.58,
+   "z": 163.31
+  },
+  "belly": {
+   "x": 208.1,
+   "y": 301.22,
+   "z": 0.0
+  },
+  "chestTop": {
+   "x": 226.99,
+   "y": 219.37,
+   "z": 0.0
+  },
+  "ribL": {
+   "x": 239.88,
+   "y": 288.03,
+   "z": 0.0
+  },
+  "ribR": {
+   "x": 185.31,
+   "y": 275.43,
+   "z": 0.0
+  },
+  "shoulderL": {
+   "x": 270.24,
+   "y": 236.54,
+   "z": 0.0
+  },
+  "elbowL": {
+   "x": 281.23,
+   "y": 284.14,
+   "z": 38.17
+  },
+  "handL": {
+   "x": 271.16,
+   "y": 284.14,
+   "z": 95.29
+  },
+  "shoulderR": {
+   "x": 180.6,
+   "y": 215.84,
+   "z": 0.0
+  },
+  "elbowR": {
+   "x": 151.07,
+   "y": 263.1,
+   "z": -27.18
+  },
+  "handR": {
+   "x": 121.52,
+   "y": 310.38,
+   "z": -11.19
+  },
+  "neckTop": {
+   "x": 227.31,
+   "y": 201.37,
+   "z": 0.0
+  },
+  "head": {
+   "x": 222.73,
+   "y": 177.81,
+   "z": 0.0
+  }
+ },
+ "extra": {
+  "source": "CMU 86_01 frame 3358, nearest pose her dials make",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "kick",
+   "attack",
+   "fight",
+   "one leg"
+  ],
+  "fit": {
+   "mean": 12.27,
+   "max": 30.54
+  }
+ }
+}

@@ -1,0 +1,146 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Waving one arm high",
+ "description": "a figure waving one arm high above the head, the other arm out to the side",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "pose": {
+  "headTilt": 5,
+  "shoulders": 1,
+  "bodyLean": 2,
+  "waistTwist": 0,
+  "shoulderSideL": 62,
+  "elbowSideL": 55,
+  "hipSideL": 6,
+  "kneeSideL": 11,
+  "shoulderForwardL": 11,
+  "elbowForwardL": 29,
+  "hipForwardL": 14,
+  "kneeForwardL": -22,
+  "shoulderSideR": 128,
+  "elbowSideR": -150,
+  "hipSideR": 6,
+  "kneeSideR": 10,
+  "shoulderForwardR": 47,
+  "elbowForwardR": 111,
+  "hipForwardR": 0,
+  "kneeForwardR": -34
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 331.48,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 222.0,
+   "y": 331.48,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 230.62,
+   "y": 413.51,
+   "z": 20.56
+  },
+  "ankleL": {
+   "x": 255.23,
+   "y": 494.0,
+   "z": 8.73
+  },
+  "hipR": {
+   "x": 178.0,
+   "y": 331.48,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 169.12,
+   "y": 416.02,
+   "z": 0.0
+  },
+  "ankleR": {
+   "x": 149.69,
+   "y": 483.75,
+   "z": -47.53
+  },
+  "belly": {
+   "x": 201.26,
+   "y": 295.5,
+   "z": 0.0
+  },
+  "chestTop": {
+   "x": 204.19,
+   "y": 211.55,
+   "z": 0.0
+  },
+  "ribL": {
+   "x": 229.94,
+   "y": 276.49,
+   "z": 0.0
+  },
+  "ribR": {
+   "x": 173.97,
+   "y": 274.54,
+   "z": 0.0
+  },
+  "shoulderL": {
+   "x": 249.99,
+   "y": 218.16,
+   "z": 0.0
+  },
+  "elbowL": {
+   "x": 303.72,
+   "y": 246.73,
+   "z": 11.83
+  },
+  "handL": {
+   "x": 343.31,
+   "y": 226.56,
+   "z": 49.11
+  },
+  "shoulderR": {
+   "x": 158.04,
+   "y": 214.95,
+   "z": 0.0
+  },
+  "elbowR": {
+   "x": 124.72,
+   "y": 188.91,
+   "z": 45.34
+  },
+  "handR": {
+   "x": 104.58,
+   "y": 139.05,
+   "z": 67.07
+  },
+  "neckTop": {
+   "x": 205.6,
+   "y": 193.61,
+   "z": 0.0
+  },
+  "head": {
+   "x": 208.53,
+   "y": 169.79,
+   "z": 0.0
+  }
+ },
+ "extra": {
+  "source": "CMU 13_26 frame 808, nearest pose her dials make",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "wave",
+   "greet",
+   "signal",
+   "arm up"
+  ],
+  "fit": {
+   "mean": 3.84,
+   "max": 11.84
+  }
+ }
+}

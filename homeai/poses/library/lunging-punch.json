@@ -1,0 +1,120 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Lunging punch",
+ "description": "a figure lunging forward with one arm punching straight ahead, back leg stretched out",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 370.77,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 221.92,
+   "y": 372.63,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 223.79,
+   "y": 410.96,
+   "z": 75.85
+  },
+  "ankleL": {
+   "x": 234.44,
+   "y": 494.0,
+   "z": 61.17
+  },
+  "hipR": {
+   "x": 178.08,
+   "y": 368.91,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 175.05,
+   "y": 451.63,
+   "z": -19.31
+  },
+  "ankleR": {
+   "x": 172.07,
+   "y": 482.43,
+   "z": -98.48
+  },
+  "belly": {
+   "x": 206.52,
+   "y": 337.13,
+   "z": 11.04
+  },
+  "chestTop": {
+   "x": 221.73,
+   "y": 258.63,
+   "z": 36.78
+  },
+  "ribL": {
+   "x": 235.79,
+   "y": 322.9,
+   "z": 6.87
+  },
+  "ribR": {
+   "x": 184.49,
+   "y": 313.97,
+   "z": 27.46
+  },
+  "shoulderL": {
+   "x": 262.79,
+   "y": 271.57,
+   "z": 18.03
+  },
+  "elbowL": {
+   "x": 270.92,
+   "y": 332.73,
+   "z": 11.92
+  },
+  "handL": {
+   "x": 263.84,
+   "y": 294.55,
+   "z": 55.01
+  },
+  "shoulderR": {
+   "x": 178.5,
+   "y": 256.91,
+   "z": 51.86
+  },
+  "elbowR": {
+   "x": 150.33,
+   "y": 265.3,
+   "z": 106.45
+  },
+  "handR": {
+   "x": 154.37,
+   "y": 251.07,
+   "z": 162.53
+  },
+  "neckTop": {
+   "x": 227.22,
+   "y": 242.77,
+   "z": 43.27
+  },
+  "head": {
+   "x": 226.58,
+   "y": 220.91,
+   "z": 53.17
+  }
+ },
+ "extra": {
+  "source": "CMU 13_17 frame 632",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "punch",
+   "attack",
+   "fight",
+   "lunge"
+  ]
+ }
+}

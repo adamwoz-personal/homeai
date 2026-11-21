@@ -75,3 +75,11 @@ def test_no_links_to_missing_nodes(model):
     from homeai.art.comfy import dangling_links
 
     assert dangling_links(comfy_common.workflow(model, "a fox", 7)) == []
+
+
+def test_ernie_turbo_fits_beside_jarvis_with_its_own_settings():
+    """16 GB in bf16: loaded as fp8. The model card says 8 steps at guidance 1.0 (2026-11-20)."""
+    graph = comfy_common.workflow("ernie_turbo", "a fox", 7)
+    assert graph["unet"]["inputs"] == {"unet_name": "ernie-image-turbo.safetensors", "weight_dtype": "fp8_e4m3fn"}
+    assert (graph["sample"]["inputs"]["steps"], graph["sample"]["inputs"]["cfg"]) == (8, 1.0)
+    assert comfy_common.workflow("ernie", "a fox", 7)["unet"]["inputs"]["weight_dtype"] == "default"

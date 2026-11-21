@@ -1,0 +1,146 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Sword guard",
+ "description": "a figure in a fighting stance, both hands together in front at chest height, knees bent",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "pose": {
+  "headTilt": -20,
+  "shoulders": -15,
+  "bodyLean": 2,
+  "waistTwist": 0,
+  "shoulderSideL": 0,
+  "elbowSideL": -56,
+  "hipSideL": 8,
+  "kneeSideL": -12,
+  "shoulderSideR": 0,
+  "elbowSideR": -70,
+  "hipSideR": -2,
+  "kneeSideR": -6,
+  "shoulderForwardL": 72,
+  "elbowForwardL": -11,
+  "hipForwardL": 30,
+  "kneeForwardL": -34,
+  "shoulderForwardR": 56,
+  "elbowForwardR": -15,
+  "hipForwardR": 6,
+  "kneeForwardR": -35
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 335.9,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 222.0,
+   "y": 335.9,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 232.24,
+   "y": 408.79,
+   "z": 42.5
+  },
+  "ankleL": {
+   "x": 226.33,
+   "y": 493.38,
+   "z": 36.57
+  },
+  "hipR": {
+   "x": 178.0,
+   "y": 335.9,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 180.95,
+   "y": 420.38,
+   "z": 8.88
+  },
+  "ankleR": {
+   "x": 191.3,
+   "y": 494.0,
+   "z": -32.32
+  },
+  "belly": {
+   "x": 201.26,
+   "y": 299.92,
+   "z": 0.0
+  },
+  "chestTop": {
+   "x": 204.19,
+   "y": 215.97,
+   "z": 0.0
+  },
+  "ribL": {
+   "x": 229.94,
+   "y": 280.91,
+   "z": 0.0
+  },
+  "ribR": {
+   "x": 173.97,
+   "y": 278.95,
+   "z": 0.0
+  },
+  "shoulderL": {
+   "x": 249.43,
+   "y": 238.56,
+   "z": 0.0
+  },
+  "elbowL": {
+   "x": 249.43,
+   "y": 257.72,
+   "z": 58.97
+  },
+  "handL": {
+   "x": 226.12,
+   "y": 273.45,
+   "z": 109.69
+  },
+  "shoulderR": {
+   "x": 157.48,
+   "y": 235.35,
+   "z": 0.0
+  },
+  "elbowR": {
+   "x": 157.48,
+   "y": 270.02,
+   "z": 51.4
+  },
+  "handR": {
+   "x": 198.62,
+   "y": 284.99,
+   "z": 89.45
+  },
+  "neckTop": {
+   "x": 201.68,
+   "y": 198.15,
+   "z": 0.0
+  },
+  "head": {
+   "x": 194.27,
+   "y": 175.32,
+   "z": 0.0
+  }
+ },
+ "extra": {
+  "source": "CMU 02_07 frame 881, nearest pose her dials make",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "sword",
+   "guard",
+   "fight",
+   "ready"
+  ],
+  "fit": {
+   "mean": 24.75,
+   "max": 60.34
+  }
+ }
+}

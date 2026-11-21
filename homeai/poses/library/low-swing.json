@@ -1,0 +1,120 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Low swing",
+ "description": "a figure crouched low, swinging both arms forward and down",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 354.61,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 221.33,
+   "y": 349.22,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 227.43,
+   "y": 411.99,
+   "z": 56.98
+  },
+  "ankleL": {
+   "x": 213.49,
+   "y": 493.47,
+   "z": 37.16
+  },
+  "hipR": {
+   "x": 178.67,
+   "y": 360.01,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 169.63,
+   "y": 433.89,
+   "z": 41.06
+  },
+  "ankleR": {
+   "x": 165.27,
+   "y": 494.0,
+   "z": -18.88
+  },
+  "belly": {
+   "x": 187.64,
+   "y": 331.85,
+   "z": 25.0
+  },
+  "chestTop": {
+   "x": 158.81,
+   "y": 278.72,
+   "z": 83.33
+  },
+  "ribL": {
+   "x": 206.34,
+   "y": 310.24,
+   "z": 46.0
+  },
+  "ribR": {
+   "x": 155.22,
+   "y": 328.15,
+   "z": 31.77
+  },
+  "shoulderL": {
+   "x": 202.86,
+   "y": 267.81,
+   "z": 90.85
+  },
+  "elbowL": {
+   "x": 198.42,
+   "y": 322.48,
+   "z": 119.75
+  },
+  "handL": {
+   "x": 193.6,
+   "y": 370.21,
+   "z": 152.34
+  },
+  "shoulderR": {
+   "x": 118.88,
+   "y": 297.23,
+   "z": 67.47
+  },
+  "elbowR": {
+   "x": 163.49,
+   "y": 339.07,
+   "z": 77.61
+  },
+  "handR": {
+   "x": 196.41,
+   "y": 351.37,
+   "z": 123.75
+  },
+  "neckTop": {
+   "x": 151.67,
+   "y": 264.97,
+   "z": 92.49
+  },
+  "head": {
+   "x": 147.49,
+   "y": 244.6,
+   "z": 104.48
+  }
+ },
+ "extra": {
+  "source": "CMU 02_07 frame 1860",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "sword",
+   "swing",
+   "crouch",
+   "fight"
+  ]
+ }
+}

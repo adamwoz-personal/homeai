@@ -1,0 +1,120 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Front kick",
+ "description": "a figure standing on one leg, kicking the other leg straight forward",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 336.93,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 221.65,
+   "y": 340.82,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 218.75,
+   "y": 417.75,
+   "z": 36.03
+  },
+  "ankleL": {
+   "x": 207.59,
+   "y": 494.0,
+   "z": 0.15
+  },
+  "hipR": {
+   "x": 178.35,
+   "y": 333.04,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 164.09,
+   "y": 306.82,
+   "z": 79.59
+  },
+  "ankleR": {
+   "x": 140.07,
+   "y": 347.94,
+   "z": 150.0
+  },
+  "belly": {
+   "x": 205.2,
+   "y": 301.83,
+   "z": 6.09
+  },
+  "chestTop": {
+   "x": 217.32,
+   "y": 219.93,
+   "z": 20.3
+  },
+  "ribL": {
+   "x": 235.33,
+   "y": 287.29,
+   "z": 13.58
+  },
+  "ribR": {
+   "x": 180.83,
+   "y": 277.37,
+   "z": 5.36
+  },
+  "shoulderL": {
+   "x": 261.22,
+   "y": 233.93,
+   "z": 26.03
+  },
+  "elbowL": {
+   "x": 283.12,
+   "y": 290.56,
+   "z": 38.59
+  },
+  "handL": {
+   "x": 271.46,
+   "y": 284.13,
+   "z": 95.04
+  },
+  "shoulderR": {
+   "x": 171.69,
+   "y": 217.63,
+   "z": 12.53
+  },
+  "elbowR": {
+   "x": 156.44,
+   "y": 265.29,
+   "z": -24.08
+  },
+  "handR": {
+   "x": 121.96,
+   "y": 310.11,
+   "z": -11.23
+  },
+  "neckTop": {
+   "x": 221.4,
+   "y": 202.58,
+   "z": 22.81
+  },
+  "head": {
+   "x": 223.56,
+   "y": 179.94,
+   "z": 30.46
+  }
+ },
+ "extra": {
+  "source": "CMU 86_01 frame 3358",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "kick",
+   "attack",
+   "fight",
+   "one leg"
+  ]
+ }
+}

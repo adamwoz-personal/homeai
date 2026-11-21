@@ -1,0 +1,121 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Long jab",
+ "description": "a figure in a deep lunge, one arm stretched far forward",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 364.09,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 221.91,
+   "y": 366.06,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 214.52,
+   "y": 410.25,
+   "z": 72.23
+  },
+  "ankleL": {
+   "x": 229.05,
+   "y": 494.0,
+   "z": 72.62
+  },
+  "hipR": {
+   "x": 178.09,
+   "y": 362.11,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 184.52,
+   "y": 441.96,
+   "z": -28.42
+  },
+  "ankleR": {
+   "x": 193.88,
+   "y": 474.5,
+   "z": -106.38
+  },
+  "belly": {
+   "x": 208.73,
+   "y": 331.8,
+   "z": 13.3
+  },
+  "chestTop": {
+   "x": 229.1,
+   "y": 256.45,
+   "z": 44.34
+  },
+  "ribL": {
+   "x": 238.21,
+   "y": 318.68,
+   "z": 8.29
+  },
+  "ribR": {
+   "x": 188.94,
+   "y": 309.03,
+   "z": 33.1
+  },
+  "shoulderL": {
+   "x": 268.11,
+   "y": 269.75,
+   "z": 21.75
+  },
+  "elbowL": {
+   "x": 273.34,
+   "y": 330.74,
+   "z": 31.6
+  },
+  "handL": {
+   "x": 268.38,
+   "y": 296.76,
+   "z": 78.33
+  },
+  "shoulderR": {
+   "x": 187.17,
+   "y": 253.9,
+   "z": 62.5
+  },
+  "elbowR": {
+   "x": 178.98,
+   "y": 254.99,
+   "z": 123.95
+  },
+  "handR": {
+   "x": 191.49,
+   "y": 242.12,
+   "z": 179.1
+  },
+  "neckTop": {
+   "x": 236.05,
+   "y": 242.09,
+   "z": 52.69
+  },
+  "head": {
+   "x": 239.04,
+   "y": 222.2,
+   "z": 65.78
+  }
+ },
+ "extra": {
+  "source": "CMU 13_17 frame 3367",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "punch",
+   "attack",
+   "fight",
+   "lunge",
+   "reach"
+  ]
+ }
+}

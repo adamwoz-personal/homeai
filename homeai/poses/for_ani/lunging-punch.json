@@ -1,0 +1,146 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Lunging punch",
+ "description": "a figure lunging forward with one arm punching straight ahead, back leg stretched out",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "pose": {
+  "headTilt": 6,
+  "shoulders": -5,
+  "bodyLean": 9,
+  "waistTwist": 0,
+  "shoulderSideL": 8,
+  "elbowSideL": -150,
+  "hipSideL": 1,
+  "kneeSideL": 7,
+  "shoulderForwardL": 11,
+  "elbowForwardL": 41,
+  "hipForwardL": 63,
+  "kneeForwardL": -73,
+  "shoulderSideR": 81,
+  "elbowSideR": 60,
+  "hipSideR": -4,
+  "kneeSideR": 18,
+  "shoulderForwardR": 80,
+  "elbowForwardR": 4,
+  "hipForwardR": -42,
+  "kneeForwardR": -3
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 372.52,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 222.0,
+   "y": 372.52,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 222.67,
+   "y": 411.11,
+   "z": 75.74
+  },
+  "ankleL": {
+   "x": 234.32,
+   "y": 494.0,
+   "z": 60.98
+  },
+  "hipR": {
+   "x": 178.0,
+   "y": 372.52,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 182.41,
+   "y": 435.54,
+   "z": -56.88
+  },
+  "ankleR": {
+   "x": 167.87,
+   "y": 493.85,
+   "z": -116.98
+  },
+  "belly": {
+   "x": 205.63,
+   "y": 336.97,
+   "z": 0.0
+  },
+  "chestTop": {
+   "x": 218.77,
+   "y": 254.0,
+   "z": 0.0
+  },
+  "ribL": {
+   "x": 236.42,
+   "y": 321.59,
+   "z": 0.0
+  },
+  "ribR": {
+   "x": 181.11,
+   "y": 312.83,
+   "z": 0.0
+  },
+  "shoulderL": {
+   "x": 262.49,
+   "y": 272.06,
+   "z": 0.0
+  },
+  "elbowL": {
+   "x": 270.96,
+   "y": 332.33,
+   "z": 11.83
+  },
+  "handL": {
+   "x": 248.97,
+   "y": 304.19,
+   "z": 57.53
+  },
+  "shoulderR": {
+   "x": 171.62,
+   "y": 257.67,
+   "z": 0.0
+  },
+  "elbowR": {
+   "x": 160.98,
+   "y": 259.35,
+   "z": 61.06
+  },
+  "handR": {
+   "x": 157.17,
+   "y": 254.64,
+   "z": 118.74
+  },
+  "neckTop": {
+   "x": 222.51,
+   "y": 236.39,
+   "z": 0.0
+  },
+  "head": {
+   "x": 228.73,
+   "y": 213.21,
+   "z": 0.0
+  }
+ },
+ "extra": {
+  "source": "CMU 13_17 frame 632, nearest pose her dials make",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "punch",
+   "attack",
+   "fight",
+   "lunge"
+  ],
+  "fit": {
+   "mean": 22.68,
+   "max": 53.77
+  }
+ }
+}

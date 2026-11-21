@@ -1,0 +1,119 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Standing",
+ "description": "a figure standing relaxed, arms loosely at the sides",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 328.91,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 222.0,
+   "y": 329.32,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 219.89,
+   "y": 413.07,
+   "z": 14.4
+  },
+  "ankleL": {
+   "x": 219.99,
+   "y": 494.0,
+   "z": -11.58
+  },
+  "hipR": {
+   "x": 178.0,
+   "y": 328.5,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 169.27,
+   "y": 413.05,
+   "z": -0.17
+  },
+  "ankleR": {
+   "x": 158.2,
+   "y": 485.21,
+   "z": -43.72
+  },
+  "belly": {
+   "x": 202.82,
+   "y": 293.07,
+   "z": 1.77
+  },
+  "chestTop": {
+   "x": 209.41,
+   "y": 209.43,
+   "z": 5.91
+  },
+  "ribL": {
+   "x": 232.14,
+   "y": 276.65,
+   "z": 1.45
+  },
+  "ribR": {
+   "x": 176.64,
+   "y": 269.66,
+   "z": 4.07
+  },
+  "shoulderL": {
+   "x": 254.52,
+   "y": 221.15,
+   "z": 3.47
+  },
+  "elbowL": {
+   "x": 254.43,
+   "y": 283.15,
+   "z": 3.77
+  },
+  "handL": {
+   "x": 257.51,
+   "y": 334.6,
+   "z": 30.36
+  },
+  "shoulderR": {
+   "x": 163.35,
+   "y": 209.66,
+   "z": 7.77
+  },
+  "elbowR": {
+   "x": 151.82,
+   "y": 269.5,
+   "z": -3.61
+  },
+  "handR": {
+   "x": 137.04,
+   "y": 324.43,
+   "z": 7.73
+  },
+  "neckTop": {
+   "x": 212.37,
+   "y": 191.81,
+   "z": 8.13
+  },
+  "head": {
+   "x": 213.91,
+   "y": 170.14,
+   "z": 18.32
+  }
+ },
+ "extra": {
+  "source": "CMU 13_04 frame 1",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "stand",
+   "rest",
+   "idle"
+  ]
+ }
+}

@@ -1,0 +1,278 @@
+{
+ "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+ "list": "homeai/poses/forms.json",
+ "forms": [
+  {
+   "name": "Sword guard",
+   "file": "sword-guard.json",
+   "tags": [
+    "sword",
+    "guard",
+    "fight",
+    "ready"
+   ],
+   "ani_fit": {
+    "mean": 24.75,
+    "max": 60.34
+   },
+   "fit_mean": 24.75
+  },
+  {
+   "name": "Sword raised overhead",
+   "file": "sword-raised-overhead.json",
+   "tags": [
+    "sword",
+    "attack",
+    "raised",
+    "fight"
+   ],
+   "ani_fit": {
+    "mean": 14.89,
+    "max": 41.71
+   },
+   "fit_mean": 14.89
+  },
+  {
+   "name": "Sword thrust",
+   "file": "sword-thrust.json",
+   "tags": [
+    "sword",
+    "thrust",
+    "attack",
+    "fight",
+    "reach"
+   ],
+   "ani_fit": {
+    "mean": 12.23,
+    "max": 34.31
+   },
+   "fit_mean": 12.23
+  },
+  {
+   "name": "Low swing",
+   "file": "low-swing.json",
+   "tags": [
+    "sword",
+    "swing",
+    "crouch",
+    "fight"
+   ],
+   "ani_fit": null,
+   "fit_mean": 46.65
+  },
+  {
+   "name": "Boxing guard",
+   "file": "boxing-guard.json",
+   "tags": [
+    "fists",
+    "guard",
+    "fight",
+    "ready"
+   ],
+   "ani_fit": {
+    "mean": 9.21,
+    "max": 29.11
+   },
+   "fit_mean": 9.21
+  },
+  {
+   "name": "Lunging punch",
+   "file": "lunging-punch.json",
+   "tags": [
+    "punch",
+    "attack",
+    "fight",
+    "lunge"
+   ],
+   "ani_fit": {
+    "mean": 22.68,
+    "max": 53.77
+   },
+   "fit_mean": 22.68
+  },
+  {
+   "name": "Long jab",
+   "file": "long-jab.json",
+   "tags": [
+    "punch",
+    "attack",
+    "fight",
+    "lunge",
+    "reach"
+   ],
+   "ani_fit": {
+    "mean": 24.23,
+    "max": 67.12
+   },
+   "fit_mean": 24.23
+  },
+  {
+   "name": "Front kick",
+   "file": "front-kick.json",
+   "tags": [
+    "kick",
+    "attack",
+    "fight",
+    "one leg"
+   ],
+   "ani_fit": {
+    "mean": 12.27,
+    "max": 30.54
+   },
+   "fit_mean": 12.27
+  },
+  {
+   "name": "Kneeling on one knee",
+   "file": "kneeling-on-one-knee.json",
+   "tags": [
+    "kneel",
+    "knight",
+    "rest"
+   ],
+   "ani_fit": null,
+   "fit_mean": 33.84
+  },
+  {
+   "name": "Crouching",
+   "file": "crouching.json",
+   "tags": [
+    "crouch",
+    "low",
+    "hide"
+   ],
+   "ani_fit": null,
+   "fit_mean": 46.14
+  },
+  {
+   "name": "Sitting",
+   "file": "sitting.json",
+   "tags": [
+    "sit",
+    "rest",
+    "seated"
+   ],
+   "ani_fit": {
+    "mean": 21.55,
+    "max": 58.68
+   },
+   "fit_mean": 21.55
+  },
+  {
+   "name": "Running",
+   "file": "running.json",
+   "tags": [
+    "run",
+    "move",
+    "chase"
+   ],
+   "ani_fit": {
+    "mean": 12.43,
+    "max": 39.25
+   },
+   "fit_mean": 12.43
+  },
+  {
+   "name": "Running stride",
+   "file": "running-stride.json",
+   "tags": [
+    "run",
+    "move",
+    "chase"
+   ],
+   "ani_fit": {
+    "mean": 12.05,
+    "max": 34.25
+   },
+   "fit_mean": 12.05
+  },
+  {
+   "name": "Waving one arm high",
+   "file": "waving-one-arm-high.json",
+   "tags": [
+    "wave",
+    "greet",
+    "signal",
+    "arm up"
+   ],
+   "ani_fit": {
+    "mean": 3.84,
+    "max": 11.84
+   },
+   "fit_mean": 3.84
+  },
+  {
+   "name": "Both arms up",
+   "file": "both-arms-up.json",
+   "tags": [
+    "cheer",
+    "arms up",
+    "celebrate",
+    "cast"
+   ],
+   "ani_fit": {
+    "mean": 3.86,
+    "max": 13.49
+   },
+   "fit_mean": 3.86
+  },
+  {
+   "name": "Pointing to the side",
+   "file": "pointing-to-the-side.json",
+   "tags": [
+    "point",
+    "direct",
+    "show"
+   ],
+   "ani_fit": {
+    "mean": 15.86,
+    "max": 36.34
+   },
+   "fit_mean": 15.86
+  },
+  {
+   "name": "Standing",
+   "file": "standing.json",
+   "tags": [
+    "stand",
+    "rest",
+    "idle"
+   ],
+   "ani_fit": {
+    "mean": 4.14,
+    "max": 18.44
+   },
+   "fit_mean": 4.14
+  },
+  {
+   "name": "Palm pushed out",
+   "file": "palm-pushed-out.json",
+   "tags": [
+    "cast",
+    "spell",
+    "push",
+    "reach",
+    "magic"
+   ],
+   "ani_fit": {
+    "mean": 12.6,
+    "max": 27.3
+   },
+   "fit_mean": 12.6
+  },
+  {
+   "name": "Wide stance, arms out",
+   "file": "wide-stance-arms-out.json",
+   "tags": [
+    "cast",
+    "spell",
+    "balance",
+    "magic"
+   ],
+   "ani_fit": {
+    "mean": 19.26,
+    "max": 41.39
+   },
+   "fit_mean": 19.26
+  }
+ ]
+}

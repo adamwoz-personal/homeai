@@ -1,0 +1,120 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Waving one arm high",
+ "description": "a figure waving one arm high above the head, the other arm out to the side",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 331.55,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 221.99,
+   "y": 332.08,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 236.68,
+   "y": 412.28,
+   "z": 24.06
+  },
+  "ankleL": {
+   "x": 255.04,
+   "y": 494.0,
+   "z": 9.61
+  },
+  "hipR": {
+   "x": 178.01,
+   "y": 331.02,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 169.9,
+   "y": 415.63,
+   "z": 0.6
+  },
+  "ankleR": {
+   "x": 149.31,
+   "y": 483.13,
+   "z": -46.79
+  },
+  "belly": {
+   "x": 201.52,
+   "y": 295.59,
+   "z": 0.44
+  },
+  "chestTop": {
+   "x": 205.06,
+   "y": 211.67,
+   "z": 1.47
+  },
+  "ribL": {
+   "x": 229.64,
+   "y": 278.91,
+   "z": -4.68
+  },
+  "ribR": {
+   "x": 175.08,
+   "y": 272.3,
+   "z": 6.05
+  },
+  "shoulderL": {
+   "x": 249.63,
+   "y": 223.09,
+   "z": -7.41
+  },
+  "elbowL": {
+   "x": 303.55,
+   "y": 247.21,
+   "z": 11.42
+  },
+  "handL": {
+   "x": 343.07,
+   "y": 226.38,
+   "z": 48.41
+  },
+  "shoulderR": {
+   "x": 159.99,
+   "y": 212.23,
+   "z": 10.21
+  },
+  "elbowR": {
+   "x": 122.11,
+   "y": 186.95,
+   "z": 52.28
+  },
+  "handR": {
+   "x": 102.39,
+   "y": 134.94,
+   "z": 68.7
+  },
+  "neckTop": {
+   "x": 205.98,
+   "y": 193.7,
+   "z": 2.12
+  },
+  "head": {
+   "x": 207.98,
+   "y": 171.77,
+   "z": 11.66
+  }
+ },
+ "extra": {
+  "source": "CMU 13_26 frame 808",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "wave",
+   "greet",
+   "signal",
+   "arm up"
+  ]
+ }
+}

@@ -1,0 +1,121 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Sword thrust",
+ "description": "a figure reaching forward with both arms, as if thrusting",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 331.12,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 221.7,
+   "y": 327.5,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 236.79,
+   "y": 408.23,
+   "z": 21.9
+  },
+  "ankleL": {
+   "x": 237.37,
+   "y": 490.76,
+   "z": 1.57
+  },
+  "hipR": {
+   "x": 178.3,
+   "y": 334.75,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 176.7,
+   "y": 417.38,
+   "z": 19.87
+  },
+  "ankleR": {
+   "x": 166.48,
+   "y": 494.0,
+   "z": -15.49
+  },
+  "belly": {
+   "x": 191.2,
+   "y": 296.47,
+   "z": 4.21
+  },
+  "chestTop": {
+   "x": 170.66,
+   "y": 215.62,
+   "z": 14.05
+  },
+  "ribL": {
+   "x": 211.66,
+   "y": 269.16,
+   "z": 15.28
+  },
+  "ribR": {
+   "x": 160.95,
+   "y": 285.28,
+   "z": -2.17
+  },
+  "shoulderL": {
+   "x": 213.78,
+   "y": 208.15,
+   "z": 27.68
+  },
+  "elbowL": {
+   "x": 183.69,
+   "y": 240.09,
+   "z": 71.49
+  },
+  "handL": {
+   "x": 144.2,
+   "y": 253.19,
+   "z": 111.89
+  },
+  "shoulderR": {
+   "x": 130.47,
+   "y": 234.64,
+   "z": -0.99
+  },
+  "elbowR": {
+   "x": 158.27,
+   "y": 272.97,
+   "z": 39.03
+  },
+  "handR": {
+   "x": 164.93,
+   "y": 252.5,
+   "z": 92.89
+  },
+  "neckTop": {
+   "x": 166.33,
+   "y": 198.15,
+   "z": 14.17
+  },
+  "head": {
+   "x": 165.54,
+   "y": 174.19,
+   "z": 15.45
+  }
+ },
+ "extra": {
+  "source": "CMU 02_07 frame 1566",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "sword",
+   "thrust",
+   "attack",
+   "fight",
+   "reach"
+  ]
+ }
+}

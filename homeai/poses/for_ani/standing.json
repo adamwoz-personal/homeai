@@ -1,0 +1,145 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Standing",
+ "description": "a figure standing relaxed, arms loosely at the sides",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "pose": {
+  "headTilt": 0,
+  "shoulders": 0,
+  "bodyLean": 5,
+  "waistTwist": 0,
+  "shoulderSideL": 0,
+  "elbowSideL": 2,
+  "hipSideL": -1,
+  "kneeSideL": 1,
+  "shoulderForwardL": 3,
+  "elbowForwardL": 24,
+  "hipForwardL": 10,
+  "kneeForwardL": -28,
+  "shoulderSideR": 14,
+  "elbowSideR": -1,
+  "hipSideR": 14,
+  "kneeSideR": -15,
+  "shoulderForwardR": -2,
+  "elbowForwardR": 12,
+  "hipForwardR": 0,
+  "kneeForwardR": -31
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 329.46,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 222.0,
+   "y": 329.46,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 220.54,
+   "y": 413.16,
+   "z": 14.76
+  },
+  "ankleL": {
+   "x": 220.54,
+   "y": 494.0,
+   "z": -11.51
+  },
+  "hipR": {
+   "x": 178.0,
+   "y": 329.46,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 157.44,
+   "y": 411.94,
+   "z": 0.0
+  },
+  "ankleR": {
+   "x": 158.71,
+   "y": 484.79,
+   "z": -43.78
+  },
+  "belly": {
+   "x": 203.14,
+   "y": 293.6,
+   "z": 0.0
+  },
+  "chestTop": {
+   "x": 210.46,
+   "y": 209.92,
+   "z": 0.0
+  },
+  "ribL": {
+   "x": 232.77,
+   "y": 276.12,
+   "z": 0.0
+  },
+  "ribR": {
+   "x": 176.99,
+   "y": 271.24,
+   "z": 0.0
+  },
+  "shoulderL": {
+   "x": 255.76,
+   "y": 219.91,
+   "z": 0.0
+  },
+  "elbowL": {
+   "x": 255.76,
+   "y": 281.82,
+   "z": 3.24
+  },
+  "handL": {
+   "x": 257.56,
+   "y": 333.47,
+   "z": 29.58
+  },
+  "shoulderR": {
+   "x": 164.11,
+   "y": 211.89,
+   "z": 0.0
+  },
+  "elbowR": {
+   "x": 149.12,
+   "y": 272.01,
+   "z": -2.16
+  },
+  "handR": {
+   "x": 136.27,
+   "y": 327.67,
+   "z": 7.91
+  },
+  "neckTop": {
+   "x": 212.03,
+   "y": 191.99,
+   "z": 0.0
+  },
+  "head": {
+   "x": 214.12,
+   "y": 168.08,
+   "z": 0.0
+  }
+ },
+ "extra": {
+  "source": "CMU 13_04 frame 1, nearest pose her dials make",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "stand",
+   "rest",
+   "idle"
+  ],
+  "fit": {
+   "mean": 4.14,
+   "max": 18.44
+  }
+ }
+}

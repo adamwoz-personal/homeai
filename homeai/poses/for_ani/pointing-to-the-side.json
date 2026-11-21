@@ -1,0 +1,145 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Pointing to the side",
+ "description": "a figure pointing with one arm stretched out to the side",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "pose": {
+  "headTilt": -40,
+  "shoulders": -12,
+  "bodyLean": -7,
+  "waistTwist": 0,
+  "shoulderSideL": 120,
+  "elbowSideL": -25,
+  "hipSideL": 6,
+  "kneeSideL": 3,
+  "shoulderForwardL": -28,
+  "elbowForwardL": 74,
+  "hipForwardL": 23,
+  "kneeForwardL": -37,
+  "shoulderSideR": 0,
+  "elbowSideR": -107,
+  "hipSideR": 6,
+  "kneeSideR": 2,
+  "shoulderForwardR": 77,
+  "elbowForwardR": -73,
+  "hipForwardR": 2,
+  "kneeForwardR": -30
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 334.73,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 222.0,
+   "y": 334.73,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 230.18,
+   "y": 412.54,
+   "z": 33.21
+  },
+  "ankleL": {
+   "x": 243.08,
+   "y": 494.0,
+   "z": 12.65
+  },
+  "hipR": {
+   "x": 178.0,
+   "y": 334.73,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 169.12,
+   "y": 419.21,
+   "z": 2.97
+  },
+  "ankleR": {
+   "x": 158.68,
+   "y": 493.53,
+   "z": -36.94
+  },
+  "belly": {
+   "x": 195.61,
+   "y": 298.99,
+   "z": 0.0
+  },
+  "chestTop": {
+   "x": 185.38,
+   "y": 215.62,
+   "z": 0.0
+  },
+  "ribL": {
+   "x": 220.97,
+   "y": 275.73,
+   "z": 0.0
+  },
+  "ribR": {
+   "x": 165.38,
+   "y": 282.56,
+   "z": 0.0
+  },
+  "shoulderL": {
+   "x": 233.23,
+   "y": 227.88,
+   "z": 0.0
+  },
+  "elbowL": {
+   "x": 280.64,
+   "y": 200.51,
+   "z": -29.11
+  },
+  "handL": {
+   "x": 320.77,
+   "y": 197.0,
+   "z": 12.61
+  },
+  "shoulderR": {
+   "x": 141.91,
+   "y": 239.09,
+   "z": 0.0
+  },
+  "elbowR": {
+   "x": 141.91,
+   "y": 253.04,
+   "z": 60.41
+  },
+  "handR": {
+   "x": 197.24,
+   "y": 236.12,
+   "z": 64.46
+  },
+  "neckTop": {
+   "x": 177.2,
+   "y": 199.58,
+   "z": 0.0
+  },
+  "head": {
+   "x": 159.65,
+   "y": 183.21,
+   "z": 0.0
+  }
+ },
+ "extra": {
+  "source": "CMU 13_26 frame 2221, nearest pose her dials make",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "point",
+   "direct",
+   "show"
+  ],
+  "fit": {
+   "mean": 15.86,
+   "max": 36.34
+  }
+ }
+}

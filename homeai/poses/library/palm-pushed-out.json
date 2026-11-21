@@ -1,0 +1,121 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Palm pushed out",
+ "description": "a figure in a wide stance pushing one open hand forward",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 329.73,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 221.97,
+   "y": 328.6,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 224.85,
+   "y": 411.22,
+   "z": 19.75
+  },
+  "ankleL": {
+   "x": 234.36,
+   "y": 491.65,
+   "z": -6.07
+  },
+  "hipR": {
+   "x": 178.03,
+   "y": 330.86,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 178.4,
+   "y": 414.71,
+   "z": 13.91
+  },
+  "ankleR": {
+   "x": 167.74,
+   "y": 494.0,
+   "z": -14.8
+  },
+  "belly": {
+   "x": 201.49,
+   "y": 294.46,
+   "z": 7.07
+  },
+  "chestTop": {
+   "x": 204.98,
+   "y": 212.17,
+   "z": 23.56
+  },
+  "ribL": {
+   "x": 230.24,
+   "y": 273.03,
+   "z": 12.11
+  },
+  "ribR": {
+   "x": 174.41,
+   "y": 276.71,
+   "z": 9.88
+  },
+  "shoulderL": {
+   "x": 250.6,
+   "y": 215.03,
+   "z": 24.21
+  },
+  "elbowL": {
+   "x": 253.22,
+   "y": 237.51,
+   "z": 81.93
+  },
+  "handL": {
+   "x": 258.22,
+   "y": 251.51,
+   "z": 137.99
+  },
+  "shoulderR": {
+   "x": 158.87,
+   "y": 221.07,
+   "z": 20.55
+  },
+  "elbowR": {
+   "x": 152.97,
+   "y": 247.7,
+   "z": 76.23
+  },
+  "handR": {
+   "x": 145.25,
+   "y": 260.23,
+   "z": 132.34
+  },
+  "neckTop": {
+   "x": 205.29,
+   "y": 194.24,
+   "z": 21.98
+  },
+  "head": {
+   "x": 202.17,
+   "y": 171.0,
+   "z": 27.09
+  }
+ },
+ "extra": {
+  "source": "CMU 12_04 frame 1188",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "cast",
+   "spell",
+   "push",
+   "reach",
+   "magic"
+  ]
+ }
+}

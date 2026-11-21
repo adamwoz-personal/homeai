@@ -1,0 +1,120 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Boxing guard",
+ "description": "a figure with both fists raised in front of the face",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 358.81,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 221.99,
+   "y": 358.24,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 248.19,
+   "y": 423.09,
+   "z": 48.31
+  },
+  "ankleL": {
+   "x": 275.99,
+   "y": 494.0,
+   "z": 10.58
+  },
+  "hipR": {
+   "x": 178.01,
+   "y": 359.38,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 156.8,
+   "y": 440.57,
+   "z": 13.56
+  },
+  "ankleR": {
+   "x": 138.94,
+   "y": 489.11,
+   "z": -53.89
+  },
+  "belly": {
+   "x": 200.32,
+   "y": 323.17,
+   "z": 5.04
+  },
+  "chestTop": {
+   "x": 201.06,
+   "y": 240.0,
+   "z": 16.81
+  },
+  "ribL": {
+   "x": 227.82,
+   "y": 304.26,
+   "z": 1.82
+  },
+  "ribR": {
+   "x": 173.17,
+   "y": 302.47,
+   "z": 13.87
+  },
+  "shoulderL": {
+   "x": 245.91,
+   "y": 247.41,
+   "z": 6.07
+  },
+  "elbowL": {
+   "x": 262.62,
+   "y": 283.5,
+   "z": 53.62
+  },
+  "handL": {
+   "x": 248.64,
+   "y": 227.22,
+   "z": 54.36
+  },
+  "shoulderR": {
+   "x": 156.11,
+   "y": 244.47,
+   "z": 25.87
+  },
+  "elbowR": {
+   "x": 160.29,
+   "y": 273.98,
+   "z": 80.23
+  },
+  "handR": {
+   "x": 181.47,
+   "y": 220.56,
+   "z": 88.13
+  },
+  "neckTop": {
+   "x": 202.6,
+   "y": 222.31,
+   "z": 19.77
+  },
+  "head": {
+   "x": 203.14,
+   "y": 200.17,
+   "z": 29.03
+  }
+ },
+ "extra": {
+  "source": "CMU 13_17 frame 1474",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "fists",
+   "guard",
+   "fight",
+   "ready"
+  ]
+ }
+}

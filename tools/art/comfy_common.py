@@ -26,7 +26,8 @@ from homeai.httpjson import OLLAMA, post_json  # noqa: E402,F401 - OLLAMA re-exp
 ROOT = Path.home() / ".local/share/homeai/comfyui"
 URL = "http://127.0.0.1:8188"
 MODELS = ("klein", "klein_base", "zimage", "sdxl", "dreamshaper", "qwen", "qwen_turbo", "krea", "ernie", "hidream", "chroma",
-          "moss", "boogu", "flux3", "klein9", "klein9_base", "ideogram", "animagine", "noobai")
+          "moss", "boogu", "flux3", "klein9", "klein9_base", "ideogram", "animagine", "noobai",
+          "ernie_turbo")
 # Adam 2026-11-05: SDXL out. 2026-11-06, after the bake-off: Ideogram blanked 39 of 60 ordinary prompts with a safety
 # card; FLUX 3 garbled; klein base lost to klein; the anime models missed their prompts.
 RETIRED = ("sdxl", "ideogram", "flux3", "klein_base", "animagine", "noobai")
@@ -52,8 +53,8 @@ def _ksampler(model: list, pos: list, neg: list, latent: list, seed: int, steps:
         "cfg": cfg, "sampler_name": sampler, "scheduler": scheduler, "denoise": 1.0}}
 
 
-def _loaders(unet: str, clip: str, clip_type: str, vae: str) -> dict:
-    return {"unet": {"class_type": "UNETLoader", "inputs": {"unet_name": unet, "weight_dtype": "default"}},
+def _loaders(unet: str, clip: str, clip_type: str, vae: str, weight_dtype: str = "default") -> dict:
+    return {"unet": {"class_type": "UNETLoader", "inputs": {"unet_name": unet, "weight_dtype": weight_dtype}},
             "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": clip, "type": clip_type}},
             "vae": {"class_type": "VAELoader", "inputs": {"vae_name": vae}}}
 
@@ -126,6 +127,12 @@ def workflow(model: str, prompt: str, seed: int, width: int = 1024, height: int 
         return {**_loaders("ernie-image.safetensors", "ministral-3-3b.safetensors", "flux2", "flux2-vae.safetensors"),
                 "pos": pos, "neg": empty_neg, "latent": {"class_type": "EmptyFlux2LatentImage", "inputs": size},
                 "sample": _ksampler(["unet", 0], ["pos", 0], ["neg", 0], ["latent", 0], seed, 20, 4.0, "euler", "simple"),
+                **_tail(["sample", 0], ["vae", 0], prefix)}
+    if model == "ernie_turbo":      # 16 GB bf16: loaded as fp8 to fit beside Jarvis; 8 steps, cfg 1 (model card)
+        return {**_loaders("ernie-image-turbo.safetensors", "ministral-3-3b.safetensors", "flux2",
+                           "flux2-vae.safetensors", "fp8_e4m3fn"),
+                "pos": pos, "neg": empty_neg, "latent": {"class_type": "EmptyFlux2LatentImage", "inputs": size},
+                "sample": _ksampler(["unet", 0], ["pos", 0], ["neg", 0], ["latent", 0], seed, 8, 1.0, "euler", "simple"),
                 **_tail(["sample", 0], ["vae", 0], prefix)}
     if model == "hidream":                                  # trained at ~4 megapixels: lower goes off-distribution
         double = {"width": width * 2 // 32 * 32, "height": height * 2 // 32 * 32, "batch_size": 1}

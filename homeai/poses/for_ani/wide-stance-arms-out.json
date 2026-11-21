@@ -1,0 +1,146 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Wide stance, arms out",
+ "description": "a figure in a wide low stance with both arms spread",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "pose": {
+  "headTilt": 22,
+  "shoulders": -15,
+  "bodyLean": -5,
+  "waistTwist": 0,
+  "shoulderSideL": 0,
+  "elbowSideL": -65,
+  "hipSideL": 36,
+  "kneeSideL": -12,
+  "shoulderForwardL": 46,
+  "elbowForwardL": -23,
+  "hipForwardL": 4,
+  "kneeForwardL": -8,
+  "shoulderSideR": 74,
+  "elbowSideR": 30,
+  "hipSideR": -20,
+  "kneeSideR": -4,
+  "shoulderForwardR": 35,
+  "elbowForwardR": 6,
+  "hipForwardR": 8,
+  "kneeForwardR": 0
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 338.01,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 222.0,
+   "y": 338.01,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 271.84,
+   "y": 406.61,
+   "z": 5.93
+  },
+  "ankleL": {
+   "x": 306.33,
+   "y": 484.07,
+   "z": 0.0
+  },
+  "hipR": {
+   "x": 178.0,
+   "y": 338.01,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 206.79,
+   "y": 417.1,
+   "z": 11.83
+  },
+  "ankleR": {
+   "x": 241.02,
+   "y": 494.0,
+   "z": 23.66
+  },
+  "belly": {
+   "x": 196.86,
+   "y": 302.14,
+   "z": 0.0
+  },
+  "chestTop": {
+   "x": 189.54,
+   "y": 218.46,
+   "z": 0.0
+  },
+  "ribL": {
+   "x": 223.01,
+   "y": 279.78,
+   "z": 0.0
+  },
+  "ribR": {
+   "x": 167.23,
+   "y": 284.66,
+   "z": 0.0
+  },
+  "shoulderL": {
+   "x": 237.2,
+   "y": 235.38,
+   "z": 0.0
+  },
+  "elbowL": {
+   "x": 237.2,
+   "y": 278.44,
+   "z": 44.6
+  },
+  "handL": {
+   "x": 188.81,
+   "y": 301.01,
+   "z": 67.26
+  },
+  "shoulderR": {
+   "x": 145.55,
+   "y": 243.39,
+   "z": 0.0
+  },
+  "elbowR": {
+   "x": 96.73,
+   "y": 257.39,
+   "z": 35.56
+  },
+  "handR": {
+   "x": 54.25,
+   "y": 246.8,
+   "z": 73.61
+  },
+  "neckTop": {
+   "x": 191.42,
+   "y": 200.56,
+   "z": 0.0
+  },
+  "head": {
+   "x": 198.44,
+   "y": 177.61,
+   "z": 0.0
+  }
+ },
+ "extra": {
+  "source": "CMU 12_04 frame 8307, nearest pose her dials make",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "cast",
+   "spell",
+   "balance",
+   "magic"
+  ],
+  "fit": {
+   "mean": 19.26,
+   "max": 41.39
+  }
+ }
+}

@@ -1,0 +1,147 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Palm pushed out",
+ "description": "a figure in a wide stance pushing one open hand forward",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "pose": {
+  "headTilt": 5,
+  "shoulders": -11,
+  "bodyLean": 0,
+  "waistTwist": 0,
+  "shoulderSideL": 31,
+  "elbowSideL": -8,
+  "hipSideL": 1,
+  "kneeSideL": 7,
+  "shoulderForwardL": 80,
+  "elbowForwardL": -2,
+  "hipForwardL": 13,
+  "kneeForwardL": -30,
+  "shoulderSideR": 21,
+  "elbowSideR": 150,
+  "hipSideR": 0,
+  "kneeSideR": 7,
+  "shoulderForwardR": 74,
+  "elbowForwardR": 29,
+  "hipForwardR": 8,
+  "kneeForwardR": -26
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 329.59,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 222.0,
+   "y": 329.59,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 223.45,
+   "y": 412.4,
+   "z": 19.12
+  },
+  "ankleL": {
+   "x": 234.76,
+   "y": 492.89,
+   "z": -5.73
+  },
+  "hipR": {
+   "x": 178.0,
+   "y": 329.59,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 178.0,
+   "y": 413.76,
+   "z": 11.83
+  },
+  "ankleR": {
+   "x": 168.15,
+   "y": 494.0,
+   "z": -14.44
+  },
+  "belly": {
+   "x": 200.0,
+   "y": 293.59,
+   "z": 0.0
+  },
+  "chestTop": {
+   "x": 200.0,
+   "y": 209.59,
+   "z": 0.0
+  },
+  "ribL": {
+   "x": 228.0,
+   "y": 273.59,
+   "z": 0.0
+  },
+  "ribR": {
+   "x": 172.0,
+   "y": 273.59,
+   "z": 0.0
+  },
+  "shoulderL": {
+   "x": 246.0,
+   "y": 226.59,
+   "z": 0.0
+  },
+  "elbowL": {
+   "x": 251.54,
+   "y": 235.82,
+   "z": 61.06
+  },
+  "handL": {
+   "x": 256.26,
+   "y": 246.92,
+   "z": 117.79
+  },
+  "shoulderR": {
+   "x": 154.0,
+   "y": 226.59,
+   "z": 0.0
+  },
+  "elbowR": {
+   "x": 147.88,
+   "y": 242.54,
+   "z": 59.6
+  },
+  "handR": {
+   "x": 149.92,
+   "y": 255.43,
+   "z": 116.11
+  },
+  "neckTop": {
+   "x": 200.79,
+   "y": 191.61,
+   "z": 0.0
+  },
+  "head": {
+   "x": 202.88,
+   "y": 167.7,
+   "z": 0.0
+  }
+ },
+ "extra": {
+  "source": "CMU 12_04 frame 1188, nearest pose her dials make",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "cast",
+   "spell",
+   "push",
+   "reach",
+   "magic"
+  ],
+  "fit": {
+   "mean": 12.6,
+   "max": 27.3
+  }
+ }
+}

@@ -1,0 +1,119 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Kneeling on one knee",
+ "description": "a figure kneeling on one knee, leaning forward",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 414.91,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 221.92,
+   "y": 413.06,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 247.69,
+   "y": 422.85,
+   "z": 80.41
+  },
+  "ankleL": {
+   "x": 238.96,
+   "y": 494.0,
+   "z": 34.72
+  },
+  "hipR": {
+   "x": 178.08,
+   "y": 416.76,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 162.33,
+   "y": 499.81,
+   "z": 8.95
+  },
+  "ankleR": {
+   "x": 174.36,
+   "y": 478.98,
+   "z": -72.57
+  },
+  "belly": {
+   "x": 204.97,
+   "y": 388.9,
+   "z": 24.39
+  },
+  "chestTop": {
+   "x": 216.58,
+   "y": 328.21,
+   "z": 81.29
+  },
+  "ribL": {
+   "x": 234.42,
+   "y": 382.84,
+   "z": 39.22
+  },
+  "ribR": {
+   "x": 181.05,
+   "y": 366.06,
+   "z": 36.65
+  },
+  "shoulderL": {
+   "x": 259.59,
+   "y": 346.32,
+   "z": 79.33
+  },
+  "elbowL": {
+   "x": 304.27,
+   "y": 387.65,
+   "z": 67.5
+  },
+  "handL": {
+   "x": 257.38,
+   "y": 413.95,
+   "z": 89.27
+  },
+  "shoulderR": {
+   "x": 171.91,
+   "y": 318.76,
+   "z": 75.11
+  },
+  "elbowR": {
+   "x": 125.47,
+   "y": 351.38,
+   "z": 50.15
+  },
+  "handR": {
+   "x": 118.21,
+   "y": 318.58,
+   "z": 97.43
+  },
+  "neckTop": {
+   "x": 223.44,
+   "y": 317.06,
+   "z": 93.64
+  },
+  "head": {
+   "x": 226.79,
+   "y": 296.68,
+   "z": 105.86
+  }
+ },
+ "extra": {
+  "source": "CMU 23_03 frame 379",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "kneel",
+   "knight",
+   "rest"
+  ]
+ }
+}

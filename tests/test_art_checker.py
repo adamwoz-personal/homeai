@@ -175,8 +175,9 @@ def test_the_multi_subject_bakeoff_asks_what_its_scenes_promise():
     got = {s: [(c.kind, c.expect) for c in B.checks_of(s)] for s in B.SCENES}
     assert got == {"rider": [("heads", 1), ("riders", 1)], "two_riders": [("heads", 1), ("riders", 2)],
                    "battleship": [("heads", 1)], "two_people": [("people", 2)],
-                   "fruit": [("apples", 3), ("pears", 2)]}
+                   "paladin": [("blades", 1), ("shields", 1)], "fruit": [("apples", 3), ("pears", 2)]}
     assert B.prompt_of("battleship").text.startswith("A single green dragon with one head.")
+    assert "by its short hilt" in B.prompt_of("paladin").text       # the glossary's words, as art mode sends
 
 
 # -- options after a complaint: pick from the right ones, don't redraw them all -----------------------

@@ -1,0 +1,120 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Sword raised overhead",
+ "description": "a figure with both hands raised above the head, about to strike downward",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 330.38,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 221.95,
+   "y": 328.9,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 228.59,
+   "y": 407.38,
+   "z": 31.96
+  },
+  "ankleL": {
+   "x": 235.64,
+   "y": 491.09,
+   "z": 18.96
+  },
+  "hipR": {
+   "x": 178.05,
+   "y": 331.85,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 183.54,
+   "y": 416.66,
+   "z": -1.68
+  },
+  "ankleR": {
+   "x": 192.57,
+   "y": 494.0,
+   "z": -35.76
+  },
+  "belly": {
+   "x": 195.6,
+   "y": 295.89,
+   "z": -9.33
+  },
+  "chestTop": {
+   "x": 185.33,
+   "y": 215.41,
+   "z": -31.1
+  },
+  "ribL": {
+   "x": 220.79,
+   "y": 273.42,
+   "z": -17.56
+  },
+  "ribR": {
+   "x": 165.51,
+   "y": 280.03,
+   "z": -11.47
+  },
+  "shoulderL": {
+   "x": 231.46,
+   "y": 215.73,
+   "z": -34.55
+  },
+  "elbowL": {
+   "x": 237.63,
+   "y": 184.44,
+   "z": 18.62
+  },
+  "handL": {
+   "x": 194.55,
+   "y": 147.63,
+   "z": 6.24
+  },
+  "shoulderR": {
+   "x": 140.66,
+   "y": 226.58,
+   "z": -24.54
+  },
+  "elbowR": {
+   "x": 153.29,
+   "y": 204.19,
+   "z": 31.87
+  },
+  "handR": {
+   "x": 182.98,
+   "y": 155.17,
+   "z": 40.83
+  },
+  "neckTop": {
+   "x": 183.12,
+   "y": 198.74,
+   "z": -37.53
+  },
+  "head": {
+   "x": 180.32,
+   "y": 175.23,
+   "z": -41.48
+  }
+ },
+ "extra": {
+  "source": "CMU 02_07 frame 99",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "sword",
+   "attack",
+   "raised",
+   "fight"
+  ]
+ }
+}

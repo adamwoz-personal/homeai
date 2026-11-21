@@ -1,0 +1,120 @@
+{
+ "schema": "pose-spec/1",
+ "rig": "mannequin-2d/2",
+ "name": "Wide stance, arms out",
+ "description": "a figure in a wide low stance with both arms spread",
+ "view": "front",
+ "turn": 0,
+ "sides": "anatomical",
+ "canvas": {
+  "width": 400,
+  "height": 520
+ },
+ "joints": {
+  "hips": {
+   "x": 200.0,
+   "y": 347.75,
+   "z": 0.0
+  },
+  "hipL": {
+   "x": 221.61,
+   "y": 343.61,
+   "z": 0.0
+  },
+  "kneeL": {
+   "x": 264.06,
+   "y": 413.72,
+   "z": 22.51
+  },
+  "ankleL": {
+   "x": 306.32,
+   "y": 483.92,
+   "z": -0.11
+  },
+  "hipR": {
+   "x": 178.39,
+   "y": 351.89,
+   "z": 0.0
+  },
+  "kneeR": {
+   "x": 179.73,
+   "y": 425.83,
+   "z": 41.9
+  },
+  "ankleR": {
+   "x": 207.69,
+   "y": 494.0,
+   "z": -0.48
+  },
+  "belly": {
+   "x": 198.92,
+   "y": 312.73,
+   "z": 8.27
+  },
+  "chestTop": {
+   "x": 196.4,
+   "y": 231.02,
+   "z": 27.57
+  },
+  "ribL": {
+   "x": 225.71,
+   "y": 291.3,
+   "z": 18.34
+  },
+  "ribR": {
+   "x": 170.93,
+   "y": 295.25,
+   "z": 7.4
+  },
+  "shoulderL": {
+   "x": 241.58,
+   "y": 233.61,
+   "z": 35.18
+  },
+  "elbowL": {
+   "x": 233.65,
+   "y": 290.01,
+   "z": 59.68
+  },
+  "handL": {
+   "x": 179.03,
+   "y": 305.73,
+   "z": 71.25
+  },
+  "shoulderR": {
+   "x": 151.59,
+   "y": 240.1,
+   "z": 17.21
+  },
+  "elbowR": {
+   "x": 96.24,
+   "y": 257.74,
+   "z": 38.87
+  },
+  "handR": {
+   "x": 52.36,
+   "y": 246.48,
+   "z": 75.09
+  },
+  "neckTop": {
+   "x": 196.4,
+   "y": 213.05,
+   "z": 26.46
+  },
+  "head": {
+   "x": 193.5,
+   "y": 189.72,
+   "z": 31.3
+  }
+ },
+ "extra": {
+  "source": "CMU 12_04 frame 8307",
+  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu.",
+  "tags": [
+   "cast",
+   "spell",
+   "balance",
+   "magic"
+  ]
+ }
+}
