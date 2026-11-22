@@ -290,6 +290,19 @@ SEEN_AS = re.compile(r"\blooks (?:a (?:whole )?lot |kind of |sort of |more |just
 _ASKING = re.compile(r"\b(?:so|make|let|to|should|could|would|can|want)\s+(?:\w+\s+){0,2}$")
 
 
+# The person judging something in the picture ("the sword sucks", "his armor looks really bad", "that forest is
+# lame"; Adam, 2026-11-21): they want it drawn better. "make him look ugly" or "an ugly troll" is a request.
+_POOR = r"(?:garbage|trash|rubbish|crap|crappy|bad|awful|terrible|horrible|hideous|ugly|lame|janky|cheap|lousy|boring|meh)"
+JUDGED = re.compile(r"\b(suck)s?\b|\b(?:is|are|looks?|seems?|'s|'re)\s+(?:(?:really|kind of|sort of|kinda|so|pretty|"
+                    rf"super|very|just|a bit|totally|like|a)\s+)*({_POOR})\b")
+
+
+def judged(said: str) -> set[str]:
+    """The judgement words in what was said ("suck", "bad"); empty for a request."""
+    low = said.lower()
+    return {m.group(1) or m.group(2) for m in JUDGED.finditer(low) if not _ASKING.search(low[:m.start()])}
+
+
 def mistakes_named(said: str) -> set[str]:
     """Words for what the picture wrongly shows, from a complaint (lower case)."""
     out = set()
@@ -304,13 +317,17 @@ def keep_mistakes_out(before: list[Feature], after: list[Feature], changed: list
     """After a complaint, a feature that newly says the mistake goes back to what it was (a new one is dropped);
     the rest of the patch stays. Returns (features, letters still changed)."""
     words = mistakes_named(said)
+    stems = judged(said)                      # "suck" also catches "sucking", "sucks"
     old = {f.id: f for f in before}
+
+    def says(word: str, text: str, stem: bool = False) -> bool:
+        return bool(re.search(rf"\b{re.escape(word)}{'\\w*' if stem else ''}\b", text.lower()))
 
     def wrong(text: str, was: str) -> bool:
         new_defects = {m.group(0) for m in DEFECT.finditer(text.lower())} - \
             {m.group(0) for m in DEFECT.finditer(was.lower())}
-        new_words = {w for w in words if re.search(rf"\b{re.escape(w)}\b", text.lower())
-                     and not re.search(rf"\b{re.escape(w)}\b", was.lower())}
+        new_words = {w for w in words if says(w, text) and not says(w, was)} | \
+            {w for w in stems if says(w, text, True) and not says(w, was, True)}
         return bool(new_defects or new_words)
 
     out, kept = [], []

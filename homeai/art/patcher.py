@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 import urllib.error
 import urllib.request
@@ -65,6 +66,11 @@ When the person describes what the picture shows ("the troll looks like an orc",
 "he has two swords instead of a sword and a shield"), that is the mistake: never write it into a
 feature. Keep what they asked for and say it more plainly ("a huge grey troll with a long nose, empty-handed";
 "one longsword in his right hand and a shield on his left arm"). Never rename a thing to what it was mistaken for.
+When the person says something looks bad ("the sword sucks", "his armor looks bad", "that forest is lame", "the
+wings look crappy"), that is about the picture: they want it drawn better. Change the feature that thing is in,
+keeping everything else it says, and describe that thing in more concrete visual words a drawing model can use:
+its shape, material, detail and finish ("an archer holding a longbow" becomes "an archer holding a tall longbow of
+dark carved yew with a taut string and a leather grip"). Never write their judgement word into a feature.
 For a new picture (no features yet), make one subject feature and add only what the person described; don't invent
 a style, colours, lighting, setting or camera they didn't ask for. Keep every detail they said (colours, clothes,
 armour) in the feature it belongs to, and add no detail they didn't say. Whatever is ridden or carries the others is
@@ -79,6 +85,60 @@ Ignore words that aren't about the picture (exclamations, questions or remarks t
 First set about_picture: true only if the person asks for something in the picture to be drawn, added, changed or
 removed, or says something in it came out wrong (then fix it as above); false for chatter like "oh my gosh, what's that" or "you're talking with my husband" (then no operations).
 Set aspect only if they ask for a shape (square, portrait, landscape, wide)."""
+
+
+# A second, narrow ask when the person judged something ("the sword sucks") and the first answer rewrote nothing
+# (2026-11-21: "the sword is terrible" left the paladin's feature as it was in 2 of 2 runs). The model only names the
+# thing and describes it; the code puts that into the feature, because asked for the whole feature it dropped the
+# paladin's shield in 3 of 3 runs.
+BETTER_SYSTEM = """The person looked at a picture and said something in it looks bad. You get the picture's
+features (letter, kind, text) and what they said. Answer with:
+- id: the letter of the feature the thing they mean is in;
+- thing: that thing's word exactly as the feature writes it (a word or two, like "longbow");
+- described: the thing's word followed by how a fine, well-made, good-looking one looks, in concrete visual
+  detail a drawing model can use: its shape, material, detail and finish, without "a" or "the" in front ("longbow
+  of dark carved yew with a taut string and a leather grip"). The person wants it to look good, so never make it
+  worn, dull, broken or plain. Only about that thing. Never write their judgement word, and never say what it
+  shouldn't be."""
+BETTER_SCHEMA = {"type": "object", "properties": {"id": {"type": "string", "maxLength": 1},
+                                                  "thing": {"type": "string", "maxLength": 40},
+                                                  "described": {"type": "string", "maxLength": 200}},
+                 "required": ["id", "thing", "described"]}
+
+
+def better_op(before: list, instruction: str, chat) -> dict | None:
+    """One "change" op that describes the judged thing better, or None if the answer is no use."""
+    listing = "\n".join(f"{f.id} ({f.kind}): {f.text}" for f in before)
+    # Only the real letters: left free, the model answered "1" for A (2026-11-21).
+    schema = {**BETTER_SCHEMA, "properties": {**BETTER_SCHEMA["properties"],
+                                              "id": {"type": "string", "enum": [f.id for f in before]}}}
+    raw = chat([{"role": "system", "content": BETTER_SYSTEM},
+                {"role": "user", "content": f"Features:\n{listing}\nThe person said: {instruction}"}], schema)
+    answer = json.loads(raw)
+    if not isinstance(answer, dict):
+        return None
+    target = next((f for f in before if f.id == answer.get("id")), None)
+    thing = str(answer.get("thing", "")).strip()
+    described = re.sub(r"^(?:an?|the)\s+", "", str(answer.get("described", "")).strip(), flags=re.I).rstrip(".")
+    if target is None or not thing or not described:
+        return None
+    if not described.lower().startswith(thing.lower()):     # it sometimes leaves the word off: "of dark steel ..."
+        joined = re.match(r"(?:of|with|made|in|that|whose|forged|carved|wrapped)\b", described, re.I)
+        described = (f"{thing} {described}" if joined else
+                     f"{thing} with {'an' if described[0].lower() in 'aeiou' else 'a'} {described}")
+    word = re.compile(rf"\b{re.escape(thing)}\b", re.I)
+    if not word.search(target.text) or len(described) <= len(thing):
+        return None
+    text = word.sub(lambda m: described, target.text, count=1)
+    return {"op": "change", "id": target.id, "kind": target.kind, "text": text}
+
+
+def _rewrites(before: list, ops: list) -> bool:
+    """Some op changes what a feature says (not just repeating it)."""
+    now = {f.id: f.text.strip().lower() for f in before}
+    return any(isinstance(op, dict) and op.get("op") in ("add", "remove") or
+               isinstance(op, dict) and str(op.get("text", "")).strip().lower() != now.get(op.get("id"))
+               for op in ops)
 
 
 def feature_messages(spec: dict, instruction: str) -> list[dict]:
@@ -104,9 +164,13 @@ def features_patch_for(spec: dict, instruction: str, chat=None, clock=time.monot
             answer = json.loads(raw)
             if not isinstance(answer, dict) or not isinstance(answer.get("ops"), list):
                 raise SpecError("no operations")
-            if answer.get("about_picture") is False:
+            judging = bool(before) and bool(F.judged(instruction))
+            if answer.get("about_picture") is False and not judging:
                 raise SpecError("not about the picture")
             ops, aspect = answer["ops"], answer.get("aspect")
+            if judging and not _rewrites(before, ops):
+                better = better_op(before, instruction, chat)
+                ops = [better] if better else ops
         if not ops and not aspect:
             raise SpecError("empty change")
         ops = F.subject_first(before, ops)

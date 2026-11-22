@@ -123,10 +123,10 @@ COMPLAINT = re.compile(r"\b(?:ended up with|came out with|there'?s|it has|it'?s 
 
 def is_complaint(text: str) -> bool:
     """Says something came out wrong: a defect ("it has two heads") or what the picture shows instead ("that troll
-    looks a lot like an orc", "he seems to be wielding two swords"; Adam's paladin, 2026-11-20)."""
-    from homeai.art.features import mistakes_named
+    looks a lot like an orc", "he seems to be wielding two swords"; Adam's paladin, 2026-11-20), or judges something ("the sword sucks", 2026-11-21)."""
+    from homeai.art.features import judged, mistakes_named
     said = _tidy(text)
-    return bool(COMPLAINT.search(said)) or bool(mistakes_named(said))
+    return bool(COMPLAINT.search(said)) or bool(mistakes_named(said)) or bool(judged(said))
 
 
 # Picking from the numbered options by number: "image three", "what is image three", "option 3", "number three".

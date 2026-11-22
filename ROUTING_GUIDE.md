@@ -4,7 +4,7 @@
 with Claude (paid). Updated as evidence accumulates. Every rule here comes from an
 observed outcome on this box, not from theory.
 
-Last updated: 2026-11-20
+Last updated: 2026-11-21
 
 ---
 
@@ -2224,3 +2224,10 @@ back with a shield on both arms and extra blades (1/8 clean vs 4/8 without a ref
 by eye as well as by the checker: the checker scored the layout win and the count loss the same (4/8 vs 3/8).
 Also: a model that scores better on counts (ERNIE Turbo 42/48 vs klein 35/48) can still be the wrong choice if it
 draws the same picture for every seed (redraws and options stop working) - look at the sheets.
+
+2026-11-21: "The sword sucks" was not misread as an action; it was ignored. The voice model called a judgement
+of the picture chatter (about_picture false) or "rewrote" the feature to the same text (2/8 on the eval). A
+prompt rule fixed most cases, but asked to rewrite a whole feature to describe the sword better it dropped the
+paladin's shield 3/3 and once described a *dull, worn* sword (it matched "terrible"). What worked: a narrow
+second ask that only names the thing and describes a good one, and the code splices that phrase into the
+feature, so nothing else can be lost. Also: a free string id came back "1" for letter A; give letters as an enum.

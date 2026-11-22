@@ -46,6 +46,30 @@ PALADIN = {"features": [{"id": "A", "kind": "subject",
                         {"id": "B", "kind": "element", "text": "a troll"},
                         {"id": "C", "kind": "element", "text": "the paladin facing off against the troll"}],
            "aspect": "square"}
+# Adam, 2026-11-21: "I want to be able to tell art-mode Jarvis that the sword sucks" without the prompt turning into
+# "a samurai sucking his sword". A quality complaint should become a better description of that thing.
+SAMURAI = {"features": [{"id": "A", "kind": "subject", "text": "a samurai in black armor holding a katana"},
+                        {"id": "B", "kind": "setting", "text": "a bamboo forest at dawn"}], "aspect": "portrait"}
+SLANG = ("suck", "bad", "terrible", "awful", "ugly", "lame", "crap", "weird", "wrong", "poor", "better", "not ")
+
+
+def no_slang(s, c):
+    found = [w for w in SLANG if has_word(s, w)]
+    return not found or f"wrote the complaint in: {found}"
+
+
+def rewrote(letter, before, *words):
+    """The feature changed, still names the thing, and says more about it than before."""
+    def check(s, c):
+        now = text(s, letter)
+        if now == before.lower():
+            return f"{letter} unchanged"
+        if not any(w in now for w in words):
+            return f"{letter} lost the thing: {now!r}"
+        return len(now.split()) > len(before.split()) or f"{letter} says no more than before: {now!r}"
+    return check
+
+
 NO_CHANGE = "no change"         # a case whose right answer is "nothing to do" (the patch is refused)
 
 
@@ -121,6 +145,26 @@ CASES = [
      "a troll should not be wielding swords",
      [lambda s, c: "troll" in text(s, "B") and "sword" not in text(s, "B") or f"B is {text(s, 'B')!r}",
       lambda s, c: "longsword" in text(s, "A") or f"A is {text(s, 'A')!r}"]),
+    ("sword sucks", SAMURAI, "the sword sucks",
+     [rewrote("A", SAMURAI["features"][0]["text"], "katana", "sword"), no_slang,
+      lambda s, c: "samurai" in text(s, "A") or f"lost the samurai: {text(s, 'A')!r}",
+      lambda s, c: text(s, "B") == SAMURAI["features"][1]["text"] or f"B changed: {text(s, 'B')!r}"]),
+    ("armor bad", SAMURAI, "his armor looks really bad",
+     [rewrote("A", SAMURAI["features"][0]["text"], "armor", "armour"), no_slang,
+      lambda s, c: "katana" in text(s, "A") or f"lost the katana: {text(s, 'A')!r}"]),
+    ("wings crappy", DRAGON, "the dragon's wings look kind of crappy",
+     [rewrote("A", DRAGON["features"][0]["text"], "wing"), no_slang,
+      lambda s, c: count(s) == 4 or f"{count(s)} features"]),
+    ("sword garbage", SAMURAI, "ugh, this sword looks like garbage",
+     [rewrote("A", SAMURAI["features"][0]["text"], "katana", "sword"), no_slang,
+      lambda s, c: not has_word(s, "garbage", "trash") or "wrote garbage in"]),
+    ("paladin sword terrible", PALADIN, "the sword is terrible",
+     [rewrote("A", PALADIN["features"][0]["text"], "sword"), no_slang,
+      lambda s, c: "shield" in text(s, "A") or f"lost the shield: {text(s, 'A')!r}",
+      lambda s, c: "sword" not in text(s, "B") or "gave the troll the sword"]),
+    ("forest lame", SAMURAI, "that forest is lame",
+     [rewrote("B", SAMURAI["features"][1]["text"], "forest", "bamboo"), no_slang,
+      lambda s, c: text(s, "A") == SAMURAI["features"][0]["text"] or f"A changed: {text(s, 'A')!r}"]),
     ("chatter", BATTLE, "oh gosh, it's fake again. oh my gosh, what's that", NO_CHANGE),
     ("aside", BATTLE, "sure. yeah, you're talking with my husband", NO_CHANGE),
 ]

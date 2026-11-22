@@ -393,3 +393,127 @@ def test_a_complaint_about_two_swords_never_asks_for_two_swords():
     before = [F.Feature("A", "subject", "a knight holding a longsword")]
     after = [F.Feature("A", "subject", "a knight holding two swords")]
     assert F.keep_mistakes_out(before, after, ["A"], "it has two blades now") == (before, [])
+
+
+# -- "the sword sucks": a judgement becomes a better description (Adam, 2026-11-21) ---------------------------------
+
+SAMURAI = [F.Feature("A", "subject", "a samurai in black armor holding a katana"),
+           F.Feature("B", "setting", "a bamboo forest at dawn")]
+
+
+@pytest.mark.parametrize("said, words", [
+    ("the sword sucks", {"suck"}), ("his armor looks really bad", {"bad"}), ("that forest is lame", {"lame"}),
+    ("the wings look kind of crappy", {"crappy"}), ("ugh, this sword looks like garbage", {"garbage"}),
+    ("the sword is terrible", {"terrible"}),
+    ("make him look ugly", set()), ("draw an ugly troll", set()), ("the troll should look bad", set()),
+    ("make the dragon red", set()), ("oh gosh, it's fake again", set())])
+def test_a_judgement_is_found_and_a_request_is_not(said, words):
+    from homeai.art import grammar
+    assert F.judged(said) == words
+    assert grammar.is_complaint(said) is bool(words)
+
+
+def chats(*answers):
+    """A pretend voice model giving these answers in turn; .asked keeps each system prompt."""
+    answers = list(answers)
+
+    def chat(messages, schema):
+        chat.asked.append((messages[0]["content"], schema))
+        return json.dumps(answers.pop(0))
+    chat.asked = []
+    return chat
+
+
+def test_a_judged_thing_left_alone_gets_the_narrow_ask_and_only_that_thing_changes():
+    from homeai.art.patcher import BETTER_SYSTEM
+    paladin = [F.Feature("A", "subject", "a paladin wielding a longsword in his right hand and a shield in his left hand"),
+               F.Feature("B", "element", "a troll")]
+    chat = chats({"about_picture": True, "ops": [{"op": "change", "id": "A", "kind": "subject", "text": paladin[0].text}]},
+                 {"id": "A", "thing": "longsword", "described": "longsword of gleaming steel with an engraved hilt"})
+    result = features_patch_for(spec_of(paladin), "the sword is terrible", chat=chat)
+    assert result.ok and result.changed == ["A"]
+    assert F.features_of(result.spec)[0].text == ("a paladin wielding a longsword of gleaming steel with an engraved "
+                                                  "hilt in his right hand and a shield in his left hand")
+    assert F.features_of(result.spec)[1].text == "a troll"
+    assert chat.asked[1][0] == BETTER_SYSTEM
+    assert chat.asked[1][1]["properties"]["id"]["enum"] == ["A", "B"]      # only real letters (it said "1")
+
+
+def test_a_judgement_called_chatter_still_gets_the_narrow_ask():
+    chat = chats({"about_picture": False, "ops": []},
+                 {"id": "A", "thing": "katana", "described": "a katana with a long polished blade"})
+    result = features_patch_for(spec_of(SAMURAI), "the sword sucks", chat=chat)
+    assert result.ok and F.features_of(result.spec)[0].text == \
+        "a samurai in black armor holding a katana with a long polished blade"
+
+
+def test_a_first_answer_that_rewrites_needs_no_second_ask():
+    chat = chats({"about_picture": True, "ops": [{"op": "change", "id": "B", "kind": "setting",
+                                                  "text": "a dense bamboo forest at dawn with tall stalks"}]})
+    result = features_patch_for(spec_of(SAMURAI), "that forest is lame", chat=chat)
+    assert F.features_of(result.spec)[1].text == "a dense bamboo forest at dawn with tall stalks"
+    assert len(chat.asked) == 1
+
+
+@pytest.mark.parametrize("described, text", [
+    ("of dark steel with a gold guard", "a samurai in black armor holding a katana of dark steel with a gold guard"),
+    ("blazing steel blade", "a samurai in black armor holding a katana with a blazing steel blade"),
+    ("engraved blade", "a samurai in black armor holding a katana with an engraved blade"),
+    ("the katana with a ridged blade.", "a samurai in black armor holding a katana with a ridged blade")])
+def test_the_described_thing_reads_as_a_phrase(described, text):
+    chat = chats({"about_picture": False, "ops": []}, {"id": "A", "thing": "katana", "described": described})
+    assert F.features_of(features_patch_for(spec_of(SAMURAI), "the sword sucks", chat=chat).spec)[0].text == text
+
+
+def test_a_thing_of_two_words_is_described_in_place():
+    chat = chats({"about_picture": False, "ops": []},
+                 {"id": "A", "thing": "black armor", "described": "black armor of lacquered iron plates"})
+    assert F.features_of(features_patch_for(spec_of(SAMURAI), "his armor looks bad", chat=chat).spec)[0].text == \
+        "a samurai in black armor of lacquered iron plates holding a katana"
+
+
+@pytest.mark.parametrize("answer", [
+    {"id": "A", "thing": "sword", "described": "sword of steel"},        # not a word in the feature
+    {"id": "A", "thing": "two words", "described": "two words of x"},   # not in the feature either
+    {"id": "A", "thing": "", "described": "katana of steel"},
+    {"id": "A", "thing": "katana", "described": ""},
+    {"id": "A", "thing": "katana", "described": "katana"},               # says nothing more
+    {"id": "Z", "thing": "katana", "described": "katana of steel"},
+    ["not", "a", "dict"]])
+def test_a_useless_narrow_answer_changes_nothing(answer):
+    chat = chats({"about_picture": False, "ops": []}, answer)
+    assert not features_patch_for(spec_of(SAMURAI), "the sword sucks", chat=chat).ok
+
+
+def test_chatter_is_still_not_a_change_when_nothing_is_judged():
+    chat = chats({"about_picture": False, "ops": []})
+    assert not features_patch_for(spec_of(SAMURAI), "oh gosh, it's fake again", chat=chat).ok
+    assert len(chat.asked) == 1
+
+
+def test_a_judgement_word_is_never_written_in():
+    after = [F.Feature("A", "subject", "a samurai in black armor holding a katana that doesn't suck"), SAMURAI[1]]
+    assert F.keep_mistakes_out(SAMURAI, after, ["A"], "the sword sucks") == (SAMURAI, [])
+    sucking = [F.Feature("A", "subject", "a samurai sucking on his katana"), SAMURAI[1]]
+    assert F.keep_mistakes_out(SAMURAI, sucking, ["A"], "the sword sucks") == (SAMURAI, [])
+    fine = [F.Feature("A", "subject", "a samurai in black armor holding a polished katana"), SAMURAI[1]]
+    assert F.keep_mistakes_out(SAMURAI, fine, ["A"], "the sword sucks") == (fine, ["A"])
+
+
+def test_the_sword_sucks_redraws_four_tries_of_a_better_sword(tmp_path):
+    patch = scripted({"ops": [{"op": "add", "kind": "subject", "text": "a samurai in black armor holding a katana"}]},
+                     {"about_picture": False, "ops": []},
+                     {"id": "A", "thing": "katana", "described": "katana with a long, polished steel blade"})
+    s = ArtSession(Store(tmp_path), Queue(), "guest", rules=policy.load("kid-safe"), patch=patch, rng=random.Random(1))
+    s.handle("draw a samurai in black armor holding a katana")
+    reply = s.handle_free("the sword sucks")
+    assert reply.spoken.startswith("Fixing it") and len(s.grid) == 4
+    for node in s.grid:
+        assert F.features_of(s.project.nodes[node].spec)[0].text == \
+            "a samurai in black armor holding a katana with a long, polished steel blade"
+
+
+def test_the_patcher_is_told_a_judgement_means_draw_it_better():
+    from homeai.art.patcher import FEATURE_SYSTEM
+    assert "When the person says something looks bad" in FEATURE_SYSTEM
+    assert "Never write their judgement word into a feature." in FEATURE_SYSTEM
