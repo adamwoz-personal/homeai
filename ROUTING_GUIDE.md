@@ -4,7 +4,7 @@
 with Claude (paid). Updated as evidence accumulates. Every rule here comes from an
 observed outcome on this box, not from theory.
 
-Last updated: 2026-11-21
+Last updated: 2026-11-23
 
 ---
 
@@ -2231,3 +2231,8 @@ prompt rule fixed most cases, but asked to rewrite a whole feature to describe t
 paladin's shield 3/3 and once described a *dull, worn* sword (it matched "terrible"). What worked: a narrow
 second ask that only names the thing and describes a good one, and the code splices that phrase into the
 feature, so nothing else can be lost. Also: a free string id came back "1" for letter A; give letters as an enum.
+
+2026-11-23: A model that won the blind listening test and saves memory (gemma4-voice: 5.4 vs 7.2 GB, 1.0 vs 1.6 s)
+still lost on the work: art features 44/48 vs 48/48 (wrote "a troll resembling an orc", dropped the shield),
+spec patches 48/57 vs 57/57, tools 91/96 vs 96/96 (said "I can look that up" and didn't). Guards and prompts
+tuned on one model don't carry to another; re-run every eval before a model switch, not just the chat ones.
