@@ -58,6 +58,10 @@ def test_the_training_config_says_the_phrase_and_never_the_sound_alikes(tmp_path
     c = T.config_for("hey_jeeves", "hey jeeves", 20000, 50000, tmp_path)
     assert c["target_phrase"] == ["hey jeeves"] and c["model_name"] == "hey_jeeves"
     assert "hey jarvis" in c["custom_negative_phrases"] and "hey jeeves" not in c["custom_negative_phrases"]
+    # about a quarter of the negatives, every sound-alike equally often
+    assert abs(len(c["custom_negative_phrases"]) - 5000) <= len(T.SOUND_ALIKES)
+    assert c["custom_negative_phrases"].count("hey jesus") == c["custom_negative_phrases"].count("sleeves") > 100
+    assert T.sound_alike_list(10) == T.SOUND_ALIKES                         # never fewer than once each
     assert {"jesus", "sleeves", "he leaves", "cheese"} <= set(c["custom_negative_phrases"])
     assert c["n_samples_val"] == 2000 and T.config_for("x", "x", 500, 1, tmp_path)["n_samples_val"] == 1000
     assert c["target_false_positives_per_hour"] <= 0.2

@@ -44,6 +44,13 @@ SOUND_ALIKES = ["hey jarvis", "jarvis", "hey jesus", "jesus", "hey steve", "hey 
                 "hey jean", "hey genie", "hey gee", "hey these", "he sees", "heaves", "chives", "hey g's"]
 
 
+def sound_alike_list(samples: int, share: float = 0.25) -> list[str]:
+    """The sound-alikes repeated to be about ``share`` of the negative clips. openWakeWord puts this list in front
+    of ~``samples`` generated phrases and voices each text once, so a list given once was ~32 clips in 50,000 and
+    the model kept waking on "hey jesus" (39/54 held-out, round 3, 2026-11-23)."""
+    return SOUND_ALIKES * max(1, round(samples * share / len(SOUND_ALIKES)))
+
+
 def config_for(name: str, phrase: str, samples: int, steps: int, out: Path, negative_weight: int = 1500,
                layer: int = 32, rounds: int = 1, adversarial: int = 50) -> dict:
     """openWakeWord's training config. negative_weight: how hard false wakes are punished at the end of training
@@ -53,7 +60,7 @@ def config_for(name: str, phrase: str, samples: int, steps: int, out: Path, nega
     return {
         "model_name": name,
         "target_phrase": [phrase],
-        "custom_negative_phrases": SOUND_ALIKES,
+        "custom_negative_phrases": sound_alike_list(samples),
         "n_samples": samples,
         "n_samples_val": max(1000, samples // 10),
         "tts_batch_size": 50,
