@@ -2236,3 +2236,10 @@ feature, so nothing else can be lost. Also: a free string id came back "1" for l
 still lost on the work: art features 44/48 vs 48/48 (wrote "a troll resembling an orc", dropped the shield),
 spec patches 48/57 vs 57/57, tools 91/96 vs 96/96 (said "I can look that up" and didn't). Guards and prompts
 tuned on one model don't carry to another; re-run every eval before a model switch, not just the chat ones.
+
+2026-11-23: Training a custom openWakeWord model ("hey jeeves"): the upstream pipeline is stale against 2026
+packages (piper-phonemize has no cp312 Linux wheel, scipy dropped sph_harm, torch>=2.6 weights_only, torchaudio
+lost load/info, the new ONNX exporter writes a side .data file, and --convert_to_tflite defaults to the truthy
+string "False"); each is patched in tools/wake/install_wake_train.sh. Upstream defaults (negative weight 1500)
+gave a model that almost never false-wakes but caught 34% of held-out voices: judge a wake model on BOTH real room
+audio (Jarvis's listen-probe clips) and held-out voices, never on the trainer's own recall number.
