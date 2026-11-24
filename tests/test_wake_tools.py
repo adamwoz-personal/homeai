@@ -62,6 +62,8 @@ def test_the_training_config_says_the_phrase_and_never_the_sound_alikes(tmp_path
     assert abs(len(c["custom_negative_phrases"]) - 5000) <= len(T.SOUND_ALIKES)
     assert c["custom_negative_phrases"].count("hey jesus") == c["custom_negative_phrases"].count("sleeves") > 100
     assert T.sound_alike_list(10) == T.SOUND_ALIKES                         # never fewer than once each
+    tenth = T.config_for("hey_jeeves", "hey jeeves", 20000, 50000, tmp_path, alike_share=0.1)
+    assert abs(len(tenth["custom_negative_phrases"]) - 2000) <= len(T.SOUND_ALIKES)
     assert {"jesus", "sleeves", "he leaves", "cheese"} <= set(c["custom_negative_phrases"])
     assert c["n_samples_val"] == 2000 and T.config_for("x", "x", 500, 1, tmp_path)["n_samples_val"] == 1000
     assert c["target_false_positives_per_hour"] <= 0.2
@@ -72,6 +74,18 @@ def test_the_training_config_says_the_phrase_and_never_the_sound_alikes(tmp_path
     assert (c["augmentation_rounds"], c["batch_n_per_class"]["adversarial_negative"]) == (1, 50)
     more = T.config_for("x", "x", 500, 1, tmp_path, rounds=2, adversarial=200)
     assert (more["augmentation_rounds"], more["batch_n_per_class"]["adversarial_negative"]) == (2, 200)
+
+
+def test_partial_features_are_cleared_so_augmenting_makes_all_four(tmp_path):
+    assert T.clear_partial_features(tmp_path) == []                         # none: nothing to do
+    for f in T.FEATURES[:2]:
+        (tmp_path / f).write_bytes(b"x")
+    assert T.clear_partial_features(tmp_path) == list(T.FEATURES[:2])     # negatives gone: positives go too
+    assert not any((tmp_path / f).exists() for f in T.FEATURES)
+    for f in T.FEATURES:
+        (tmp_path / f).write_bytes(b"x")
+    assert T.clear_partial_features(tmp_path) == []                         # complete: kept
+    assert all((tmp_path / f).exists() for f in T.FEATURES)
 
 
 def test_training_refuses_until_installed(tmp_path, monkeypatch):

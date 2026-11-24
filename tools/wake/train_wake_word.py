@@ -52,15 +52,16 @@ def sound_alike_list(samples: int, share: float = 0.25) -> list[str]:
 
 
 def config_for(name: str, phrase: str, samples: int, steps: int, out: Path, negative_weight: int = 1500,
-               layer: int = 32, rounds: int = 1, adversarial: int = 50) -> dict:
+               layer: int = 32, rounds: int = 1, adversarial: int = 50, alike_share: float = 0.25) -> dict:
     """openWakeWord's training config. negative_weight: how hard false wakes are punished at the end of training
     (upstream default 1500 gave 0 false/h but 34% recall on held-out voices, 2026-11-23); layer: model width;
     rounds: augmentation passes over each clip; adversarial: sound-alike clips per training batch ("hey jesus"
-    woke the 300-weight model on 37 of 54 held-out clips with the default 50)."""
+    woke the 300-weight model on 37 of 54 held-out clips with the default 50); alike_share: the sound-alikes'
+    part of the negative clips (0.25 cut "hey jesus" to 10/54 but recall to 59%, round 4)."""
     return {
         "model_name": name,
         "target_phrase": [phrase],
-        "custom_negative_phrases": sound_alike_list(samples),
+        "custom_negative_phrases": sound_alike_list(samples, alike_share),
         "n_samples": samples,
         "n_samples_val": max(1000, samples // 10),
         "tts_batch_size": 50,
@@ -110,6 +111,22 @@ def missing(step: str = "all") -> list[str]:
     return out
 
 
+FEATURES = ("positive_features_train.npy", "positive_features_test.npy", "negative_features_train.npy",
+            "negative_features_test.npy")
+
+
+def clear_partial_features(folder: Path) -> list[str]:
+    """Delete the feature files when only some exist, so augmenting makes all four. openWakeWord skips augmenting
+    if positive_features_train.npy exists, so deleting only the negatives (to redo them) left training without
+    them and it failed (round 5, 2026-11-24). Returns what was deleted."""
+    present = [folder / f for f in FEATURES if (folder / f).exists()]
+    if len(present) in (0, len(FEATURES)):
+        return []
+    for f in present:
+        f.unlink()
+    return [f.name for f in present]
+
+
 def run_step(step: str, config: Path, log: Path) -> float:
     start = time.monotonic()
     with log.open("a") as out:
@@ -134,6 +151,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--layer", type=int, default=32)
     ap.add_argument("--rounds", type=int, default=1, help="augmentation passes (delete old features to redo)")
     ap.add_argument("--adversarial", type=int, default=50, help="sound-alike clips per training batch")
+    ap.add_argument("--alike-share", type=float, default=0.25, help="sound-alikes' share of the negative clips")
     ap.add_argument("--tag", default="", help="suffix for the saved copy, to keep several trainings of one run")
     ap.add_argument("--keep-coder", action="store_true", help="don't pause the coder (only if the GPU has room)")
     args = ap.parse_args(argv)
@@ -148,7 +166,8 @@ def main(argv: list[str] | None = None) -> int:
     config = folder / "config.yml"
     import yaml  # noqa: PLC0415 - only the driver needs it, from the project venv
     config.write_text(yaml.safe_dump(config_for(name, args.phrase, args.samples, args.steps, folder / "model",
-                                                args.negative_weight, args.layer, args.rounds, args.adversarial)))
+                                                args.negative_weight, args.layer, args.rounds, args.adversarial,
+                                                args.alike_share)))
     log = folder / "train.log"
     steps = ["generate_clips", "augment_clips", "train_model"] if args.step == "all" else \
         [{"generate": "generate_clips", "augment": "augment_clips", "train": "train_model"}[args.step]]
@@ -156,6 +175,10 @@ def main(argv: list[str] | None = None) -> int:
     pause = contextlib.nullcontext() if args.keep_coder else coder_paused()
     with pause:
         for step in steps:
+            if step == "augment_clips":
+                gone = clear_partial_features(folder / "model" / name)
+                if gone:
+                    print("  partial features deleted so all four are made: " + ", ".join(gone), flush=True)
             print(f"{step} ... (log {log})", flush=True)
             times[step] = run_step(step, config, log)
             print(f"{step} done in {times[step]} s", flush=True)
