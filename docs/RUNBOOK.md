@@ -56,6 +56,11 @@ named `jarvis`; on the original box it is `local` (`HOMEAI_AGENT_NAME` in
 - If a reply ends with a question, just answer; no wake word is needed.
 - Long answers stop at about 110 words and ask "Want me to keep going?".
   "Yes" or "go on" continues; "no" or silence drops it.
+- "Hey Jarvis, record my wake word" / "record the wake word for Ani": Jarvis
+  asks for "hey jeeves" 30 times in different styles, then 6 sound-alikes,
+  each answered without the wake word. "Stop" ends it; asking again carries
+  on (max 100 per person). Clips: `~/.local/share/homeai/wake-recordings/`
+  (local only; delete a person's folder to remove them).
 
 ## Tuning (`.env`, then restart)
 

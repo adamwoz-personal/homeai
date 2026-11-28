@@ -147,6 +147,7 @@ class VoiceAssistant(VoiceIdTurns):
         # "Status update"; built in start() once the house controller is known.
         self.status = None
         self._enrolment: vid.Enrolment | None = None
+        self._wake_rec = None  # a wake_recording.Session while family members record "hey jeeves"
         # Unknown voices heard in passing, in memory only, so Jarvis can offer to learn one.
         self._strangers = vid.StrangerPool()
         self._offer_voice = None        # the pooled voice an offered enrolment belongs to
@@ -485,6 +486,8 @@ class VoiceAssistant(VoiceIdTurns):
         self.presence.caption("user", transcript.text)
 
         ident, emb = self._identify(audio, turn)
+        if self._handle_wake_recording(turn, transcript.text, source, audio, ident, total):
+            return
         if self._handle_voice_id(turn, transcript.text, source, audio, ident, emb, total):
             return
         if ident is not None:
@@ -741,6 +744,44 @@ class VoiceAssistant(VoiceIdTurns):
         return ArtVoice(switcher, build_studio, self.presence.publish, adults=self.cfg.art.adults,
                         on_state=self.presence.state, checker=checker, reword_chat=reword,
                         review=art_review.Review())
+
+    def _handle_wake_recording(self, turn: Turn, text: str, source: str, audio: np.ndarray, ident,
+                               total: Stopwatch) -> bool:
+        """"Record my wake word": prompts and saves each answer (homeai/wake_recording.py). Runs before the
+        other-voice gate: Adam may start a session for Ani, then Ani answers."""
+        from . import wake_recording as wr
+        session = self._wake_rec
+        if session is not None:
+            if source != "followup":                 # a wake-word turn means the session was left
+                log.info("wake recording for %s ended by a new request", session.person)
+                self._wake_rec = None
+            elif wr.is_stop(text) or is_dismissal(text, self.cfg.wake.model):
+                self._wake_rec = None
+                turn.verdict = "wake-rec"
+                self._say_turn(turn, session.stopped(), total)
+                return True
+            else:
+                reply = session.take(audio, text, self.cfg.audio.sample_rate)
+                log.info("wake recording %s: %d/%d kept (heard %r)", session.person, session.kept,
+                         len(session.items), text)
+                if session.done:
+                    self._wake_rec = None
+                turn.verdict = "wake-rec"
+                self._say_turn(turn, reply, total, listen=not session.done)
+                return True
+        start = wr.parse_start(text)
+        if start is None:
+            return False
+        person = start.name or (ident.name if ident is not None else None)
+        turn.verdict = "wake-rec"
+        if person is None:
+            self._say_turn(turn, "Whose voice is it? Say record the wake word for, and the name.", total)
+            return True
+        session = wr.Session(person)
+        self._wake_rec = session if not session.done else None
+        log.info("wake recording for %s: %d prompts", person, len(session.items))
+        self._say_turn(turn, session.opening(), total, listen=not session.done)
+        return True
 
     def _handle_status(self, turn: Turn, text: str, ident, total: Stopwatch) -> bool:
         """'Status update': built from the voice registry, doorbell history and weather, no agent."""
